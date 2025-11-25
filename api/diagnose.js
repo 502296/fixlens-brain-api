@@ -18,19 +18,27 @@ const client = new OpenAI({
 
  * FixLens Brain – Diagnosis API
 
- * - يستقبل نص المشكلة + اللغة + الهستوري (اختياري)
+ *
 
- * - يرجّع جواب واحد منسّق، بدون تكرار العناوين
+ * يستقبل:
+
+ * - message  (وصف المشكلة)
+
+ * - language (اختياري، مثلاً English / Arabic)
+
+ * - conversationId (اختياري للتتبع)
+
+ *
+
+ * يرجع:
+
+ * { answer: "... النص النهائي ..." }
 
  */
 
 module.exports = async (req, res) => {
 
-  // نسمح فقط بالـ POST
-
   if (req.method !== "POST") {
-
-    res.setHeader("Allow", "POST");
 
     return res.status(405).json({ error: "Method not allowed" });
 
@@ -40,27 +48,17 @@ module.exports = async (req, res) => {
 
   try {
 
-    const body = typeof req.body === "string" ? JSON.parse(req.body) : req.body;
+    const body = req.body || {};
+
+    const message = (body.message || "").trim();
+
+    const language = body.language || "English";
+
+    const conversationId = body.conversationId || null;
 
 
 
-    const {
-
-      message,
-
-      uiLanguage,
-
-      category,
-
-      history, // لو حابب نستخدمه لاحقاً
-
-      hasImage,
-
-    } = body || {};
-
-
-
-    if (!message || !String(message).trim()) {
+    if (!message) {
 
       return res.status(400).json({ error: "Message is required." });
 
@@ -68,91 +66,57 @@ module.exports = async (req, res) => {
 
 
 
-    const userText = String(message).trim();
-
-
-
-    // نبني البرومبت
-
     const systemPrompt = `
 
-You are **FixLens Brain**, an AI assistant that diagnoses **real-world problems**
+You are FixLens Brain, a practical AI technician.
 
-only in three domains:
+You help users diagnose real-world issues with cars, appliances, and homes.
 
-1) Cars & vehicles
+Always respond in a clear, friendly, step-by-step way.
 
-2) Home & property
-
-3) Appliances & devices
-
-
-
-Rules:
-
-- Answer in the SAME language the user is using (Arabic, English, etc).
-
-- Always focus on practical, realistic, real-world guidance.
-
-- If the user’s message is just a greeting or very general ("hello", "كيفك؟"),
-
-  reply as a friendly assistant and ask what problem they want to diagnose.
-
-- If the issue is not related to cars / home / appliances, say politely
-
-  that FixLens is specialized only in these three areas.
-
-
-
-When the user describes a real problem:
-
-- First: give a **very short summary** of what you think is going on.
-
-- Second: give **clear step-by-step recommended actions**.
-
-- Third: add a short **safety note** (what NOT to do, and when to call a professional).
-
-
-
-Format:
-
-- Use short paragraphs and bullet points.
-
-- Keep the answer compact and easy to read on a phone screen.
-
-- Do NOT repeat the same text twice.
-
-- Do NOT leave empty sections or dashes; only include sections that have content.
-
-
-
-Extra context for this request:
-
-- Category selected in the app: ${category || "not specified"}
-
-- UI language: ${uiLanguage || "not specified"}
-
-- The user may have attached a photo: ${hasImage ? "YES" : "NO"}.
-
-If a photo is mentioned, infer what it likely shows from the text.
+If the user language is not English, respond in that language when possible.
 
 `;
 
 
 
-    // نرسل الطلب إلى GPT-4o mini
+    const userPrompt = `
 
-    const completion = await client.chat.completions.create({
+User message:
 
-      model: "gpt-4o-mini",
+${message}
 
-      temperature: 0.4,
 
-      messages: [
 
-        { role: "system", content: systemPrompt },
+Language: ${language}
 
-        { role: "user", content: userText },
+Conversation ID: ${conversationId ?? "N/A"}
+
+`;
+
+
+
+    const response = await client.responses.create({
+
+      model: "gpt-4.1-mini",
+
+      input: [
+
+        {
+
+          role: "system",
+
+          content: systemPrompt,
+
+        },
+
+        {
+
+          role: "user",
+
+          content: userPrompt,
+
+        },
 
       ],
 
@@ -160,19 +124,23 @@ If a photo is mentioned, infer what it likely shows from the text.
 
 
 
-    const reply =
+    // استخراج النص من استجابة OpenAI
 
-      completion.choices?.[0]?.message?.content?.trim() ||
+    const output = response.output?.[0]?.content?.[0]?.text || "";
 
-      "FixLens Brain could not generate a reply.";
+    const answer = output.trim() || "I analyzed your issue but couldn't generate a detailed answer.";
 
 
 
-    return res.status(200).json({ reply });
+    return res.status(200).json({
+
+      answer,
+
+    });
 
   } catch (err) {
 
-    console.error("FixLens Brain API error:", err);
+    console.error("FixLens Brain error:", err);
 
     return res.status(500).json({
 
