@@ -1,0 +1,23 @@
+{
+
+  "name": "fixlens-brain-api",
+
+  "version": "1.0.0",
+
+  "main": "api/diagnose.js",
+
+  "license": "MIT",
+
+  "engines": {
+
+    "node": ">=18"
+
+  },
+
+  "dependencies": {
+
+    "openai": "^4.0.0"
+
+  }
+
+}
