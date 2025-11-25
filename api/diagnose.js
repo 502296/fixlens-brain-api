@@ -16,11 +16,9 @@ const client = new OpenAI({
 
 module.exports = async (req, res) => {
 
-  // نسمح فقط بالـ POST
-
   if (req.method !== "POST") {
 
-    return res.status(405).json({ error: "Method not allowed. Use POST." });
+    return res.status(405).json({ error: "Method not allowed" });
 
   }
 
@@ -28,25 +26,11 @@ module.exports = async (req, res) => {
 
   try {
 
-    const {
-
-      message,
-
-      category,
-
-      uiLanguage,
-
-      hasImage,
-
-      // لو في المستقبل أضفنا وصف للصورة أو بيانات أخرى
-
-      imageDescription,
-
-    } = req.body || {};
+    const { userMessage, category, uiLanguage, hasImage } = req.body || {};
 
 
 
-    if (!message || !message.trim()) {
+    if (!userMessage || !userMessage.trim()) {
 
       return res.status(400).json({ error: "Message is required." });
 
@@ -54,101 +38,79 @@ module.exports = async (req, res) => {
 
 
 
-    const cleanedMessage = message.trim();
+    // نضبط القيم الافتراضية
 
-    const safeCategory = (category || "General").toString();
+    const safeCategory = category || "General";
 
-    const lang = (uiLanguage || "English").toString();
+    const safeLanguage = uiLanguage || "English";
 
 
-
-    // ===== System Prompt (قلب FixLens Brain) =====
 
     const systemPrompt = `
 
-You are **FixLens Brain**, an AI assistant for diagnosing *real-world problems*.
+You are **FixLens Brain**, an AI assistant for diagnosing *real-world technical problems*.
 
 
 
-Your ONLY focus areas are:
+Areas you focus on:
 
-1) Auto – car issues, noises, leaks, warning lights, steering, brakes, etc.
+- Auto (cars, steering, brakes, engine, leaks, noises…)
 
-2) Home – plumbing, electricity, doors, windows, walls, leaks, HVAC, etc.
+- Home (plumbing, electricity, doors, windows, leaks…)
 
-3) Appliances – washers, dryers, dishwashers, fridges, ovens, small appliances, etc.
-
-
-
-RULES:
-
-- If the user asks about something outside Auto / Home / Appliances,
-
-  politely refuse and invite them to ask about car, home, or appliance problems.
-
-- Ask 2–4 short follow-up questions when needed for clarity or safety.
-
-- Always think about safety first (fire, electricity, gas, heavy parts).
-
-  If there is any serious risk, tell the user to stop and call a professional
-
-  or emergency services.
-
-- Give answers as clear, numbered, step-by-step instructions when possible.
-
-- Keep answers focused and usually under ~400 words unless the user asks
-
-  for more detail.
-
-- If "hasImage" is true, you DO NOT see the photo pixels yet.
-
-  Treat the user's text as a description of what you see in the photo.
-
-- Language:
-
-    * If uiLanguage is Arabic (contains "عرب" or equals "Arabic" / "العربية"),
-
-      answer in Modern Standard Arabic.
-
-    * Otherwise, answer in the same language as the user's message if possible,
-
-      or in English.
-
-- You are polite, practical, and professional. 
-
-`;
+- Appliances (washer, dryer, fridge, oven, AC…).
 
 
 
-    // نبني رسالة المستخدم مع شوية ميتا
+Rules:
 
-    let userPrompt = `User category: ${safeCategory}\n`;
+- Always be **practical and step-by-step**.
 
-    userPrompt += `UI language: ${lang}\n`;
+- First, help the user **understand the problem**.
 
-    userPrompt += `Has image attached: ${hasImage ? "yes" : "no"}\n`;
+- Then, give **clear steps**: what to check, what tools, what to do.
 
-    if (imageDescription && imageDescription.trim()) {
+- If something is dangerous (electricity, fuel, lifting a car, gas, etc.) explain the risk and advise to call a professional.
 
-      userPrompt += `Image description (if any): ${imageDescription.trim()}\n\n`;
+- Never invent measurements or part numbers if you are not sure.
 
-    } else {
-
-      userPrompt += `\n`;
-
-    }
-
-    userPrompt += `User message:\n${cleanedMessage}`;
+- If the user’s message is outside Auto/Home/Appliances, answer politely but stay helpful.
 
 
 
-    // ===== Call OpenAI =====
+Language:
+
+- Try to respond in the **same language** the user is using.
+
+- If the UI language is "${safeLanguage}", use it as a hint.
+
+- It is OK to mix short English terms if needed for tools or parts.
+
+
+
+Context:
+
+- Category: ${safeCategory}
+
+- The user ${hasImage ? "also sent a photo of the problem." : "did not send a photo this time."}
+
+`.trim();
+
+
+
+    const userPrompt = `
+
+User message:
+
+${userMessage}
+
+`.trim();
+
+
 
     const completion = await client.chat.completions.create({
 
       model: "gpt-4o-mini",
-
-      temperature: 0.4,
 
       messages: [
 
@@ -157,6 +119,8 @@ RULES:
         { role: "user", content: userPrompt },
 
       ],
+
+      temperature: 0.4,
 
     });
 
@@ -170,15 +134,7 @@ RULES:
 
     if (!reply) {
 
-      // في حال نادرة جداً لو رجع فاضي
-
-      return res.status(200).json({
-
-        reply:
-
-          "FixLens Brain could not generate a detailed reply this time. Please try again with a bit more detail about the problem.",
-
-      });
+      return res.status(500).json({ error: "FixLens Brain: empty reply." });
 
     }
 
@@ -192,7 +148,7 @@ RULES:
 
     return res.status(500).json({
 
-      error: "FixLens Brain internal error.",
+      error: "FixLens Brain: internal error.",
 
     });
 
