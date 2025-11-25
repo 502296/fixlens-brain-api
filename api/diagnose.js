@@ -1,8 +1,16 @@
-// api/diagnose.js
+// /api/diagnose.js
 
 
 
-const OpenAI = require("openai");
+import OpenAI from "openai";
+
+
+
+export const config = {
+
+  runtime: "edge",
+
+};
 
 
 
@@ -14,144 +22,306 @@ const client = new OpenAI({
 
 
 
-module.exports = async (req, res) => {
+// -------------------------------------------------------------
 
-  if (req.method !== "POST") {
+// Helper: Detect language of user so FixLens replies same language
 
-    return res.status(405).json({ error: "Method not allowed" });
+// -------------------------------------------------------------
 
-  }
-
-
+async function detectLanguage(text) {
 
   try {
 
-    const { userMessage, category, uiLanguage, hasImage } = req.body || {};
-
-
-
-    if (!userMessage || !userMessage.trim()) {
-
-      return res.status(400).json({ error: "Message is required." });
-
-    }
-
-
-
-    // نضبط القيم الافتراضية
-
-    const safeCategory = category || "General";
-
-    const safeLanguage = uiLanguage || "English";
-
-
-
-    const systemPrompt = `
-
-You are **FixLens Brain**, an AI assistant for diagnosing *real-world technical problems*.
-
-
-
-Areas you focus on:
-
-- Auto (cars, steering, brakes, engine, leaks, noises…)
-
-- Home (plumbing, electricity, doors, windows, leaks…)
-
-- Appliances (washer, dryer, fridge, oven, AC…).
-
-
-
-Rules:
-
-- Always be **practical and step-by-step**.
-
-- First, help the user **understand the problem**.
-
-- Then, give **clear steps**: what to check, what tools, what to do.
-
-- If something is dangerous (electricity, fuel, lifting a car, gas, etc.) explain the risk and advise to call a professional.
-
-- Never invent measurements or part numbers if you are not sure.
-
-- If the user’s message is outside Auto/Home/Appliances, answer politely but stay helpful.
-
-
-
-Language:
-
-- Try to respond in the **same language** the user is using.
-
-- If the UI language is "${safeLanguage}", use it as a hint.
-
-- It is OK to mix short English terms if needed for tools or parts.
-
-
-
-Context:
-
-- Category: ${safeCategory}
-
-- The user ${hasImage ? "also sent a photo of the problem." : "did not send a photo this time."}
-
-`.trim();
-
-
-
-    const userPrompt = `
-
-User message:
-
-${userMessage}
-
-`.trim();
-
-
-
-    const completion = await client.chat.completions.create({
+    const response = await client.responses.create({
 
       model: "gpt-4o-mini",
 
-      messages: [
-
-        { role: "system", content: systemPrompt },
-
-        { role: "user", content: userPrompt },
-
-      ],
-
-      temperature: 0.4,
+      input: `Detect the language of the following text and answer only with the language name:\n\n${text}`,
 
     });
 
 
 
-    const reply =
+    return response.output_text.trim() || "English";
 
-      completion.choices?.[0]?.message?.content?.trim() || "";
+  } catch {
+
+    return "English";
+
+  }
+
+}
 
 
 
-    if (!reply) {
+// -------------------------------------------------------------
 
-      return res.status(500).json({ error: "FixLens Brain: empty reply." });
+// Helper: Format the final FixLens answer
+
+// -------------------------------------------------------------
+
+function formatFinalAnswer({ language, diagnosis, steps, warning }) {
+
+  if (language === "Arabic") {
+
+    return `
+
+🔧 **تشخيص FixLens:**
+
+${diagnosis}
+
+
+
+📌 **الخطوات المقترحة للإصلاح:**
+
+${steps}
+
+
+
+⚠️ **تنبيه مهم:**
+
+${warning}
+
+    `.trim();
+
+  }
+
+
+
+  return `
+
+🔧 **FixLens Diagnosis**
+
+${diagnosis}
+
+
+
+📌 **Recommended Steps**
+
+${steps}
+
+
+
+⚠️ **Important Safety Note**
+
+${warning}
+
+  `.trim();
+
+}
+
+
+
+// -------------------------------------------------------------
+
+// Main handler
+
+// -------------------------------------------------------------
+
+export default async function handler(req) {
+
+  try {
+
+    const body = await req.json();
+
+
+
+    const { userMessage, category, uiLanguage, hasImage } = body;
+
+
+
+    const prompt = userMessage?.trim() || "";
+
+    const lang = uiLanguage || (await detectLanguage(prompt));
+
+
+
+    // ---------------------------------------------------------
+
+    // 1) Choose model automatically
+
+    // ---------------------------------------------------------
+
+    let modelToUse = "gpt-4o-mini";
+
+
+
+    if (hasImage) {
+
+      modelToUse = "gpt-4o";
+
+    } else if (prompt.length > 250) {
+
+      modelToUse = "gpt-4o";
+
+    } else if (
+
+      prompt.includes("won't start") ||
+
+      prompt.includes("leaking") ||
+
+      prompt.includes("burning") ||
+
+      prompt.includes("danger") ||
+
+      prompt.includes("fire") ||
+
+      prompt.includes("gas") ||
+
+      prompt.includes("explosion")
+
+    ) {
+
+      modelToUse = "gpt-4o-reasoning";
 
     }
 
 
 
-    return res.status(200).json({ reply });
+    // ---------------------------------------------------------
 
-  } catch (err) {
+    // 2) Build instruction for FixLens Brain
 
-    console.error("FixLens Brain error:", err);
+    // ---------------------------------------------------------
 
-    return res.status(500).json({
+    const systemPrompt = `
 
-      error: "FixLens Brain: internal error.",
+You are FixLens Brain — an AI technician expert in Auto, Home, and Appliances.
+
+Your mission:
+
+1. Give accurate diagnosis.
+
+2. Always provide step-by-step instructions.
+
+3. Always include a safety warning.
+
+4. Stay short, clear, and professional.
+
+5. Write the answer in the user's language: ${lang}.
+
+6. If unclear, ask one clarifying question.
+
+7. Never hallucinate. Never invent things.
+
+8. If the user uploads a photo, analyze it visually with high precision.
+
+    `.trim();
+
+
+
+    // ---------------------------------------------------------
+
+    // 3) Call the chosen model
+
+    // ---------------------------------------------------------
+
+    const response = await client.responses.create({
+
+      model: modelToUse,
+
+      input: [
+
+        {
+
+          role: "system",
+
+          content: systemPrompt,
+
+        },
+
+        {
+
+          role: "user",
+
+          content: prompt,
+
+        },
+
+      ],
 
     });
 
+
+
+    const raw = response.output_text || "I could not generate a diagnosis.";
+
+
+
+    // ---------------------------------------------------------
+
+    // 4) Parse into sections: diagnosis + steps + safety warning
+
+    // ---------------------------------------------------------
+
+    const diagnosis =
+
+      raw.match(/Diagnosis:(.*)/i)?.[1]?.trim() ||
+
+      raw.match(/تشخيص:(.*)/i)?.[1]?.trim() ||
+
+      raw;
+
+
+
+    const steps =
+
+      raw.match(/Steps:(.*)/i)?.[1]?.trim() ||
+
+      raw.match(/الخطوات:(.*)/i)?.[1]?.trim() ||
+
+      "-";
+
+
+
+    const warning =
+
+      raw.match(/Warning:(.*)/i)?.[1]?.trim() ||
+
+      raw.match(/تحذير:(.*)/i)?.[1]?.trim() ||
+
+      "Always follow safety procedures.";
+
+
+
+    // ---------------------------------------------------------
+
+    // 5) Build final formatted reply
+
+    // ---------------------------------------------------------
+
+    const finalReply = formatFinalAnswer({
+
+      language: lang,
+
+      diagnosis,
+
+      steps,
+
+      warning,
+
+    });
+
+
+
+    return new Response(JSON.stringify({ reply: finalReply }), {
+
+      status: 200,
+
+      headers: { "Content-Type": "application/json" },
+
+    });
+
+  } catch (err) {
+
+    return new Response(
+
+      JSON.stringify({ error: String(err) }),
+
+      { status: 500 }
+
+    );
+
   }
 
-};
+}
