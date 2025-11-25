@@ -1,16 +1,8 @@
-// /api/diagnose.js
+// api/diagnose.js
 
 
 
-import OpenAI from "openai";
-
-
-
-export const config = {
-
-  runtime: "edge",
-
-};
+const OpenAI = require("openai");
 
 
 
@@ -22,221 +14,145 @@ const client = new OpenAI({
 
 
 
-// -------------------------------------------------------------
+/**
 
-// Helper: Detect language of user so FixLens replies same language
+ * FixLens Brain – Diagnosis API
 
-// -------------------------------------------------------------
+ * - يستقبل نص المشكلة + اللغة + الهستوري (اختياري)
 
-async function detectLanguage(text) {
+ * - يرجّع جواب واحد منسّق، بدون تكرار العناوين
 
-  try {
+ */
 
-    const response = await client.responses.create({
+module.exports = async (req, res) => {
 
-      model: "gpt-4o-mini",
+  // نسمح فقط بالـ POST
 
-      input: `Detect the language of the following text and answer only with the language name:\n\n${text}`,
+  if (req.method !== "POST") {
 
-    });
+    res.setHeader("Allow", "POST");
 
-
-
-    return response.output_text.trim() || "English";
-
-  } catch {
-
-    return "English";
-
-  }
-
-}
-
-
-
-// -------------------------------------------------------------
-
-// Helper: Format the final FixLens answer
-
-// -------------------------------------------------------------
-
-function formatFinalAnswer({ language, diagnosis, steps, warning }) {
-
-  if (language === "Arabic") {
-
-    return `
-
-🔧 **تشخيص FixLens:**
-
-${diagnosis}
-
-
-
-📌 **الخطوات المقترحة للإصلاح:**
-
-${steps}
-
-
-
-⚠️ **تنبيه مهم:**
-
-${warning}
-
-    `.trim();
+    return res.status(405).json({ error: "Method not allowed" });
 
   }
 
 
 
-  return `
-
-🔧 **FixLens Diagnosis**
-
-${diagnosis}
-
-
-
-📌 **Recommended Steps**
-
-${steps}
-
-
-
-⚠️ **Important Safety Note**
-
-${warning}
-
-  `.trim();
-
-}
-
-
-
-// -------------------------------------------------------------
-
-// Main handler
-
-// -------------------------------------------------------------
-
-export default async function handler(req) {
-
   try {
 
-    const body = await req.json();
+    const body = typeof req.body === "string" ? JSON.parse(req.body) : req.body;
 
 
 
-    const { userMessage, category, uiLanguage, hasImage } = body;
+    const {
+
+      message,
+
+      uiLanguage,
+
+      category,
+
+      history, // لو حابب نستخدمه لاحقاً
+
+      hasImage,
+
+    } = body || {};
 
 
 
-    const prompt = userMessage?.trim() || "";
+    if (!message || !String(message).trim()) {
 
-    const lang = uiLanguage || (await detectLanguage(prompt));
-
-
-
-    // ---------------------------------------------------------
-
-    // 1) Choose model automatically
-
-    // ---------------------------------------------------------
-
-    let modelToUse = "gpt-4o-mini";
-
-
-
-    if (hasImage) {
-
-      modelToUse = "gpt-4o";
-
-    } else if (prompt.length > 250) {
-
-      modelToUse = "gpt-4o";
-
-    } else if (
-
-      prompt.includes("won't start") ||
-
-      prompt.includes("leaking") ||
-
-      prompt.includes("burning") ||
-
-      prompt.includes("danger") ||
-
-      prompt.includes("fire") ||
-
-      prompt.includes("gas") ||
-
-      prompt.includes("explosion")
-
-    ) {
-
-      modelToUse = "gpt-4o-reasoning";
+      return res.status(400).json({ error: "Message is required." });
 
     }
 
 
 
-    // ---------------------------------------------------------
+    const userText = String(message).trim();
 
-    // 2) Build instruction for FixLens Brain
 
-    // ---------------------------------------------------------
+
+    // نبني البرومبت
 
     const systemPrompt = `
 
-You are FixLens Brain — an AI technician expert in Auto, Home, and Appliances.
+You are **FixLens Brain**, an AI assistant that diagnoses **real-world problems**
 
-Your mission:
+only in three domains:
 
-1. Give accurate diagnosis.
+1) Cars & vehicles
 
-2. Always provide step-by-step instructions.
+2) Home & property
 
-3. Always include a safety warning.
-
-4. Stay short, clear, and professional.
-
-5. Write the answer in the user's language: ${lang}.
-
-6. If unclear, ask one clarifying question.
-
-7. Never hallucinate. Never invent things.
-
-8. If the user uploads a photo, analyze it visually with high precision.
-
-    `.trim();
+3) Appliances & devices
 
 
 
-    // ---------------------------------------------------------
+Rules:
 
-    // 3) Call the chosen model
+- Answer in the SAME language the user is using (Arabic, English, etc).
 
-    // ---------------------------------------------------------
+- Always focus on practical, realistic, real-world guidance.
 
-    const response = await client.responses.create({
+- If the user’s message is just a greeting or very general ("hello", "كيفك؟"),
 
-      model: modelToUse,
+  reply as a friendly assistant and ask what problem they want to diagnose.
 
-      input: [
+- If the issue is not related to cars / home / appliances, say politely
 
-        {
+  that FixLens is specialized only in these three areas.
 
-          role: "system",
 
-          content: systemPrompt,
 
-        },
+When the user describes a real problem:
 
-        {
+- First: give a **very short summary** of what you think is going on.
 
-          role: "user",
+- Second: give **clear step-by-step recommended actions**.
 
-          content: prompt,
+- Third: add a short **safety note** (what NOT to do, and when to call a professional).
 
-        },
+
+
+Format:
+
+- Use short paragraphs and bullet points.
+
+- Keep the answer compact and easy to read on a phone screen.
+
+- Do NOT repeat the same text twice.
+
+- Do NOT leave empty sections or dashes; only include sections that have content.
+
+
+
+Extra context for this request:
+
+- Category selected in the app: ${category || "not specified"}
+
+- UI language: ${uiLanguage || "not specified"}
+
+- The user may have attached a photo: ${hasImage ? "YES" : "NO"}.
+
+If a photo is mentioned, infer what it likely shows from the text.
+
+`;
+
+
+
+    // نرسل الطلب إلى GPT-4o mini
+
+    const completion = await client.chat.completions.create({
+
+      model: "gpt-4o-mini",
+
+      temperature: 0.4,
+
+      messages: [
+
+        { role: "system", content: systemPrompt },
+
+        { role: "user", content: userText },
 
       ],
 
@@ -244,84 +160,26 @@ Your mission:
 
 
 
-    const raw = response.output_text || "I could not generate a diagnosis.";
+    const reply =
+
+      completion.choices?.[0]?.message?.content?.trim() ||
+
+      "FixLens Brain could not generate a reply.";
 
 
 
-    // ---------------------------------------------------------
-
-    // 4) Parse into sections: diagnosis + steps + safety warning
-
-    // ---------------------------------------------------------
-
-    const diagnosis =
-
-      raw.match(/Diagnosis:(.*)/i)?.[1]?.trim() ||
-
-      raw.match(/تشخيص:(.*)/i)?.[1]?.trim() ||
-
-      raw;
-
-
-
-    const steps =
-
-      raw.match(/Steps:(.*)/i)?.[1]?.trim() ||
-
-      raw.match(/الخطوات:(.*)/i)?.[1]?.trim() ||
-
-      "-";
-
-
-
-    const warning =
-
-      raw.match(/Warning:(.*)/i)?.[1]?.trim() ||
-
-      raw.match(/تحذير:(.*)/i)?.[1]?.trim() ||
-
-      "Always follow safety procedures.";
-
-
-
-    // ---------------------------------------------------------
-
-    // 5) Build final formatted reply
-
-    // ---------------------------------------------------------
-
-    const finalReply = formatFinalAnswer({
-
-      language: lang,
-
-      diagnosis,
-
-      steps,
-
-      warning,
-
-    });
-
-
-
-    return new Response(JSON.stringify({ reply: finalReply }), {
-
-      status: 200,
-
-      headers: { "Content-Type": "application/json" },
-
-    });
+    return res.status(200).json({ reply });
 
   } catch (err) {
 
-    return new Response(
+    console.error("FixLens Brain API error:", err);
 
-      JSON.stringify({ error: String(err) }),
+    return res.status(500).json({
 
-      { status: 500 }
+      error: "FixLens Brain internal error.",
 
-    );
+    });
 
   }
 
-}
+};
