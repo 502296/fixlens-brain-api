@@ -6,19 +6,9 @@ import OpenAI from "openai";
 
 
 
-const openai = new OpenAI({
-
-  apiKey: process.env.OPENAI_API_KEY,
-
-});
-
-
-
 export default async function handler(req, res) {
 
   try {
-
-    // السماح بـ POST فقط
 
     if (req.method !== "POST") {
 
@@ -28,57 +18,27 @@ export default async function handler(req, res) {
 
 
 
-    const {
-
-      issue,
-
-      imageBase64,
-
-      imageMime,
-
-      languageCode = "en",
-
-      // لو حاب ترسل فلاغ من الموبايل أن هناك صوت
-
-      hasAudio = false,
-
-    } = req.body || {};
+    const { issue, imageBase64, imageMime, languageCode = "en" } = req.body;
 
 
 
-    // لو ماكو نص ولا صورة ولا صوت
-
-    if (!issue && !imageBase64 && !hasAudio) {
+    if (!issue && !imageBase64) {
 
       return res.status(400).json({
 
-        error: "You must provide issue text, imageBase64, or audio.",
+        error: "You must provide issue text OR imageBase64",
 
       });
 
     }
 
 
-
-    // حالياً: الصوت غير مدعوم، لكن لا نُسقط الـ API
-
-    if (hasAudio && !issue && !imageBase64) {
-
-      return res.status(200).json({
-
-        reply:
-
-          "I'm currently unable to process voice notes directly. Please type a short description of the issue so I can help you step by step.",
-
-      });
-
-    }
-
-
-
-    // معالجة نوع الصورة
 
     let mime = imageMime || "image/jpeg";
+
+
+
+    // Fix HEIC → JPG issue
 
     if (mime === "image/heic" || mime === "image/heif") {
 
@@ -88,7 +48,11 @@ export default async function handler(req, res) {
 
 
 
-    // ==== بناء الرسائل ====
+    const openai = new OpenAI({
+
+      apiKey: process.env.OPENAI_API_KEY,
+
+    });
 
 
 
@@ -96,7 +60,7 @@ export default async function handler(req, res) {
 
 
 
-    // SYSTEM MESSAGE
+    // SYSTEM
 
     messages.push({
 
@@ -108,13 +72,7 @@ export default async function handler(req, res) {
 
           type: "text",
 
-          text:
-
-            "You are FixLens Brain, an AI technician that analyzes images and user descriptions to troubleshoot real-world problems (home appliances, vehicles, home issues). " +
-
-            "Always reply in the same language the user used (English or Arabic). " +
-
-            "Be calm, friendly, and very clear. Start with safety steps if there is any risk of electric shock, gas leak, or injury, then give step-by-step diagnosis.",
+          text: `You are FixLens Brain. You analyze images + voice + text and respond in ${languageCode}.`,
 
         },
 
@@ -124,55 +82,45 @@ export default async function handler(req, res) {
 
 
 
-    // USER CONTENT (نجمع النص + الصورة في رسالة واحدة)
-
-    const userContent = [];
-
-
+    // USER TEXT
 
     if (issue) {
 
-      userContent.push({
+      messages.push({
 
-        type: "text",
+        role: "user",
 
-        text: issue,
+        content: [{ type: "text", text: issue }],
 
       });
 
     }
 
 
+
+    // USER IMAGE (NEW FORMAT)
 
     if (imageBase64) {
 
-      userContent.push({
+      messages.push({
 
-        type: "image_url",
+        role: "user",
 
-        image_url: {
+        content: [
 
-          url: `data:${mime};base64,${imageBase64}`,
+          {
 
-        },
+            type: "image_url",
 
-      });
+            image_url: {
 
-    }
+              url: `data:${mime};base64,${imageBase64}`,
 
+            },
 
+          },
 
-    // لو لأي سبب ماكو شيء، نضيف نص بسيط
-
-    if (userContent.length === 0) {
-
-      userContent.push({
-
-        type: "text",
-
-        text:
-
-          "The user did not send any description or image. Please kindly ask them to describe their problem.",
+        ],
 
       });
 
@@ -180,27 +128,15 @@ export default async function handler(req, res) {
 
 
 
-    messages.push({
-
-      role: "user",
-
-      content: userContent,
-
-    });
-
-
-
-    // ==== الاتصال مع OpenAI ====
-
-
+    // CALL OPENAI
 
     const completion = await openai.chat.completions.create({
 
-      model: "gpt-4o-mini",
+      model: "gpt-4.1",   // best for images
 
       messages,
 
-      max_tokens: 700,
+      max_tokens: 500,
 
     });
 
@@ -218,13 +154,13 @@ export default async function handler(req, res) {
 
   } catch (err) {
 
-    console.error("FixLens API ERROR:", err?.response?.data || err);
+    console.error("FixLens API ERROR:", err);
 
     return res.status(500).json({
 
       error: "FixLens Brain internal error",
 
-      details: err?.message || "Unknown error",
+      details: err.message,
 
     });
 
