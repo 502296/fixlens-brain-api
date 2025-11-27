@@ -2,11 +2,13 @@
 
 
 
-import OpenAI, { toFile } from "openai";
+import OpenAI from "openai";
+
+import fridgeKB from "../brain/knowledge/fridge.json" assert { type: "json" };
 
 
 
-const openai = new OpenAI({
+const client = new OpenAI({
 
   apiKey: process.env.OPENAI_API_KEY,
 
@@ -16,41 +18,35 @@ const openai = new OpenAI({
 
 export default async function handler(req, res) {
 
+  if (req.method !== "POST") {
+
+    return res.status(405).json({ error: "Method not allowed. Use POST." });
+
+  }
+
+
+
   try {
-
-    if (req.method !== "POST") {
-
-      return res.status(405).json({ error: "Only POST allowed" });
-
-    }
-
-
 
     const {
 
       issue,
 
-      imageBase64,
-
-      imageMime,
-
-      audioBase64,
-
-      audioMime,
-
       languageCode = "en",
+
+      hasImage = false,
+
+      hasAudio = false,
 
     } = req.body || {};
 
 
 
-    if (!issue && !imageBase64 && !audioBase64) {
+    if (!issue && !hasImage && !hasAudio) {
 
       return res.status(400).json({
 
-        error:
-
-          "You must provide at least one of: issue text, imageBase64, or audioBase64",
+        error: "Missing issue description or media flags.",
 
       });
 
@@ -58,113 +54,205 @@ export default async function handler(req, res) {
 
 
 
-    // 1) لو عندنا صوت، نخليه نص باستخدام gpt-4o-transcribe
+    // 🧠 نجهّز نص الـ Knowledge Base للثلاجات
 
-    let transcriptText = null;
-
-
-
-    if (audioBase64) {
-
-      try {
-
-        const audioBuffer = Buffer.from(audioBase64, "base64");
+    const fridgeKBText = JSON.stringify(fridgeKB);
 
 
 
-        // نحاول نخمن الامتداد من الـ MIME
+    // 🧾 نبني سياق المستخدم
 
-        let ext = "wav";
-
-        if (audioMime === "audio/webm") ext = "webm";
-
-        else if (audioMime === "audio/mpeg" || audioMime === "audio/mp3")
-
-          ext = "mp3";
-
-        else if (audioMime === "audio/mp4" || audioMime === "audio/m4a")
-
-          ext = "m4a";
+    const userParts = [];
 
 
 
-        const audioFile = await toFile(audioBuffer, `voice.${ext}`);
+    if (issue && issue.trim().length > 0) {
 
-
-
-        const transcription = await openai.audio.transcriptions.create({
-
-          file: audioFile,
-
-          model: "gpt-4o-transcribe",
-
-          // يمكنك ترك اللغة فاضية لو تحب يكتشفها:
-
-          // language: languageCode,
-
-        });
-
-
-
-        transcriptText = transcription.text;
-
-        console.log("Transcription:", transcriptText);
-
-      } catch (err) {
-
-        console.error("Audio transcription failed:", err);
-
-        // ما نرمي الخطأ حتى ما نكسر الطلب كله
-
-      }
+      userParts.push(`User description:\n${issue}`);
 
     }
 
 
 
-    // 2) ندمج المشكلة النصية + النص المفرغ من الصوت
+    if (hasImage) {
 
-    let finalIssue = (issue || "").trim();
+      userParts.push(
 
+        "The user also attached one or more photos related to this issue. " +
 
+          "You do NOT see the image directly, but assume it shows the appliance or problem area."
 
-    if (transcriptText && transcriptText.trim()) {
-
-      const voiceText = transcriptText.trim();
-
-      if (finalIssue) {
-
-        finalIssue += `\n\nVoice note from the user (transcribed): ${voiceText}`;
-
-      } else {
-
-        finalIssue = `Voice note from the user: ${voiceText}`;
-
-      }
+      );
 
     }
 
 
 
-    // 3) نبني الرسائل لـ FixLens Brain
+    if (hasAudio) {
 
-    const messages = [];
+      userParts.push(
+
+        "The user also attached an audio/voice note describing the issue or strange noises. " +
+
+          "You do NOT hear the audio directly, but you should think about typical sounds: humming, clicking, rattling, grinding, squealing, etc."
+
+      );
+
+    }
 
 
 
-    messages.push({
+    const userContext = userParts.join("\n\n");
 
-      role: "system",
 
-      content: [
+
+    // 🧠 System Prompt: FixLens Brain + Knowledge Base
+
+    const systemPrompt = `
+
+You are **FixLens Brain**, an AI technician that helps diagnose real-world problems
+
+in appliances, refrigerators, washing machines, AC units, cars, and electrical systems.
+
+
+
+Today, you have access to a structured **Refrigerator Knowledge Base** in JSON format.
+
+Use it whenever the issue is related to a fridge or freezer.
+
+
+
+----------------- FRIDGE KNOWLEDGE BASE (JSON) -----------------
+
+${fridgeKBText}
+
+----------------------------------------------------------------
+
+
+
+Rules for using this knowledge:
+
+
+
+1. When the problem is about a **fridge or freezer**:
+
+   - Match the user's symptoms, noises, and observations to the closest issues in the JSON.
+
+   - Use fields: symptoms, sounds, causes, checks, recommended_actions, danger_level, tags.
+
+   - If multiple issues are possible, list them from MOST likely to LEAST likely.
+
+   - Always include:
+
+     a) Short summary of the most likely cause.
+
+     b) Step-by-step checks the user can do safely.
+
+     c) What is safe for a normal user, and when to call a professional.
+
+     d) Safety warnings (electric shock, fire risk, refrigerant, gas, etc.) if danger_level is "high" or "critical".
+
+
+
+2. If the problem is **not** about a fridge:
+
+   - Ignore the JSON and use your general technical knowledge as FixLens Brain.
+
+   - Still answer in a structured, step-by-step way.
+
+
+
+3. If the user indicates an image was sent (hasImage = true):
+
+   - You do not actually see the image, but infer what it likely shows.
+
+   - For fridges, think about: dirty coils, ice buildup, leaks, broken parts, burned marks, loose wires, etc.
+
+
+
+4. If the user indicates an audio/voice note was sent (hasAudio = true):
+
+   - You do not hear the audio directly.
+
+   - Instead, reason about common sounds: humming, buzzing, rattling, knocking, clicking, grinding, squealing.
+
+   - Map those sounds to likely issues in the knowledge base (for fridges) or your general knowledge.
+
+
+
+5. Language:
+
+   - Answer in the same language as the user if possible.
+
+   - Detected languageCode from app is: ${languageCode}.
+
+   - If the user writes in Arabic, answer in clear Modern Standard Arabic.
+
+   - If English, answer in clear, simple English.
+
+
+
+6. Style:
+
+   - Be calm, practical, and friendly.
+
+   - Start with a 2–3 line summary of the situation and likely cause.
+
+   - Then use numbered steps (1, 2, 3, …) for diagnosis and actions.
+
+   - Mark safety sections clearly, for example: **Safety warning** or **تحذير أمان**.
+
+
+
+You are not just a chatbot. You are "FixLens Brain" — an AI technician that thinks like a real technician,
+
+using both the JSON knowledge base and your own reasoning.
+
+    `.trim();
+
+
+
+    // 🧠 نرسل الطلب إلى GPT-4.1-mini عبر واجهة responses
+
+    const response = await client.responses.create({
+
+      model: "gpt-4.1-mini",
+
+      input: [
 
         {
 
-          type: "text",
+          role: "system",
 
-          text:
+          content: [
 
-            "You are FixLens Brain. You analyze images and real-world problems (home appliances, cars, plumbing, HVAC, etc.) and give clear, step-by-step diagnostics and advice in the user's language.",
+            {
+
+              type: "input_text",
+
+              text: systemPrompt,
+
+            },
+
+          ],
+
+        },
+
+        {
+
+          role: "user",
+
+          content: [
+
+            {
+
+              type: "input_text",
+
+              text: userContext,
+
+            },
+
+          ],
 
         },
 
@@ -174,91 +262,57 @@ export default async function handler(req, res) {
 
 
 
-    if (finalIssue) {
+    // 📝 نأخذ النص من الرد
 
-      messages.push({
-
-        role: "user",
-
-        content: [{ type: "text", text: finalIssue }],
-
-      });
-
-    }
+    let replyText = "";
 
 
 
-    if (imageBase64) {
+    try {
 
-      let mime = imageMime || "image/jpeg";
+      replyText =
 
-      if (mime === "image/heic" || mime === "image/heif") {
+        response.output?.[0]?.content?.[0]?.text ??
 
-        mime = "image/jpeg";
+        JSON.stringify(response);
 
-      }
+    } catch (e) {
 
-
-
-      messages.push({
-
-        role: "user",
-
-        content: [
-
-          {
-
-            type: "input_image",
-
-            image_url: {
-
-              url: `data:${mime};base64,${imageBase64}`,
-
-            },
-
-          },
-
-        ],
-
-      });
+      replyText = JSON.stringify(response);
 
     }
 
 
 
-    // 4) نطلب التحليل من gpt-4o-mini
+    return res.status(200).json({
 
-    const completion = await openai.chat.completions.create({
+      reply: replyText,
 
-      model: "gpt-4o-mini",
+      model: response.model,
 
-      messages,
-
-      max_tokens: 700,
+      usage: response.usage,
 
     });
 
+  } catch (error) {
+
+    console.error("FixLens Brain diagnose error:", error);
 
 
-    const reply =
-
-      completion.choices?.[0]?.message?.content ||
-
-      "FixLens Brain could not generate a response.";
-
-
-
-    return res.status(200).json({ reply });
-
-  } catch (err) {
-
-    console.error("FixLens API ERROR:", err);
 
     return res.status(500).json({
 
       error: "FixLens Brain internal error",
 
-      details: err?.message || "Unknown error",
+      details:
+
+        error?.response?.data ||
+
+        error?.message ||
+
+        error?.toString() ||
+
+        "Unknown error",
 
     });
 
