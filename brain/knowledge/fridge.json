@@ -1,1725 +1,2288 @@
-{
+[
 
-  "category": "fridge",
+  {
 
-  "issues": [
+    "id": "fridge_01",
 
+    "title": "Fridge not cooling at all",
+
+    "symptoms": [
+
+      "Fresh food compartment is warm",
+
+      "Freezer may be slightly cool or also warm",
+
+      "Motor/compressor may be silent or clicking"
+
+    ],
+
+    "possible_causes": [
+
+      "Compressor not starting",
+
+      "Start relay or overload protector faulty",
+
+      "Control board or thermostat failure",
+
+      "Severe refrigerant leak"
+
+    ],
+
+    "recommended_actions": [
+
+      "Verify the fridge is plugged in and outlet has power",
+
+      "Listen for compressor: is it totally silent or only clicking every few minutes?",
+
+      "Clean condenser coils thoroughly to remove heavy dust",
+
+      "If compressor never starts or only clicks, call a professional to test relay, capacitor, and compressor windings"
+
+    ],
+
+    "severity": "high"
+
+  },
+
+  {
+
+    "id": "fridge_02",
+
+    "title": "Fridge runs but not cold enough",
+
+    "symptoms": [
+
+      "Motor/compressor runs frequently",
+
+      "Temperature in fresh food section above 45°F (7°C)",
+
+      "Freezer is cold but not solid hard"
+
+    ],
+
+    "possible_causes": [
+
+      "Dirty condenser coils",
+
+      "Evaporator fan not moving air",
+
+      "Door gasket leaking cold air",
+
+      "Blocked air vents between freezer and fridge compartment"
+
+    ],
+
+    "recommended_actions": [
+
+      "Unplug unit and clean condenser coils with brush and vacuum",
+
+      "Check that evaporator fan in freezer is spinning when door switch is pressed",
+
+      "Inspect door seals for gaps; replace damaged gaskets",
+
+      "Move food away from vents to allow good airflow"
+
+    ],
+
+    "severity": "medium"
+
+  },
+
+  {
+
+    "id": "fridge_03",
+
+    "title": "Freezer cold but fridge warm",
+
+    "symptoms": [
+
+      "Frozen food is okay",
+
+      "Fresh food compartment too warm",
+
+      "Sometimes frost buildup in freezer"
+
+    ],
+
+    "possible_causes": [
+
+      "Air damper stuck closed",
+
+      "Evaporator fan weak or not spinning",
+
+      "Frost clogging air channels between freezer and fridge"
+
+    ],
+
+    "recommended_actions": [
+
+      "Listen for fan noise in freezer with door open and switch pressed",
+
+      "Check and gently move air damper vent to ensure it can open",
+
+      "Defrost unit completely for 24 hours with doors open and towels to catch water"
+
+    ],
+
+    "severity": "medium"
+
+  },
+
+  {
+
+    "id": "fridge_04",
+
+    "title": "Fridge making clicking sound and not cooling",
+
+    "symptoms": [
+
+      "Repeated clicking from compressor area every few minutes",
+
+      "Compressor tries to start but stops",
+
+      "Little or no cooling"
+
+    ],
+
+    "possible_causes": [
+
+      "Start relay/overload failing",
+
+      "Compressor drawing too much current (internal damage)",
+
+      "Low voltage or bad outlet"
+
+    ],
+
+    "recommended_actions": [
+
+      "Verify outlet voltage with another heavy appliance",
+
+      "Inspect relay/overload module on compressor for burnt smell or cracks",
+
+      "Replace start relay kit if visibly damaged",
+
+      "If new relay does not fix it, compressor may need professional replacement"
+
+    ],
+
+    "severity": "high"
+
+  },
+
+  {
+
+    "id": "fridge_05",
+
+    "title": "Heavy dust on condenser coils, poor cooling",
+
+    "symptoms": [
+
+      "Back or bottom coils covered in thick dust",
+
+      "Fridge sides feel warm",
+
+      "Compressor seems to run very hot"
+
+    ],
+
+    "possible_causes": [
+
+      "Restricted heat dissipation due to dust",
+
+      "Condenser fan blocked or weak"
+
+    ],
+
+    "recommended_actions": [
+
+      "Unplug fridge before cleaning",
+
+      "Use brush, compressed air, and vacuum to remove all dust from coils and fan area",
+
+      "Make sure fan spins freely and replace if noisy or stuck",
+
+      "Leave at least a few inches of space behind the fridge for airflow"
+
+    ],
+
+    "severity": "medium"
+
+  },
+
+  {
+
+    "id": "fridge_06",
+
+    "title": "Water leaking under fridge",
+
+    "symptoms": [
+
+      "Puddle of water on floor near front or back",
+
+      "Inside fridge seems dry",
+
+      "Sometimes gurgling sound"
+
+    ],
+
+    "possible_causes": [
+
+      "Clogged defrost drain",
+
+      "Cracked drain pan",
+
+      "Supply line leak on models with ice maker or water dispenser"
+
+    ],
+
+    "recommended_actions": [
+
+      "Remove freezer panel and look for ice buildup near drain hole",
+
+      "Use warm water and a thin tube or pipe cleaner to clear drain",
+
+      "Inspect drain pan for cracks or overflow",
+
+      "Check water supply connections for drips"
+
+    ],
+
+    "severity": "medium"
+
+  },
+
+  {
+
+    "id": "fridge_07",
+
+    "title": "Ice buildup on back wall of freezer",
+
+    "symptoms": [
+
+      "Thick ice sheet on back panel",
+
+      "Fan noise may get louder or start to grind",
+
+      "Cooling performance slowly drops"
+
+    ],
+
+    "possible_causes": [
+
+      "Defrost heater not working",
+
+      "Defrost thermostat or sensor failure",
+
+      "Control board not initiating defrost cycle",
+
+      "Door left open frequently allowing moist air"
+
+    ],
+
+    "recommended_actions": [
+
+      "Do a full manual defrost for 24 hours with doors open",
+
+      "After restart, listen if frost returns within a week",
+
+      "If frost returns quickly, defrost components should be tested by a technician"
+
+    ],
+
+    "severity": "high"
+
+  },
+
+  {
+
+    "id": "fridge_08",
+
+    "title": "Fridge too cold, food freezing in fresh section",
+
+    "symptoms": [
+
+      "Vegetables and drinks freezing",
+
+      "Thermostat set to normal but temperature is near 0°C",
+
+      "Freezer also very cold"
+
+    ],
+
+    "possible_causes": [
+
+      "Temperature sensor or thermostat stuck closed",
+
+      "Air damper stuck open",
+
+      "Control board not reading sensor correctly"
+
+    ],
+
+    "recommended_actions": [
+
+      "Reset temperature settings to a warmer level and wait 24 hours",
+
+      "Check if air vent into fridge is fully open; partially close if adjustable",
+
+      "If temperature does not change, sensor or control board may require service"
+
+    ],
+
+    "severity": "medium"
+
+  },
+
+  {
+
+    "id": "fridge_09",
+
+    "title": "Loud buzzing or rattling from back of fridge",
+
+    "symptoms": [
+
+      "Vibration noise especially when compressor starts",
+
+      "Noise may change if you push fridge slightly",
+
+      "Cooling still normal"
+
+    ],
+
+    "possible_causes": [
+
+      "Loose compressor mounting",
+
+      "Copper tubes touching cabinet or each other",
+
+      "Condenser fan blade hitting debris"
+
+    ],
+
+    "recommended_actions": [
+
+      "Unplug fridge and gently move copper lines so they do not touch metal surfaces",
+
+      "Tighten any loose mounting brackets if accessible",
+
+      "Inspect fan for debris or bent blades; clean and straighten carefully"
+
+    ],
+
+    "severity": "low"
+
+  },
+
+  {
+
+    "id": "fridge_10",
+
+    "title": "Interior light on but fridge not running",
+
+    "symptoms": [
+
+      "Light turns on when door opens",
+
+      "No fan noise, no compressor noise",
+
+      "Unit completely silent"
+
+    ],
+
+    "possible_causes": [
+
+      "Defective thermostat or control board",
+
+      "Starter relay open",
+
+      "Door switch stuck so system thinks door is open (on some models)"
+
+    ],
+
+    "recommended_actions": [
+
+      "Turn thermostat from coldest to warmest and back; listen for click",
+
+      "Unplug and re-plug after 5 minutes to reset electronics",
+
+      "If still dead, thermostat or board likely needs professional testing"
+
+    ],
+
+    "severity": "high"
+
+  },
+
+  {
+
+    "id": "fridge_11",
+
+    "title": "Fridge constantly running, never shuts off",
+
+    "symptoms": [
+
+      "Compressor and fans always on",
+
+      "Exterior warm, especially between doors",
+
+      "Interior may be too cold or barely adequate"
+
+    ],
+
+    "possible_causes": [
+
+      "Thermostat stuck closed",
+
+      "Door gasket leaking warm air",
+
+      "Low refrigerant charge",
+
+      "Very dirty condenser coils"
+
+    ],
+
+    "recommended_actions": [
+
+      "Check door seals with paper test (paper should drag when pulled)",
+
+      "Clean condenser coils thoroughly",
+
+      "If still running non-stop with correct temperature, technician should check gas charge and thermostat"
+
+    ],
+
+    "severity": "medium"
+
+  },
+
+  {
+
+    "id": "fridge_12",
+
+    "title": "Bad smell inside fridge",
+
+    "symptoms": [
+
+      "Strong odor even after removing old food",
+
+      "Smell returns after cleaning",
+
+      "Sometimes mold spots on plastic"
+
+    ],
+
+    "possible_causes": [
+
+      "Spilled liquids absorbed into plastic",
+
+      "Mold in drain system",
+
+      "Long power outage spoiled food in hidden areas"
+
+    ],
+
+    "recommended_actions": [
+
+      "Empty fridge and wash all surfaces with baking soda solution",
+
+      "Flush drain line with warm water and mild bleach solution",
+
+      "Place open box of baking soda or activated charcoal to absorb remaining odor"
+
+    ],
+
+    "severity": "low"
+
+  },
+
+  {
+
+    "id": "fridge_13",
+
+    "title": "Ice maker not producing ice",
+
+    "symptoms": [
+
+      "Ice bin empty or very low",
+
+      "Fridge otherwise cooling normally",
+
+      "No water filling ice tray"
+
+    ],
+
+    "possible_causes": [
+
+      "Water supply valve closed or kinked hose",
+
+      "Frozen fill tube",
+
+      "Faulty inlet valve",
+
+      "Ice maker module failure"
+
+    ],
+
+    "recommended_actions": [
+
+      "Check that water supply valve is open and line not kinked",
+
+      "Inspect and thaw any ice blockage in fill tube with warm air (not tools)",
+
+      "If water never enters tray, inlet valve may need replacement"
+
+    ],
+
+    "severity": "medium"
+
+  },
+
+  {
+
+    "id": "fridge_14",
+
+    "title": "Water dispenser not working",
+
+    "symptoms": [
+
+      "Pressing paddle gives no water",
+
+      "You can hear or not hear valve click",
+
+      "Ice maker may still work"
+
+    ],
+
+    "possible_causes": [
+
+      "Air lock or frozen line in the door",
+
+      "Clogged water filter",
+
+      "Dispenser switch or control problem"
+
+    ],
+
+    "recommended_actions": [
+
+      "Replace water filter if old or clogged",
+
+      "Open door and feel if water line in door feels frozen; let it thaw",
+
+      "Check if any child-lock function is enabled on control panel"
+
+    ],
+
+    "severity": "low"
+
+  },
+
+  {
+
+    "id": "fridge_15",
+
+    "title": "Condensation and water droplets on door gaskets",
+
+    "symptoms": [
+
+      "Moisture around doors",
+
+      "Sometimes small puddles near base",
+
+      "Room may be very humid"
+
+    ],
+
+    "possible_causes": [
+
+      "Door not closing properly",
+
+      "Gasket torn or dirty",
+
+      "High room humidity or frequent door openings"
+
+    ],
+
+    "recommended_actions": [
+
+      "Clean gaskets with warm soapy water and dry",
+
+      "Adjust door level so it closes by itself when released",
+
+      "Replace damaged gaskets if they do not seal"
+
+    ],
+
+    "severity": "low"
+
+  },
+
+  {
+
+    "id": "fridge_16",
+
+    "title": "Freezer burning food (freezer burn)",
+
+    "symptoms": [
+
+      "White dry patches on frozen food",
+
+      "Food tastes old or dry",
+
+      "Ice crystals in packages"
+
+    ],
+
+    "possible_causes": [
+
+      "Food stored too long or not sealed",
+
+      "Temperature fluctuates due to door openings",
+
+      "Freezer temperature slightly too warm"
+
+    ],
+
+    "recommended_actions": [
+
+      "Use airtight bags or containers for long storage",
+
+      "Keep freezer as full as possible but not overcrowded",
+
+      "Set freezer to recommended temperature (around -18°C / 0°F)"
+
+    ],
+
+    "severity": "low"
+
+  },
+
+  {
+
+    "id": "fridge_17",
+
+    "title": "Noise like grinding or scraping from freezer",
+
+    "symptoms": [
+
+      "Periodic grinding noise, especially when door is closed",
+
+      "Noise changes when you open door",
+
+      "Cooling may still be ok"
+
+    ],
+
+    "possible_causes": [
+
+      "Evaporator fan hitting ice buildup",
+
+      "Fan blade loose",
+
+      "Foreign object touching fan"
+
+    ],
+
+    "recommended_actions": [
+
+      "Open freezer and listen near fan cover",
+
+      "If noise stops when door is open, fan or ice is likely",
+
+      "Defrost unit fully; if noise returns, fan motor or blade may need replacement"
+
+    ],
+
+    "severity": "medium"
+
+  },
+
+  {
+
+    "id": "fridge_18",
+
+    "title": "Fridge trips breaker immediately",
+
+    "symptoms": [
+
+      "Breaker trips when fridge plugged in or when compressor starts",
+
+      "Sometimes burning smell"
+
+    ],
+
+    "possible_causes": [
+
+      "Short in compressor windings",
+
+      "Damaged power cord",
+
+      "Internal short in control board"
+
+    ],
+
+    "recommended_actions": [
+
+      "Unplug fridge immediately and do not reset breaker repeatedly",
+
+      "Inspect cord for visible damage",
+
+      "This situation requires a qualified appliance electrician"
+
+    ],
+
+    "severity": "critical"
+
+  },
+
+  {
+
+    "id": "fridge_19",
+
+    "title": "Display panel not responding but cooling ok",
+
+    "symptoms": [
+
+      "Buttons do not change settings",
+
+      "Temperatures seem normal",
+
+      "Sometimes beeping or flashing lights"
+
+    ],
+
+    "possible_causes": [
+
+      "Control panel locked",
+
+      "Moisture or corrosion in keypad",
+
+      "Control board glitch"
+
+    ],
+
+    "recommended_actions": [
+
+      "Check user manual for child-lock or panel-lock function and try unlock sequence",
+
+      "Power-cycle fridge for 5 minutes",
+
+      "If still frozen, panel or board may need service but unit can temporarily operate as is"
+
+    ],
+
+    "severity": "low"
+
+  },
+
+  {
+
+    "id": "fridge_20",
+
+    "title": "Strong chemical or burning smell from back",
+
+    "symptoms": [
+
+      "Sharp odor when standing behind fridge",
+
+      "May coincide with smoke or discoloration",
+
+      "Unit may stop working"
+
+    ],
+
+    "possible_causes": [
+
+      "Electrical component overheating",
+
+      "Fan motor burning out",
+
+      "Compressor wiring short"
+
+    ],
+
+    "recommended_actions": [
+
+      "Unplug fridge immediately",
+
+      "Do not continue to run unit until inspected",
+
+      "Call professional service; risk of fire or further damage"
+
+    ],
+
+    "severity": "critical"
+
+  }
     {
 
-      "id": "no_cooling_total",
+    "id": "fridge_21",
 
-      "name": "Fridge not cooling at all",
+    "title": "Door alarm keeps beeping even when closed",
 
-      "symptoms": [
+    "symptoms": [
 
-        "inside is warm",
+      "Door alarm sounds randomly",
 
-        "food not cold",
+      "Door appears fully closed"
 
-        "freezer also warm",
+    ],
 
-        "light may be on but no cooling"
+    "possible_causes": [
 
-      ],
+      "Faulty door switch",
 
-      "sounds": [
+      "Misaligned door",
 
-        "no sound from compressor",
+      "Magnet for sensor weak or missing"
 
-        "no fan noise",
+    ],
 
-        "or occasional click and then silence"
+    "recommended_actions": [
 
-      ],
+      "Gently press around gasket to see if alarm stops",
 
-      "causes": [
+      "Check for broken plastic around door switch",
 
-        "no power or power outlet issue",
+      "If alarm persists, switch or sensor may need replacement"
 
-        "faulty thermostat or control board",
+    ],
 
-        "compressor relay failure",
+    "severity": "low"
 
-        "compressor failure",
+  },
 
-        "overload protector tripped"
+  {
 
-      ],
+    "id": "fridge_22",
 
-      "checks": [
+    "title": "Fridge interior light stays on when door closed",
 
-        "Verify the fridge is plugged in and outlet works",
+    "symptoms": [
 
-        "Check home breaker/fuse for that outlet",
+      "Light visible through cabinet gaps",
 
-        "Listen at the back for any compressor or fan noise",
+      "Top of fridge feels very warm"
 
-        "Feel if the compressor is warm or completely cold",
+    ],
 
-        "Check if control panel or temperature display is working"
+    "possible_causes": [
 
-      ],
+      "Door switch stuck",
 
-      "recommended_actions": [
+      "Light housing misaligned"
 
-        "Make sure outlet has power (test with another device)",
+    ],
 
-        "Power cycle the fridge (unplug 5 minutes then plug back)",
+    "recommended_actions": [
 
-        "If compressor only clicks and stops, relay/overload may be faulty",
+      "Press door switch manually; see if light turns off",
 
-        "If compressor is hot and not running, stop using and call a technician"
+      "If switch feels loose or broken, it must be replaced to avoid overheating"
 
-      ],
+    ],
 
-      "danger_level": "medium",
+    "severity": "medium"
 
-      "tags": ["cooling", "power", "compressor"]
+  },
 
-    },
+  {
 
-    {
+    "id": "fridge_23",
 
-      "id": "weak_cooling_both",
+    "title": "Cracking or popping noises from inside fridge",
 
-      "name": "Weak cooling in both fridge and freezer",
+    "symptoms": [
 
-      "symptoms": [
+      "Random sharp pops or cracks",
 
-        "fridge not cold enough",
+      "More frequent during cooling cycles"
 
-        "freezer soft or not fully freezing",
+    ],
 
-        "compressor runs for long time",
+    "possible_causes": [
 
-        "food spoils faster than normal"
+      "Normal expansion and contraction of plastic liners",
 
-      ],
+      "Ice shifting in ice maker"
 
-      "sounds": [
+    ],
 
-        "normal humming most of the time",
+    "recommended_actions": [
 
-        "fan sound but continuous"
+      "Usually harmless if cooling is normal",
 
-      ],
+      "Check for loose shelves or items touching walls",
 
-      "causes": [
+      "If noise becomes metallic or grinding, investigate fan or compressor instead"
 
-        "dirty or blocked condenser coils",
+    ],
 
-        "poor ventilation around fridge",
+    "severity": "low"
 
-        "condenser fan not spinning well",
+  },
 
-        "low refrigerant or small leak",
+  {
 
-        "door gaskets leaking warm air"
+    "id": "fridge_24",
 
-      ],
+    "title": "Strong vibration transmitted to floor",
 
-      "checks": [
+    "symptoms": [
 
-        "Inspect and clean condenser coils",
+      "Fridge hums and floor vibrates",
 
-        "Ensure there is enough space around the back and sides",
+      "Noise reduces when you press on cabinet"
 
-        "Check if condenser fan at the back is spinning freely",
+    ],
 
-        "Look for frost or ice buildup on freezer back wall",
+    "possible_causes": [
 
-        "Check gasket condition and if doors shut fully"
+      "Leveling legs not set",
 
-      ],
+      "Fridge touching wall or cabinets",
 
-      "recommended_actions": [
+      "Compressor vibration not isolated"
 
-        "Thoroughly clean coils with brush and vacuum",
+    ],
 
-        "Move fridge a bit away from wall to improve airflow",
+    "recommended_actions": [
 
-        "Make sure fans spin freely and are not blocked by dust",
+      "Adjust feet so fridge is stable and all corners touch floor",
 
-        "If problem continues after cleaning, a technician should check refrigerant levels"
+      "Move fridge slightly away from walls",
 
-      ],
+      "Use vibration pads under feet if floor is very resonant"
 
-      "danger_level": "medium",
+    ],
 
-      "tags": ["cooling", "coils", "ventilation"]
+    "severity": "low"
 
-    },
+  },
 
-    {
+  {
 
-      "id": "freezer_cold_fridge_warm",
+    "id": "fridge_25",
 
-      "name": "Freezer cold but fridge warm",
+    "title": "Frost only on top of freezer compartment",
 
-      "symptoms": [
+    "symptoms": [
 
-        "freezer seems okay",
+      "Top area icy, lower shelves normal",
 
-        "fridge compartment is warm",
+      "Door may not close fully"
 
-        "ice melts slowly in fridge section",
+    ],
 
-        "back wall of freezer may be icy"
+    "possible_causes": [
 
-      ],
+      "Items blocking door from sealing at top",
 
-      "sounds": [
+      "Sagging freezer door",
 
-        "normal compressor noise",
+      "Warm air entering from top corner"
 
-        "evaporator fan may be noisy or quiet",
+    ],
 
-        "airflow sound may be weak to fridge"
+    "recommended_actions": [
 
-      ],
+      "Rearrange food so nothing touches ceiling or door",
 
-      "causes": [
+      "Check gasket for gaps at top",
 
-        "evaporator fan not blowing air to fridge",
+      "Adjust hinges if possible or replace gasket"
 
-        "air vents between freezer and fridge blocked by ice or food",
+    ],
 
-        "damper door stuck closed",
+    "severity": "medium"
 
-        "frost buildup on evaporator coils blocking airflow"
+  },
 
-      ],
+  {
 
-      "checks": [
+    "id": "fridge_26",
 
-        "Open freezer and listen if fan runs when door switch is pressed",
+    "title": "Freezer door hard to open right after closing",
 
-        "Check for ice buildup on back wall inside freezer",
+    "symptoms": [
 
-        "Look for air vents between freezer and fridge and see if blocked",
+      "Door feels vacuum-sealed for a short time",
 
-        "Verify fridge is not over-packed blocking internal airflow"
+      "After a minute it opens normally"
 
-      ],
+    ],
 
-      "recommended_actions": [
+    "possible_causes": [
 
-        "Defrost fridge completely (24 hours unplugged with doors open) if heavy ice is present",
+      "Normal pressure equalization",
 
-        "Move items away from vents to allow air circulation",
+      "Gasket sealing very well"
 
-        "If fan is not spinning or makes grinding noises, fan motor may need replacement",
+    ],
 
-        "If problem returns quickly after defrost, there may be a defrost system fault"
+    "recommended_actions": [
 
-      ],
+      "This is usually normal behavior",
 
-      "danger_level": "low",
+      "Wait 30–60 seconds before reopening",
 
-      "tags": ["airflow", "evaporator_fan", "vents"]
+      "If door never releases or gasket tears, inspect for mechanical issues"
 
-    },
+    ],
 
-    {
+    "severity": "low"
 
-      "id": "runs_constantly",
+  },
 
-      "name": "Fridge runs constantly without stopping",
+  {
 
-      "symptoms": [
+    "id": "fridge_27",
 
-        "compressor almost never turns off",
+    "title": "Food freezing only near back wall",
 
-        "sides of fridge may feel warm",
+    "symptoms": [
 
-        "electric bill may be higher",
+      "Items touching back panel become icy",
 
-        "inside possibly too cold or just barely correct"
+      "Front shelves okay"
 
-      ],
+    ],
 
-      "sounds": [
+    "possible_causes": [
 
-        "continuous humming from compressor",
+      "Cold air outlet directly at back",
 
-        "fans running most of the time"
+      "Thermostat slightly too low"
 
-      ],
+    ],
 
-      "causes": [
+    "recommended_actions": [
 
-        "temperature set too low",
+      "Keep sensitive items away from back wall",
 
-        "door not sealing properly",
+      "Raise temperature setting one step and monitor",
 
-        "frequent door opening",
+      "If entire section begins to freeze, sensor calibration may be off"
 
-        "dirty condenser coils",
+    ],
 
-        "broken door gasket letting warm air in",
+    "severity": "low"
 
-        "control board or thermostat issue"
+  },
 
-      ],
+  {
 
-      "checks": [
+    "id": "fridge_28",
 
-        "Verify temperature settings are reasonable (3–4 °C / 37–40 °F for fridge)",
+    "title": "Vegetable drawers full of water",
 
-        "Check gaskets for cracks or gaps and test with paper strip",
+    "symptoms": [
 
-        "Look for ice buildup or heavy load inside fridge",
+      "Condensation or standing water in crispers",
 
-        "Inspect and clean condenser coils",
+      "Produce spoils quickly"
 
-        "Check if doors are misaligned or not closing fully"
+    ],
 
-      ],
+    "possible_causes": [
 
-      "recommended_actions": [
+      "Humidity setting too high",
 
-        "Adjust temperature settings to normal range",
+      "Door opened very frequently in humid climate",
 
-        "Clean coils to reduce compressor load",
+      "Warm food placed directly into drawers"
 
-        "Fix or replace gaskets that do not seal properly",
+    ],
 
-        "Reduce unnecessary door opening and large warm food loads",
+    "recommended_actions": [
 
-        "If still running nonstop, have a technician check controls and refrigerant"
+      "Adjust crisper vents to lower humidity",
 
-      ],
+      "Let hot foods cool before refrigeration",
 
-      "danger_level": "medium",
+      "Wipe drawers dry and monitor door opening habits"
 
-      "tags": ["energy", "gasket", "coils"]
+    ],
 
-    },
+    "severity": "low"
 
-    {
+  },
 
-      "id": "short_cycle_on_off",
+  {
 
-      "name": "Fridge short-cycling (turns on and off quickly)",
+    "id": "fridge_29",
 
-      "symptoms": [
+    "title": "Back interior panel bulging or warped",
 
-        "compressor starts and stops repeatedly",
+    "symptoms": [
 
-        "clicking sounds every few seconds or minutes",
+      "Panel seems bowed outward",
 
-        "no stable cooling",
+      "Sometimes rubbing fan noise"
 
-        "lights work but cooling is inconsistent"
+    ],
 
-      ],
+    "possible_causes": [
 
-      "sounds": [
+      "Ice accumulation behind panel",
 
-        "click, hum for a moment, then click off",
+      "Improper defrost",
 
-        "relay clicking repeatedly"
+      "Water leak from evaporator"
 
-      ],
+    ],
 
-      "causes": [
+    "recommended_actions": [
 
-        "faulty compressor start relay",
+      "Unplug and fully defrost fridge for at least 24 hours",
 
-        "overload protector tripping",
+      "If panel stays deformed or icing quickly returns, defrost system needs service"
 
-        "compressor internal problem",
+    ],
 
-        "voltage issues",
+    "severity": "high"
 
-        "control board fault"
+  },
 
-      ],
+  {
 
-      "checks": [
+    "id": "fridge_30",
 
-        "Listen carefully at back for pattern of click–hum–click",
+    "title": "Condensation on exterior cabinet",
 
-        "Check if compressor gets very hot to the touch",
+    "symptoms": [
 
-        "Ensure fridge is plugged into a stable power outlet (not overloaded strip)",
+      "Sweating or water droplets on outside walls",
 
-        "Look for burned marks on relay area (for technicians only)"
+      "Particularly in humid weather"
 
-      ],
+    ],
 
-      "recommended_actions": [
+    "possible_causes": [
 
-        "Unplug fridge and let compressor cool down",
+      "High room humidity",
 
-        "Avoid using cheap extension cords or overloaded power strips",
+      "Cabinet insulation issue",
 
-        "If clicking repeats after cooling, relay or compressor likely needs professional service",
+      "Door gaskets leaking allowing cold bridges"
 
-        "Do not bypass safety components"
+    ],
 
-      ],
+    "recommended_actions": [
 
-      "danger_level": "high",
+      "Use dehumidifier in room if humidity very high",
 
-      "tags": ["compressor", "relay", "safety"]
+      "Ensure doors seal well and are not misaligned",
 
-    },
+      "If sweating extreme on new unit, contact manufacturer"
 
-    {
+    ],
 
-      "id": "no_power",
+    "severity": "medium"
 
-      "name": "Fridge has no power at all",
+  },
 
-      "symptoms": [
+  {
 
-        "no lights inside",
+    "id": "fridge_31",
 
-        "no sound at all",
+    "title": "Ice forming on floor of freezer",
 
-        "control panel off",
+    "symptoms": [
 
-        "fridge appears completely dead"
+      "Solid sheet of ice on bottom",
 
-      ],
+      "Water sometimes drips into fridge section"
 
-      "sounds": [
+    ],
 
-        "no sound"
+    "possible_causes": [
 
-      ],
+      "Frozen or blocked defrost drain",
 
-      "causes": [
+      "Door left open slightly",
 
-        "outlet has no power",
+      "Cracked drain trough"
 
-        "power cord damaged or loose",
+    ],
 
-        "home breaker tripped",
+    "recommended_actions": [
 
-        "internal fuse or control board issue"
+      "Defrost unit fully and clear drain with hot water and flexible tube",
 
-      ],
+      "Check door gasket and hinges",
 
-      "checks": [
+      "If ice returns quickly, drain system may need parts replaced"
 
-        "Test outlet with another device (like a lamp)",
+    ],
 
-        "Check home breaker/fuse box for tripped breaker",
+    "severity": "medium"
 
-        "Inspect power cord for visible damage or burn marks",
+  },
 
-        "Make sure plug is fully seated and not loose"
+  {
 
-      ],
+    "id": "fridge_32",
 
-      "recommended_actions": [
+    "title": "Rattle noise from inside fridge ceiling",
 
-        "Restore power at breaker if tripped",
+    "symptoms": [
 
-        "Try a different outlet temporarily if safe",
+      "Noise near cold air diffuser",
 
-        "If outlet works but fridge stays dead, internal electronics need service",
+      "Changes when doors open"
 
-        "Do not open control board unless you are qualified"
+    ],
 
-      ],
+    "possible_causes": [
 
-      "danger_level": "high",
+      "Loose air duct cover",
 
-      "tags": ["power", "safety"]
+      "Fan cover vibrating",
 
-    },
+      "Pieces of ice hitting fan"
 
-    {
+    ],
 
-      "id": "light_on_not_running",
+    "recommended_actions": [
 
-      "name": "Light is on but fridge not running",
+      "Remove shelves and inspect plastic covers for looseness",
 
-      "symptoms": [
+      "Tighten screws or clips carefully",
 
-        "interior light works",
+      "If ice present, do a manual defrost and monitor"
 
-        "no humming sound from compressor",
+    ],
 
-        "temperature rising slowly",
+    "severity": "low"
 
-        "fan noise may be absent"
+  },
 
-      ],
+  {
 
-      "sounds": [
+    "id": "fridge_33",
 
-        "complete silence except for door switch click",
+    "title": "Display shows error code related to sensors",
 
-        "maybe occasional single click from compressor area"
+    "symptoms": [
 
-      ],
+      "Letters like \"E1\", \"E2\", or sensor code",
 
-      "causes": [
+      "Cooling may continue or stop"
 
-        "thermostat not calling for cooling",
+    ],
 
-        "control board stuck",
+    "possible_causes": [
 
-        "start relay failure",
+      "Failed temperature sensor",
 
-        "compressor not starting"
+      "Loose wiring harness",
 
-      ],
+      "Control board fault"
 
-      "checks": [
+    ],
 
-        "Set temperature to colder and wait a few minutes",
+    "recommended_actions": [
 
-        "Listen carefully at the back for any attempt of compressor to start",
+      "Power-cycle fridge for 5 minutes",
 
-        "Check if fan in freezer runs at all",
+      "If code returns, consult manual for meaning",
 
-        "Observe if compressor vibrates slightly when calling for cooling"
+      "Sensor or board usually must be replaced by technician"
 
-      ],
+    ],
 
-      "recommended_actions": [
+    "severity": "high"
 
-        "Try unplugging for 5–10 minutes to reset electronics",
+  },
 
-        "If compressor never attempts to start, relay/control likely faulty",
+  {
 
-        "If compressor tries but fails with clicking, technician should test relay and compressor"
+    "id": "fridge_34",
 
-      ],
+    "title": "Door handle feels loose or wobbly",
 
-      "danger_level": "medium",
+    "symptoms": [
 
-      "tags": ["control", "compressor"]
+      "Handle moves more than normal",
 
-    },
+      "May squeak when pulled"
 
-    {
+    ],
 
-      "id": "clicking_sound",
+    "possible_causes": [
 
-      "name": "Repeated clicking sound from back",
+      "Mounting screws loosened",
 
-      "symptoms": [
+      "Hidden set screws backing out"
 
-        "clicking every few seconds or minutes",
+    ],
 
-        "little or no cooling",
+    "recommended_actions": [
 
-        "compressor may start briefly then stop",
+      "Tighten visible screws with correct screwdriver",
 
-        "fridge temperature rising"
+      "For hidden screws, remove decorative caps carefully",
 
-      ],
+      "Do not overtighten to avoid cracking plastic"
 
-      "sounds": [
+    ],
 
-        "distinct click from relay area",
+    "severity": "low"
 
-        "short hum followed by click off"
+  },
 
-      ],
+  {
 
-      "causes": [
+    "id": "fridge_35",
 
-        "compressor relay failure",
+    "title": "Shelves or door bins keep cracking",
 
-        "compressor drawing too much current",
+    "symptoms": [
 
-        "overload protector tripping"
+      "Plastic parts brittle or breaking",
 
-      ],
+      "Cracks near corners"
 
-      "checks": [
+    ],
 
-        "Listen from the back to confirm the pattern",
+    "possible_causes": [
 
-        "Check if compressor is very hot to the touch (be careful)",
+      "Overloading shelves with heavy items",
 
-        "Observe if fans run normally while compressor fails"
+      "Very low temperatures stressing plastic",
 
-      ],
+      "Age and UV exposure"
 
-      "recommended_actions": [
+    ],
 
-        "Unplug fridge to let compressor cool",
+    "recommended_actions": [
 
-        "Do not keep letting it click for hours (may cause damage)",
+      "Spread heavy items across multiple shelves",
 
-        "Have a technician test relay and compressor windings",
+      "Avoid placing glass jugs on door bins",
 
-        "Relay replacement is sometimes enough, but compressor failure is also possible"
+      "Order replacement bins specific to model"
 
-      ],
+    ],
 
-      "danger_level": "high",
+    "severity": "low"
 
-      "tags": ["compressor", "relay", "noise"]
+  },
 
-    },
+  {
 
-    {
+    "id": "fridge_36",
 
-      "id": "loud_humming",
+    "title": "Noise only when ice maker cycles",
 
-      "name": "Loud humming or buzzing noise",
+    "symptoms": [
 
-      "symptoms": [
+      "Loud clunk or grinding when ice dumps",
 
-        "fridge still cooling",
+      "Otherwise unit quiet"
 
-        "noise seems louder than usual",
+    ],
 
-        "vibration may be felt on sides or floor",
+    "possible_causes": [
 
-        "noise may change when door is opened"
+      "Ice maker ejector arm worn",
 
-      ],
+      "Ice hitting empty plastic bin",
 
-      "sounds": [
+      "Normal operation of ice harvest"
 
-        "deep humming from compressor",
+    ],
 
-        "buzzing from coils or metal parts touching",
+    "recommended_actions": [
 
-        "resonance through cabinet"
+      "Compare with manual description of normal sounds",
 
-      ],
+      "If cubes distorted or ice maker jams, module may need replacement",
 
-      "causes": [
+      "Turn ice maker off if not needed"
 
-        "fridge not level or touching wall/furniture",
+    ],
 
-        "loose panel or tubing vibrating",
+    "severity": "low"
 
-        "compressor older and noisier but still working",
+  },
 
-        "fan motor bearings wearing out"
+  {
 
-      ],
+    "id": "fridge_37",
 
-      "checks": [
+    "title": "Water filter warning light on",
 
-        "Gently pull fridge away from the wall",
+    "symptoms": [
 
-        "Check if noise changes when you press on side panels",
+      "Indicator says \"Replace Filter\"",
 
-        "Verify if fridge is level using a small level or by feel",
+      "Water flow may be slower"
 
-        "Listen if noise comes more from fan area or compressor"
+    ],
 
-      ],
+    "possible_causes": [
 
-      "recommended_actions": [
+      "Filter age reached",
 
-        "Adjust fridge feet to make it level and stable",
+      "Clogging from sediments"
 
-        "Ensure no back panel or tubing is touching wall tightly",
+    ],
 
-        "If noise is clearly from a fan, fan motor may need replacement",
+    "recommended_actions": [
 
-        "If compressor is extremely loud and hot, plan for service or replacement"
+      "Replace filter with correct model",
 
-      ],
+      "Reset indicator following manual (button or combination)",
 
-      "danger_level": "medium",
+      "If flow still poor, line or valve may also be restricted"
 
-      "tags": ["noise", "vibration", "compressor"]
+    ],
 
-    },
+    "severity": "low"
 
-    {
+  },
 
-      "id": "rattling_noise",
+  {
 
-      "name": "Rattling, clanking, or metal vibration noise",
+    "id": "fridge_38",
 
-      "symptoms": [
+    "title": "Door opens by itself after shutting",
 
-        "intermittent rattling or clanking",
+    "symptoms": [
 
-        "noise may appear when compressor starts or stops",
+      "Door slowly reopens a few centimeters",
 
-        "fridge may be touching cabinets or floor unevenly"
+      "Happens more when fridge is full"
 
-      ],
+    ],
 
-      "sounds": [
+    "possible_causes": [
 
-        "metal clank",
+      "Fridge slightly leaning backward or forward incorrectly",
 
-        "loose object rattling",
+      "Air pressure equalization pushing door",
 
-        "vibration against wall or pipes"
+      "Items pushing against door from inside"
 
-      ],
+    ],
 
-      "causes": [
+    "recommended_actions": [
 
-        "loose drip tray or panel at the back",
+      "Level fridge so it leans just slightly backward",
 
-        "tubing touching each other or cabinet",
+      "Rearrange tall containers away from door",
 
-        "items on top of fridge vibrating",
+      "Confirm gaskets are clean and sticky enough to seal"
 
-        "internal fan shroud loose"
+    ],
 
-      ],
+    "severity": "low"
 
-      "checks": [
+  },
 
-        "Remove items from top of fridge and test noise",
+  {
 
-        "Look behind fridge for loose drip pan or panel",
+    "id": "fridge_39",
 
-        "Gently move tubing so it does not touch sharp corners",
+    "title": "Random beeping with no visible error",
 
-        "Check inside if fan cover is loose"
+    "symptoms": [
 
-      ],
+      "Beeps periodically",
 
-      "recommended_actions": [
+      "No obvious alarm message"
 
-        "Secure any loose back panels or trays",
+    ],
 
-        "Re-route tubes slightly to avoid contact",
+    "possible_causes": [
 
-        "Keep top of fridge clear of heavy vibrating items",
+      "Door open too long earlier",
 
-        "If internal components are loose, technician can tighten mounts"
+      "Temperature briefly out of range",
 
-      ],
+      "Loose wire to display"
 
-      "danger_level": "low",
+    ],
 
-      "tags": ["noise", "vibration"]
+    "recommended_actions": [
 
-    },
+      "Power-cycle fridge and check that doors close firmly",
 
-    {
+      "Monitor temperatures with a fridge thermometer",
 
-      "id": "water_leak_front",
+      "If beeping continues daily, service may be needed"
 
-      "name": "Water leaking on floor in front of fridge",
+    ],
 
-      "symptoms": [
+    "severity": "medium"
 
-        "puddle of water in front or under fridge",
+  },
 
-        "more water after defrost cycles",
+  {
 
-        "sometimes only on one side"
+    "id": "fridge_40",
 
-      ],
+    "title": "Temperature fluctuates widely during the day",
 
-      "sounds": [
+    "symptoms": [
 
-        "may hear occasional dripping",
+      "Thermometer reading swings up and down",
 
-        "otherwise normal sounds"
+      "Food near front warms more"
 
-      ],
+    ],
 
-      "causes": [
+    "possible_causes": [
 
-        "clogged defrost drain",
+      "Frequent door openings",
 
-        "drain hose frozen or blocked",
+      "Overloaded shelves blocking airflow",
 
-        "leak from water line to ice maker or dispenser",
+      "Thermostat located near door opening"
 
-        "door left slightly open causing excess condensation"
+    ],
 
-      ],
+    "recommended_actions": [
 
-      "checks": [
+      "Group items so cold air can circulate",
 
-        "Check behind and under fridge for source of water",
+      "Avoid opening door for long periods",
 
-        "Inspect water line connections if fridge has ice maker / dispenser",
+      "Place most sensitive foods deeper inside"
 
-        "Look inside freezer for ice sheet under bottom tray",
+    ],
 
-        "Check if defrost drain hole is blocked with ice or food"
+    "severity": "medium"
 
-      ],
+  },
 
-      "recommended_actions": [
+  {
 
-        "Turn off water supply and fix any loose water line connections",
+    "id": "fridge_41",
 
-        "Defrost and clear defrost drain with warm water (if accessible)",
+    "title": "Ice cubes have bad taste or odor",
 
-        "Ensure doors close fully and gaskets seal properly",
+    "symptoms": [
 
-        "If leak source is internal and hidden, technician should inspect"
+      "Ice tastes like freezer smell",
 
-      ],
+      "Drinks taste off when using ice"
 
-      "danger_level": "medium",
+    ],
 
-      "tags": ["water_leak", "defrost", "plumbing"]
+    "possible_causes": [
 
-    },
+      "Uncovered food absorbing into ice",
 
-    {
+      "Old water filter",
 
-      "id": "water_inside_fridge",
+      "Stale ice stored for months"
 
-      "name": "Water pooling inside fridge section",
+    ],
 
-      "symptoms": [
+    "recommended_actions": [
 
-        "water collecting under crisper drawers",
+      "Throw away old ice and make fresh batch",
 
-        "small puddles inside fridge",
+      "Store foods in sealed containers",
 
-        "sometimes water dripping from top"
+      "Replace water filter regularly"
 
-      ],
+    ],
 
-      "sounds": [
+    "severity": "low"
 
-        "normal operating sounds",
+  },
 
-        "occasional drip noise"
+  {
 
-      ],
+    "id": "fridge_42",
 
-      "causes": [
+    "title": "Freezer temperature okay but ice is soft",
 
-        "clogged defrost drain inside fridge",
+    "symptoms": [
 
-        "condensation from warm air entering",
+      "Ice cubes stick together",
 
-        "blocked drain trough"
+      "Thermometer shows around -5°C instead of -18°C"
 
-      ],
+    ],
 
-      "checks": [
+    "possible_causes": [
 
-        "Look under drawers for standing water",
+      "Freezer set too warm",
 
-        "Inspect back wall for signs of water trails",
+      "Door not fully sealing",
 
-        "Check if drain hole is blocked by debris or ice"
+      "Frequent door openings"
 
-      ],
+    ],
 
-      "recommended_actions": [
+    "recommended_actions": [
 
-        "Clear drain hole using warm water and a small flexible tube",
+      "Lower freezer setpoint and wait 24 hours",
 
-        "Avoid leaving door open for long periods",
+      "Check for frost only near door area (indicates gasket leak)",
 
-        "Keep food from touching back wall to reduce condensation"
+      "Avoid opening door repeatedly during hot weather"
 
-      ],
+    ],
 
-      "danger_level": "low",
+    "severity": "medium"
 
-      "tags": ["water_inside", "defrost"]
+  },
 
-    },
+  {
 
-    {
+    "id": "fridge_43",
 
-      "id": "ice_buildup_back_wall",
+    "title": "Fridge runs normally but display shows very wrong temperature",
 
-      "name": "Ice buildup on back wall of freezer",
+    "symptoms": [
 
-      "symptoms": [
+      "Thermometer inside shows 4°C but display 10°C or -5°C",
 
-        "thick ice on inside back panel",
+      "Food condition appears normal"
 
-        "airflow reduced",
+    ],
 
-        "freezer may be cold but fridge warm",
+    "possible_causes": [
 
-        "fan may be noisy or blocked by ice"
+      "Sensor calibration drift",
 
-      ],
+      "Loose sensor probe",
 
-      "sounds": [
+      "Control board misreading"
 
-        "fan hitting ice (ticking sound)",
+    ],
 
-        "whirring with occasional grinding",
+    "recommended_actions": [
 
-        "airflow noise reduced"
+      "Verify real temperature with separate thermometer",
 
-      ],
+      "If difference constant, note real value and consider service when convenient",
 
-      "causes": [
+      "Sensor may eventually need replacement"
 
-        "defrost heater failure",
+    ],
 
-        "defrost thermostat or sensor fault",
+    "severity": "low"
 
-        "defrost timer or control board issue",
+  },
 
-        "door gasket leaking moist air inside"
+  {
 
-      ],
+    "id": "fridge_44",
 
-      "checks": [
+    "title": "Door gasket repeatedly falls out of track",
 
-        "Visually inspect back panel for solid ice buildup",
+    "symptoms": [
 
-        "Listen if fan noise changes or hits ice",
+      "Seal pulls away when door opened",
 
-        "Check door gasket for gaps or tears",
+      "Gaps visible after closing"
 
-        "Note if problem returns quickly after manual defrost"
+    ],
 
-      ],
+    "possible_causes": [
 
-      "recommended_actions": [
+      "Retainer strip loose",
 
-        "Perform full manual defrost (24 hours unplugged with towels)",
+      "Gasket shrunk with age",
 
-        "After defrost, monitor how long it takes for ice to return",
+      "Incorrect replacement part"
 
-        "If ice returns within days, defrost system likely needs service",
+    ],
 
-        "Technician can test heater, thermostat, and control board"
+    "recommended_actions": [
 
-      ],
+      "Warm gasket gently with hair dryer to make it flexible and press back into track",
 
-      "danger_level": "medium",
+      "Tighten retainer screws if present",
 
-      "tags": ["ice", "defrost", "airflow"]
+      "Replace gasket if it no longer stays seated"
 
-    },
+    ],
 
-    {
+    "severity": "medium"
 
-      "id": "frost_on_food",
+  },
 
-      "name": "Excess frost on food and packages",
+  {
 
-      "symptoms": [
+    "id": "fridge_45",
 
-        "frost covering food in freezer",
+    "title": "Fridge makes gurgling or bubbling sounds",
 
-        "frozen packages stuck together",
+    "symptoms": [
 
-        "ice crystals on inside walls"
+      "Liquid flowing sounds from back or inside walls",
 
-      ],
+      "Noise more frequent after compressor stops"
 
-      "sounds": [
+    ],
 
-        "normal operation",
+    "possible_causes": [
 
-        "sometimes more fan noise due to airflow obstruction"
+      "Refrigerant moving through tubing (often normal)",
 
-      ],
+      "Defrost water dripping into pan"
 
-      "causes": [
+    ],
 
-        "door opened very frequently",
+    "recommended_actions": [
 
-        "door not closing fully or gasket leaking",
+      "Usually harmless if cooling is fine",
 
-        "storing warm food without covering",
+      "If combined with poor cooling and oily residue, there may be refrigerant leak requiring professional service"
 
-        "temperature set too low"
+    ],
 
-      ],
+    "severity": "low"
 
-      "checks": [
+  },
 
-        "Inspect door gasket for tears or dirt",
+  {
 
-        "Check if door is sometimes left slightly open",
+    "id": "fridge_46",
 
-        "Verify temperature not set excessively low",
+    "title": "Fan starts and stops rapidly",
 
-        "Observe user habits (door frequently opened, hot food placed inside)"
+    "symptoms": [
 
-      ],
+      "Short bursts of fan noise",
 
-      "recommended_actions": [
+      "Temperature may swing"
 
-        "Clean and inspect gaskets, replace if damaged",
+    ],
 
-        "Reduce door opening time and frequency",
+    "possible_causes": [
 
-        "Let hot food cool slightly before placing inside",
+      "Loose connection to fan motor",
 
-        "Set temperature to manufacturer’s recommended setting"
+      "Control board relay malfunction",
 
-      ],
+      "Icing around fan blades"
 
-      "danger_level": "low",
+    ],
 
-      "tags": ["frost", "door", "habits"]
+    "recommended_actions": [
 
-    },
+      "Listen whether pattern follows door opening/closing",
 
-    {
+      "Do a full defrost to remove any hidden ice",
 
-      "id": "ice_maker_not_working",
+      "If issue persists, fan or board needs testing"
 
-      "name": "Ice maker not producing ice",
+    ],
 
-      "symptoms": [
+    "severity": "high"
 
-        "no ice in bin",
+  },
 
-        "very slow ice production",
+  {
 
-        "ice maker tray may be empty",
+    "id": "fridge_47",
 
-        "water dispenser may still work or not"
+    "title": "LED interior lights flicker",
 
-      ],
+    "symptoms": [
 
-      "sounds": [
+      "Lights flash quickly when door opened",
 
-        "no ice drop sounds",
+      "Sometimes stay dim"
 
-        "sometimes small motor noise trying to rotate"
+    ],
 
-      ],
+    "possible_causes": [
 
-      "causes": [
+      "Loose connector",
 
-        "water supply to ice maker blocked or turned off",
+      "Failing LED module",
 
-        "frozen fill tube",
+      "Voltage regulation issue on control board"
 
-        "ice maker arm left in OFF position",
+    ],
 
-        "faulty ice maker module",
+    "recommended_actions": [
 
-        "low water pressure"
+      "Gently tap light module; if flicker changes, connector likely loose",
 
-      ],
+      "If comfortable, remove cover and reseat plug",
 
-      "checks": [
+      "Otherwise schedule service; parts are usually modular"
 
-        "Confirm water supply valve is open",
+    ],
 
-        "Check if ice maker switch/arm is in ON position",
+    "severity": "low"
 
-        "Inspect fill tube for ice blockage",
+  },
 
-        "Test water dispenser to confirm water pressure"
+  {
 
-      ],
+    "id": "fridge_48",
 
-      "recommended_actions": [
+    "title": "Fridge in garage stops cooling in winter",
 
-        "Thaw frozen fill tube carefully with warm (not boiling) water",
+    "symptoms": [
 
-        "Ensure house water valve is fully open",
+      "Ambient garage temperature very low",
 
-        "If water reaches ice maker but no cycles happen, ice maker assembly may need replacement"
+      "Freezer warms up while fridge area seems okay"
 
-      ],
+    ],
 
-      "danger_level": "low",
+    "possible_causes": [
 
-      "tags": ["ice_maker", "water_supply"]
+      "Unit not designed for cold environment",
 
-    },
+      "Thermostat senses room not needing cooling"
 
-    {
+    ],
 
-      "id": "water_dispenser_not_working",
+    "recommended_actions": [
 
-      "name": "Water dispenser not dispensing",
+      "Check manufacturer spec for operating temperature",
 
-      "symptoms": [
+      "Consider garage-rated fridge or heater kit",
 
-        "no water when pressing dispenser paddle",
+      "Avoid storing critical frozen foods in non-rated units"
 
-        "light may come on but no flow",
+    ],
 
-        "ice maker may or may not work"
+    "severity": "medium"
 
-      ],
+  },
 
-      "sounds": [
+  {
 
-        "very faint or no valve click",
+    "id": "fridge_49",
 
-        "no water flow sound"
+    "title": "Switching off power causes loud bang or click",
 
-      ],
+    "symptoms": [
 
-      "causes": [
+      "Noise at moment of unplugging or power cut",
 
-        "water supply shut off",
+      "Otherwise normal"
 
-        "filter clogged",
+    ],
 
-        "frozen water line in door",
+    "possible_causes": [
 
-        "dispenser switch or valve issue"
+      "Compressor pressure equalizing",
 
-      ],
+      "Relay releasing suddenly"
 
-      "checks": [
+    ],
 
-        "Check if ice maker still gets water",
+    "recommended_actions": [
 
-        "Inspect and possibly replace water filter",
+      "Usually normal once or twice",
 
-        "Make sure water supply valve is open",
+      "If repetitive loud bangs during running, internal compressor damage may be present and needs professional check"
 
-        "Listen for valve click when pressing paddle"
+    ],
 
-      ],
+    "severity": "medium"
 
-      "recommended_actions": [
+  },
 
-        "Replace water filter if old or clogged",
+  {
 
-        "Thaw frozen door water line by opening door and letting it warm a bit",
+    "id": "fridge_50",
 
-        "If valve never clicks, dispenser switch or valve may need service"
+    "title": "Fridge door rusting around edges",
 
-      ],
+    "symptoms": [
 
-      "danger_level": "low",
+      "Brown spots or bubbling paint",
 
-      "tags": ["water_dispenser", "filter"]
+      "More near bottom corners"
 
-    },
+    ],
 
-    {
+    "possible_causes": [
 
-      "id": "bad_odor",
+      "Condensation attacking metal seams",
 
-      "name": "Bad odor inside fridge",
+      "Damaged paint or coating"
 
-      "symptoms": [
+    ],
 
-        "strong unpleasant smell",
+    "recommended_actions": [
 
-        "smell remains even after removing spoiled food",
+      "Clean and dry area; remove loose rust carefully",
 
-        "odor may be worse when door first opens"
+      "Touch up with appliance paint to slow progression",
 
-      ],
+      "Severe structural rust may eventually require door replacement"
 
-      "sounds": [
+    ],
 
-        "normal operation"
+    "severity": "low"
 
-      ],
+  },
 
-      "causes": [
+  {
 
-        "spoiled food residues",
+    "id": "fridge_51",
 
-        "spills under drawers or in hidden corners",
+    "title": "Unit very hot between freezer and fridge doors",
 
-        "clogged drain pan with organic residue",
+    "symptoms": [
 
-        "mold growth"
+      "Center mullion strip hot to touch",
 
-      ],
+      "More noticeable in summer"
 
-      "checks": [
+    ],
 
-        "Inspect all containers and drawers for spills",
+    "possible_causes": [
 
-        "Remove drawers and clean underneath",
+      "Heater strip working to prevent condensation",
 
-        "Check drain pan under fridge if accessible",
+      "Condenser coils overloaded or dirty"
 
-        "Inspect door gaskets for trapped food"
+    ],
 
-      ],
+    "recommended_actions": [
 
-      "recommended_actions": [
+      "Clean coils thoroughly",
 
-        "Deep clean interior with mild detergent and baking soda solution",
+      "Ensure good air circulation around fridge",
 
-        "Clean or replace any smelly containers",
+      "If strip is extremely hot, thermostat or control for heater may malfunction"
 
-        "Ventilate fridge by leaving door open briefly (while unplugged during cleaning)",
+    ],
 
-        "If odor persists from insulation area, professional help may be needed"
+    "severity": "medium"
 
-      ],
+  },
 
-      "danger_level": "low",
+  {
 
-      "tags": ["odor", "cleaning"]
+    "id": "fridge_52",
 
-    },
+    "title": "Fridge repeatedly shuts off then on due to power saver outlet",
 
-    {
+    "symptoms": [
 
-      "id": "door_not_closing",
+      "Unit seems to lose power randomly",
 
-      "name": "Door not closing or popping open",
+      "Other devices on same outlet also controlled"
 
-      "symptoms": [
+    ],
 
-        "door feels misaligned",
+    "possible_causes": [
 
-        "door opens by itself after closing",
+      "Smart outlet or energy-saving strip cutting power",
 
-        "gaps visible in gasket",
+      "Generator or inverter with unstable voltage"
 
-        "items may be blocking shelves"
+    ],
 
-      ],
+    "recommended_actions": [
 
-      "sounds": [
+      "Plug fridge directly into dedicated wall outlet",
 
-        "sometimes small pop when door opens itself",
+      "Avoid using timers or smart plugs on refrigerators",
 
-        "normal compressor and fan sounds"
+      "Stable power is critical to avoid compressor damage"
 
-      ],
+    ],
 
-      "causes": [
+    "severity": "high"
 
-        "fridge not level (tilting forward)",
+  },
 
-        "hinges loose or worn",
+  {
 
-        "shelves or big items interfering with door",
+    "id": "fridge_53",
 
-        "gasket hardened or deformed"
+    "title": "Water under drawers inside fridge compartment",
 
-      ],
+    "symptoms": [
 
-      "checks": [
+      "Moisture pooling below crisper drawers",
 
-        "Check if fridge leans forward (doors prefer slight backward tilt)",
+      "No visible leak from above"
 
-        "Inspect hinges for looseness",
+    ],
 
-        "Make sure food items and trays do not push against door",
+    "possible_causes": [
 
-        "Examine gasket for flat or cracked sections"
+      "Defrost water not reaching drain",
 
-      ],
+      "Crack in liner allowing water path"
 
-      "recommended_actions": [
+    ],
 
-        "Adjust leveling feet so front is slightly higher than back",
+    "recommended_actions": [
 
-        "Rearrange shelves and large items",
+      "Remove drawers and clean channel leading to drain hole",
 
-        "Tighten hinge screws if safe to do so",
+      "Use warm water and soft brush to flush",
 
-        "Replace gasket if it no longer seals properly"
+      "If water still appears daily, liner damage may require professional evaluation"
 
-      ],
+    ],
 
-      "danger_level": "medium",
+    "severity": "medium"
 
-      "tags": ["door", "gasket", "leveling"]
+  },
 
-    },
+  {
 
-    {
+    "id": "fridge_54",
 
-      "id": "door_gasket_damaged",
+    "title": "Alarm for high temperature after power outage",
 
-      "name": "Door gasket damaged or leaking",
+    "symptoms": [
 
-      "symptoms": [
+      "Beeping and warning symbol",
 
-        "visible cracks or tears in gasket",
+      "Food still partly frozen"
 
-        "condensation around door edges",
+    ],
 
-        "warm air leaks causing frost or weak cooling"
+    "possible_causes": [
 
-      ],
+      "Normal alert after extended outage",
 
-      "sounds": [
+      "Door opened while warm"
 
-        "normal operation"
+    ],
 
-      ],
+    "recommended_actions": [
 
-      "causes": [
+      "Silence alarm according to manual",
 
-        "age and wear",
+      "Check internal temperature and food safety",
 
-        "improper cleaning chemicals",
+      "If unit cools back normally within a few hours, no repair needed"
 
-        "physical damage from items or children hanging on door"
+    ],
 
-      ],
+    "severity": "low"
 
-      "checks": [
+  },
 
-        "Visually inspect gasket all around",
+  {
 
-        "Use paper strip test to see if gasket grips paper",
+    "id": "fridge_55",
 
-        "Look for mold or sticky buildup on gasket"
+    "title": "Fridge makes whooshing noise when doors close",
 
-      ],
+    "symptoms": [
 
-      "recommended_actions": [
+      "Air sound for a few seconds",
 
-        "Clean gasket with mild soapy water",
+      "Doors slightly harder to open immediately after closing"
 
-        "If gasket is cracked or hard, replace it",
+    ],
 
-        "Ensure door is correctly aligned before installing new gasket"
+    "possible_causes": [
 
-      ],
+      "Normal pressure equalization through small vents",
 
-      "danger_level": "medium",
+      "Tight door seals"
 
-      "tags": ["gasket", "door", "air_leak"]
+    ],
 
-    },
+    "recommended_actions": [
 
-    {
+      "Considered normal design feature",
 
-      "id": "temperature_fluctuations",
+      "If noise becomes loud whistle, vents may be partially blocked"
 
-      "name": "Temperature fluctuates widely",
+    ],
 
-      "symptoms": [
+    "severity": "low"
 
-        "sometimes very cold, sometimes too warm",
+  },
 
-        "ice cream may soften then refreeze",
+  {
 
-        "milk spoils early"
+    "id": "fridge_56",
 
-      ],
+    "title": "Inside back wall shows yellow or brown stains",
 
-      "sounds": [
+    "symptoms": [
 
-        "compressor cycling irregularly",
+      "Discoloration behind plastic liner",
 
-        "fans may turn on and off frequently"
+      "No visible leak"
 
-      ],
+    ],
 
-      "causes": [
+    "possible_causes": [
 
-        "thermostat or sensor issues",
+      "Old refrigerant oil stain from factory",
 
-        "control board malfunction",
+      "Aging of insulation"
 
-        "blocked vents",
+    ],
 
-        "overloading fridge with warm food"
+    "recommended_actions": [
 
-      ],
+      "If cooling is normal and stain not sticky, usually cosmetic",
 
-      "checks": [
+      "If accompanied by oily residue or strong chemical smell, contact service for leak check"
 
-        "Use a separate thermometer to verify actual temperatures",
+    ],
 
-        "Inspect vents for blockages by food packages",
+    "severity": "medium"
 
-        "Note whether fluctuations follow large grocery loads",
+  },
 
-        "Observe control panel for error codes or flickering"
+  {
 
-      ],
+    "id": "fridge_57",
 
-      "recommended_actions": [
+    "title": "Freezer making constant wind noise",
 
-        "Keep vents clear for steady airflow",
+    "symptoms": [
 
-        "Avoid placing hot food directly inside",
+      "Loud airflow sound from vents",
 
-        "If control panel behaves erratically, electronics may need service",
+      "Door seal may whistle slightly"
 
-        "Sensor replacement may be required if readings are inaccurate"
+    ],
 
-      ],
+    "possible_causes": [
 
-      "danger_level": "medium",
+      "Fan running at high speed due to warm load",
 
-      "tags": ["temperature", "sensor", "control"]
+      "Door not sealing and fan pulling extra air",
 
-    },
+      "Vent grill obstructed"
 
-    {
+    ],
 
-      "id": "control_panel_not_responding",
+    "recommended_actions": [
 
-      "name": "Control panel not responding or dead",
+      "Check gasket for gaps with paper test",
 
-      "symptoms": [
+      "Ensure no packaging blocks air vents",
 
-        "buttons do nothing",
+      "Noise should reduce once temperature stabilizes"
 
-        "display frozen or blank",
+    ],
 
-        "cannot change temperature or modes"
+    "severity": "medium"
 
-      ],
+  },
 
-      "sounds": [
+  {
 
-        "normal compressor and fan sounds or no cooling if control fully failed"
+    "id": "fridge_58",
 
-      ],
+    "title": "Fridge very old, running but using too much energy",
 
-      "causes": [
+    "symptoms": [
 
-        "electronic control board fault",
+      "Unit more than 15 years old",
 
-        "moisture or condensation in control panel",
+      "Compressor loud and often running",
 
-        "power surge damage"
+      "Electric bill high"
 
-      ],
+    ],
 
-      "checks": [
+    "possible_causes": [
 
-        "Try unplugging fridge for 5–10 minutes and plugging back in",
+      "Inefficient compressor and insulation compared to modern units"
 
-        "Observe if display resets or remains frozen",
+    ],
 
-        "Note if any error codes briefly appear"
+    "recommended_actions": [
 
-      ],
+      "Consider energy calculator to compare replacement payback",
 
-      "recommended_actions": [
+      "If major repair needed, replacement is often smarter long-term",
 
-        "Perform power reset as first step",
+      "Recycle old appliance responsibly"
 
-        "If still unresponsive, control board or UI may need replacement",
+    ],
 
-        "Use surge protection for sensitive electronics in future"
+    "severity": "low"
 
-      ],
+  },
 
-      "danger_level": "medium",
+  {
 
-      "tags": ["control_panel", "electronics"]
+    "id": "fridge_59",
 
-    },
+    "title": "Fridge transported laying down and now not cooling",
 
-    {
+    "symptoms": [
 
-      "id": "error_code_displayed",
+      "Moved recently",
 
-      "name": "Error code displayed on fridge panel",
+      "Compressor runs but poor cooling"
 
-      "symptoms": [
+    ],
 
-        "letters or numbers flashing",
+    "possible_causes": [
 
-        "some features disabled",
+      "Oil migrated into refrigerant lines during transport",
 
-        "alarm beeping"
+      "System started before oil resettled"
 
-      ],
+    ],
 
-      "sounds": [
+    "recommended_actions": [
 
-        "beeping alarm",
+      "Always keep fridge upright during move when possible",
 
-        "otherwise normal or abnormal operation depending on error"
+      "If it was on its side, let it stand unplugged for 24 hours before turning on",
 
-      ],
+      "If damage already done, professional service may be required"
 
-      "causes": [
+    ],
 
-        "sensor fault",
+    "severity": "high"
 
-        "fan malfunction",
+  },
 
-        "defrost system problem",
+  {
 
-        "communication error between boards"
+    "id": "fridge_60",
 
-      ],
+    "title": "New fridge making many unfamiliar sounds",
 
-      "checks": [
+    "symptoms": [
 
-        "Note exact error code on display",
+      "Clicks, gurgles, fan changes like never heard before",
 
-        "Check user manual or manufacturer website for code meaning",
+      "Cooling performance is excellent"
 
-        "Observe if cooling is affected or just display"
+    ],
 
-      ],
+    "possible_causes": [
 
-      "recommended_actions": [
+      "Modern high-efficiency compressors and fans",
 
-        "Try a power reset and see if code returns",
+      "Normal defrost and refrigerant flow cycles"
 
-        "If code persists, follow manufacturer guidance for that specific code",
+    ],
 
-        "Technician may read advanced diagnostics for hidden codes"
+    "recommended_actions": [
 
-      ],
+      "Review \"normal sounds\" section of user manual",
 
-      "danger_level": "medium",
+      "If sounds are not accompanied by error codes or temperature problems, they are usually normal",
 
-      "tags": ["error_code", "electronics"]
+      "Record audio if noise becomes extremely loud or metallic and share with technician"
 
-    },
+    ],
 
-    {
+    "severity": "low"
 
-      "id": "burnt_smell",
+  }
 
-      "name": "Burnt smell or electrical odor",
-
-      "symptoms": [
-
-        "burnt or plastic smell near fridge",
-
-        "possibly some discoloration on plug or cord",
-
-        "fridge may stop cooling suddenly"
-
-      ],
-
-      "sounds": [
-
-        "may coincide with humming stopping",
-
-        "unusual buzzing before failure"
-
-      ],
-
-      "causes": [
-
-        "overheated compressor relay",
-
-        "burned wiring or connector",
-
-        "short circuit in control board",
-
-        "overloaded outlet or extension cord"
-
-      ],
-
-      "checks": [
-
-        "Unplug fridge immediately if burnt smell is strong",
-
-        "Inspect plug and outlet for scorch marks",
-
-        "Do not continue using if any melting or burning is visible"
-
-      ],
-
-      "recommended_actions": [
-
-        "Keep fridge unplugged until inspected by qualified technician",
-
-        "Avoid sharing fridge outlet with heavy appliances",
-
-        "Replace damaged cords/outlets only by professionals"
-
-      ],
-
-      "danger_level": "critical",
-
-      "tags": ["safety", "burnt_smell", "fire_risk"]
-
-    },
-
-    {
-
-      "id": "hot_side_panels",
-
-      "name": "Side panels excessively hot",
-
-      "symptoms": [
-
-        "sides of fridge very warm or almost hot",
-
-        "front edge mullion hot to touch",
-
-        "fridge may still cool but works hard"
-
-      ],
-
-      "sounds": [
-
-        "compressor running often",
-
-        "fans may be louder than normal"
-
-      ],
-
-      "causes": [
-
-        "normal heat dissipation but exaggerated by poor airflow",
-
-        "dirty condenser coils",
-
-        "condenser fan not working",
-
-        "high ambient room temperature"
-
-      ],
-
-      "checks": [
-
-        "Check airflow behind and around fridge",
-
-        "Inspect and clean condenser coils",
-
-        "Confirm condenser fan is spinning",
-
-        "Measure room temperature (very hot kitchens make this worse)"
-
-      ],
-
-      "recommended_actions": [
-
-        "Improve ventilation space around fridge",
-
-        "Thoroughly clean coils and fan area",
-
-        "If fan is not running, have it repaired promptly",
-
-        "If heat is extreme, unplug and call a technician"
-
-      ],
-
-      "danger_level": "medium",
-
-      "tags": ["heat", "coils", "fan"]
-
-    },
-
-    {
-
-      "id": "condensation_on_outside",
-
-      "name": "Condensation on outside surfaces",
-
-      "symptoms": [
-
-        "water beads on outer walls or door",
-
-        "sweating around door gasket",
-
-        "floor may become damp"
-
-      ],
-
-      "sounds": [
-
-        "normal operation"
-
-      ],
-
-      "causes": [
-
-        "very humid room environment",
-
-        "door gasket leaking",
-
-        "door being opened very often",
-
-        "energy saver or mullion heater turned off (on some models)"
-
-      ],
-
-      "checks": [
-
-        "Check humidity and ventilation in the kitchen",
-
-        "Inspect gasket for leaks",
-
-        "Note if condensation worse during humid weather"
-
-      ],
-
-      "recommended_actions": [
-
-        "Improve room ventilation and reduce humidity if possible",
-
-        "Ensure doors seal fully",
-
-        "Turn on anti-condensation or mullion heater function if available",
-
-        "Wipe moisture regularly to avoid floor damage"
-
-      ],
-
-      "danger_level": "low",
-
-      "tags": ["condensation", "humidity"]
-
-    },
-
-    {
-
-      "id": "loud_startup_bang",
-
-      "name": "Loud bang or knock when compressor starts or stops",
-
-      "symptoms": [
-
-        "single loud knock at start or stop",
-
-        "fridge still cools normally",
-
-        "noise may scare users but brief"
-
-      ],
-
-      "sounds": [
-
-        "single knock or bang",
-
-        "metallic clunk"
-
-      ],
-
-      "causes": [
-
-        "internal compressor components moving slightly",
-
-        "tubing or panels flexing with pressure changes",
-
-        "mounts slightly loose"
-
-      ],
-
-      "checks": [
-
-        "Verify noise is a single event at start/stop, not continuous",
-
-        "Check if fridge is level and stable",
-
-        "Listen from different sides to locate source"
-
-      ],
-
-      "recommended_actions": [
-
-        "Ensure fridge is level and not rocking",
-
-        "If cooling is normal and noise is brief, often considered a normal characteristic on some models",
-
-        "If noise becomes very loud or frequent, technician can inspect mounts and compressor"
-
-      ],
-
-      "danger_level": "low",
-
-      "tags": ["noise", "compressor"]
-
-    }
-
-  ]
-
-}
+]
