@@ -26,15 +26,13 @@ export default async function handler(req, res) {
 
   try {
 
-    // في بعض الأحيان body يأتي كـ string من Vercel
-
     const body =
 
       typeof req.body === "string" ? JSON.parse(req.body) : req.body || {};
 
 
 
-    const {
+    let {
 
       issue,
 
@@ -44,25 +42,71 @@ export default async function handler(req, res) {
 
       imageMime,
 
-      // حاليا نتجاهل الصوت حتى نضبطه لاحقاً
+      audioBase64,
 
-      // audioBase64,
-
-      // audioMime,
+      audioMime,
 
     } = body;
 
 
 
-    if (!issue && !imageBase64) {
+    if (!issue && !imageBase64 && !audioBase64) {
 
       res
 
         .status(400)
 
-        .json({ error: "Missing issue or image for FixLens diagnosis." });
+        .json({ error: "Missing issue, image, or audio for FixLens." });
 
       return;
+
+    }
+
+
+
+    // لو فيه صوت، نحوله نص بـ Whisper ونضيفه للوصف
+
+    if (audioBase64) {
+
+      const audioBuffer = Buffer.from(audioBase64, "base64");
+
+
+
+      const transcription = await client.audio.transcriptions.create({
+
+        file: {
+
+          data: audioBuffer,
+
+          name: "voice.m4a",
+
+        },
+
+        model: "whisper-1",
+
+        response_format: "text",
+
+      });
+
+
+
+      const textFromAudio =
+
+        typeof transcription === "string"
+
+          ? transcription
+
+          : transcription.text || "";
+
+
+
+      if (textFromAudio.trim().length > 0) {
+
+        issue = (issue ? issue + "\n\n" : "") +
+
+          `User voice description (transcribed): ${textFromAudio}`;
+
+      }
 
     }
 
@@ -72,17 +116,23 @@ export default async function handler(req, res) {
 
 You are **FixLens**, an AI assistant for real-world troubleshooting.
 
+You CAN see and analyze images, and you can use transcribed audio descriptions.
+
+Never say that you cannot analyze images or voice notes.
+
+
+
 You help with home appliances, vehicles, and home issues.
 
 
 
-- Always be practical and step-by-step.
+- Always answer in the user's language when possible. User language code: ${languageCode}.
 
-- Mention safety steps clearly.
+- Be practical, step-by-step, and clear.
 
-- If you're not sure, say that a professional technician should inspect it.
+- Emphasize safety instructions.
 
-- Answer in the language of the user. User language code: ${languageCode}.
+- If the situation is dangerous or unclear, recommend contacting a professional technician.
 
 `.trim();
 
@@ -136,7 +186,7 @@ You help with home appliances, vehicles, and home issues.
 
     const completion = await client.chat.completions.create({
 
-      model: "gpt-4.1-mini", // أو gpt-4o / gpt-4.1 حسب الخطة
+      model: "gpt-4.1-mini", // تقدر تغيّرها لاحقاً لـ gpt-4.1 أو gpt-4o
 
       messages,
 
