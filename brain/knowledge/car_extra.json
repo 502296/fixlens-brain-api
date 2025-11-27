@@ -1,0 +1,453 @@
+[
+
+  {
+
+    "id": "car_201",
+
+    "category": "car",
+
+    "title": "Engine misfire under load but smooth at idle",
+
+    "symptoms": [
+
+      "Car shakes or hesitates when accelerating",
+
+      "Check engine light with misfire codes (P0300–P030x)",
+
+      "Idle feels mostly smooth"
+
+    ],
+
+    "possible_causes": [
+
+      "Weak ignition coil on one cylinder",
+
+      "Worn spark plugs or plug wires",
+
+      "Fuel injector partially clogged",
+
+      "Low fuel pressure under load"
+
+    ],
+
+    "recommended_actions": [
+
+      "Scan for diagnostic trouble codes to see which cylinder is affected",
+
+      "Inspect and replace spark plugs if worn or overdue",
+
+      "Swap ignition coils between cylinders to see if misfire follows the coil (for mechanics)",
+
+      "If misfire persists, fuel pressure and injectors should be checked by technician"
+
+    ],
+
+    "severity": "high"
+
+  },
+
+  {
+
+    "id": "car_202",
+
+    "category": "car",
+
+    "title": "Steering wheel shakes at highway speeds only",
+
+    "symptoms": [
+
+      "Vibration between 60–75 mph (100–120 km/h)",
+
+      "Steering wheel oscillates left-right",
+
+      "No vibration at low speed"
+
+    ],
+
+    "possible_causes": [
+
+      "Front wheel imbalance",
+
+      "Bent wheel rim",
+
+      "Uneven tire wear or separated belt",
+
+      "Worn tie rod ends or suspension bushings"
+
+    ],
+
+    "recommended_actions": [
+
+      "Have front wheels balanced on a proper machine",
+
+      "Inspect wheels for visible bends or cracks",
+
+      "Check tires for bulges, flat spots, or irregular wear",
+
+      "If vibration remains after balancing, suspension components should be inspected"
+
+    ],
+
+    "severity": "medium"
+
+  },
+
+  {
+
+    "id": "car_203",
+
+    "category": "car",
+
+    "title": "Grinding noise when braking",
+
+    "symptoms": [
+
+      "Loud metal-on-metal sound when pressing brake pedal",
+
+      "Stopping distance increased",
+
+      "Brake warning light may be on"
+
+    ],
+
+    "possible_causes": [
+
+      "Brake pads worn completely down",
+
+      "Grooved or damaged brake rotors",
+
+      "Foreign object trapped between pad and rotor"
+
+    ],
+
+    "recommended_actions": [
+
+      "Do not continue driving long distances with grinding brakes; it is unsafe",
+
+      "Schedule immediate brake inspection and pad/rotor replacement",
+
+      "If pedal feels soft or sinks, have vehicle towed instead of driving"
+
+    ],
+
+    "severity": "critical"
+
+  },
+
+  {
+
+    "id": "car_204",
+
+    "category": "car",
+
+    "title": "Engine temperature fluctuates up and down",
+
+    "symptoms": [
+
+      "Gauge moves from normal to hot then back",
+
+      "Heater may blow hot then cold",
+
+      "No visible coolant leak"
+
+    ],
+
+    "possible_causes": [
+
+      "Sticking thermostat",
+
+      "Air pockets in cooling system",
+
+      "Failing water pump or slipping belt",
+
+      "Partially clogged radiator"
+
+    ],
+
+    "recommended_actions": [
+
+      "Check coolant level only when engine is completely cold",
+
+      "If low, inspect for external leaks around hoses and radiator",
+
+      "Have mechanic bleed cooling system and test thermostat operation",
+
+      "Do not drive the car if temperature goes into red zone"
+
+    ],
+
+    "severity": "high"
+
+  },
+
+  {
+
+    "id": "car_205",
+
+    "category": "car",
+
+    "title": "Clicking noise from CV axle when turning",
+
+    "symptoms": [
+
+      "Rhythmic clicking or popping while making tight turns",
+
+      "Noise louder when accelerating during the turn",
+
+      "Usually from front of vehicle (FWD cars)"
+
+    ],
+
+    "possible_causes": [
+
+      "Worn constant velocity (CV) joint",
+
+      "Damaged or torn CV boot losing grease",
+
+      "Contamination inside joint"
+
+    ],
+
+    "recommended_actions": [
+
+      "Inspect CV boots for tears and grease splatter",
+
+      "If clicking is consistent, CV axle likely needs replacement",
+
+      "Avoid full-lock hard turns until repaired to reduce risk of failure"
+
+    ],
+
+    "severity": "medium"
+
+  },
+
+  {
+
+    "id": "car_206",
+
+    "category": "car",
+
+    "title": "ABS warning light on with normal braking feel",
+
+    "symptoms": [
+
+      "ABS light illuminated on dash",
+
+      "Brakes work but ABS does not activate on hard stops",
+
+      "Sometimes traction control light also on"
+
+    ],
+
+    "possible_causes": [
+
+      "Faulty wheel speed sensor",
+
+      "Damaged tone ring or rust on hub",
+
+      "Broken sensor wiring near wheel",
+
+      "Internal ABS module fault"
+
+    ],
+
+    "recommended_actions": [
+
+      "Have codes read with ABS-capable scan tool to identify which wheel or circuit",
+
+      "Visually inspect wiring and connectors at each wheel for damage",
+
+      "Driving is usually safe with moderate braking, but ABS function is reduced",
+
+      "Repair should be done as soon as practical for maximum safety"
+
+    ],
+
+    "severity": "medium"
+
+  },
+
+  {
+
+    "id": "car_207",
+
+    "category": "car",
+
+    "title": "Fuel smell around car but no visible leak",
+
+    "symptoms": [
+
+      "Strong gasoline odor near rear of car or fuel filler area",
+
+      "Check engine light with EVAP system codes",
+
+      "Smell stronger after refueling"
+
+    ],
+
+    "possible_causes": [
+
+      "Loose or faulty fuel cap",
+
+      "Cracked EVAP hoses or charcoal canister",
+
+      "Small leak at fuel tank top or sender unit"
+
+    ],
+
+    "recommended_actions": [
+
+      "Ensure fuel cap is tightly closed until it clicks several times",
+
+      "Inspect around filler neck for cracks or rust",
+
+      "If smell is very strong or visible wet fuel is seen, do not drive and seek towing",
+
+      "Mechanic can smoke-test EVAP system for small leaks"
+
+    ],
+
+    "severity": "high"
+
+  },
+
+  {
+
+    "id": "car_208",
+
+    "category": "car",
+
+    "title": "Transmission slipping on acceleration (automatic)",
+
+    "symptoms": [
+
+      "Engine revs increase but vehicle speed rises slowly",
+
+      "Shifts feel delayed or harsh",
+
+      "Burnt smell from transmission area"
+
+    ],
+
+    "possible_causes": [
+
+      "Low or degraded transmission fluid",
+
+      "Internal clutch pack wear",
+
+      "Faulty shift solenoids or valve body",
+
+      "Overheating from towing or heavy load"
+
+    ],
+
+    "recommended_actions": [
+
+      "Check transmission fluid level and color according to owner’s manual",
+
+      "If fluid is dark/burnt, have professional service performed (no aggressive power flushing on very old units)",
+
+      "Avoid towing or hard acceleration until issue is diagnosed",
+
+      "Prolonged slipping can quickly destroy transmission; repair promptly"
+
+    ],
+
+    "severity": "critical"
+
+  },
+
+  {
+
+    "id": "car_209",
+
+    "category": "car",
+
+    "title": "Battery repeatedly dies overnight",
+
+    "symptoms": [
+
+      "Car starts after jump but battery is dead next morning",
+
+      "Lights or accessories may be left on",
+
+      "Sometimes no obvious cause"
+
+    ],
+
+    "possible_causes": [
+
+      "Parasitic electrical draw (module not sleeping)",
+
+      "Old or weak battery near end of life",
+
+      "Charging system not fully recharging battery",
+
+      "Aftermarket accessories wired incorrectly"
+
+    ],
+
+    "recommended_actions": [
+
+      "Have battery load-tested and charging system checked",
+
+      "Ensure interior lights, trunk light, and glovebox light are turning off",
+
+      "If battery is good, mechanic can perform parasitic draw test with ammeter",
+
+      "Until fixed, disconnect battery negative terminal if safe and you are comfortable doing so"
+
+    ],
+
+    "severity": "medium"
+
+  },
+
+  {
+
+    "id": "car_210",
+
+    "category": "car",
+
+    "title": "Sudden loss of power with turbocharged engine",
+
+    "symptoms": [
+
+      "Car feels very weak, like turbo not working",
+
+      "Check engine light with boost or airflow codes",
+
+      "Whooshing sound or hiss under acceleration"
+
+    ],
+
+    "possible_causes": [
+
+      "Boost leak from intercooler hose or clamp",
+
+      "Faulty boost control solenoid or wastegate",
+
+      "Mass airflow sensor issues",
+
+      "Limp mode activated to protect engine"
+
+    ],
+
+    "recommended_actions": [
+
+      "Inspect visible intercooler hoses for loose clamps or splits",
+
+      "Avoid heavy acceleration until cause is found",
+
+      "Have codes read and freeze-frame data checked by qualified technician",
+
+      "Driving gently may be possible in limp mode, but long trips should be avoided"
+
+    ],
+
+    "severity": "high"
+
+  }
+
+]
