@@ -2,7 +2,7 @@
 
 
 
-const OpenAI = require("openai");
+import OpenAI from "openai";
 
 
 
@@ -14,29 +14,7 @@ const client = new OpenAI({
 
 
 
-/**
-
- * FixLens Brain – Diagnosis API
-
- *
-
- * يستقبل:
-
- * - message  (وصف المشكلة)
-
- * - language (اختياري، مثلاً English / Arabic)
-
- * - conversationId (اختياري للتتبع)
-
- *
-
- * يرجع:
-
- * { answer: "... النص النهائي ..." }
-
- */
-
-module.exports = async (req, res) => {
+export default async function handler(req, res) {
 
   if (req.method !== "POST") {
 
@@ -48,106 +26,170 @@ module.exports = async (req, res) => {
 
   try {
 
-    const body = req.body || {};
+    // نتأكد أن الـ body دايماً كـ object
 
-    const message = (body.message || "").trim();
+    const body =
 
-    const language = body.language || "English";
+      typeof req.body === "string"
 
-    const conversationId = body.conversationId || null;
+        ? JSON.parse(req.body || "{}")
+
+        : (req.body || {});
 
 
 
-    if (!message) {
+    const {
 
-      return res.status(400).json({ error: "Message is required." });
+      issue,
+
+      languageCode,
+
+      imageBase64,
+
+      imageMime,
+
+      audioBase64,
+
+      audioMime,
+
+    } = body;
+
+
+
+    if (!issue || typeof issue !== "string") {
+
+      return res.status(400).json({ error: "Missing 'issue' text" });
 
     }
 
 
 
+    const lang = languageCode || "en";
+
+
+
     const systemPrompt = `
 
-You are FixLens Brain, a practical AI technician.
+You are FixLens Brain, an expert AI that diagnoses real-world problems:
 
-You help users diagnose real-world issues with cars, appliances, and homes.
+- home appliances (fridge, washer, dryer, dishwasher, HVAC)
 
-Always respond in a clear, friendly, step-by-step way.
+- cars and vehicles
 
-If the user language is not English, respond in that language when possible.
+- home issues (leaks, mold, wiring, etc.)
 
-`;
+Respond in language: ${lang}.
 
+Give step-by-step troubleshooting, safety warnings, and clear next actions.
 
+If an image is provided, use it to improve your diagnosis.
 
-    const userPrompt = `
-
-User message:
-
-${message}
-
-
-
-Language: ${language}
-
-Conversation ID: ${conversationId ?? "N/A"}
+If audio is provided, assume the user described the issue verbally.
 
 `;
 
 
 
-    const response = await client.responses.create({
+    // نبني محتوى المستخدم (نص + صورة إن وجدت)
 
-      model: "gpt-4.1-mini",
+    const userContent = [
 
-      input: [
+      {
 
-        {
+        type: "text",
 
-          role: "system",
+        text: `User description:\n${issue}`,
 
-          content: systemPrompt,
+      },
+
+    ];
+
+
+
+    if (imageBase64) {
+
+      const mime = imageMime || "image/jpeg";
+
+      userContent.push({
+
+        type: "image_url",
+
+        image_url: {
+
+          url: `data:${mime};base64,${imageBase64}`,
 
         },
 
-        {
+      });
 
-          role: "user",
+    }
 
-          content: userPrompt,
 
-        },
+
+    if (audioBase64) {
+
+      // حالياً لا نفريغ الصوت، لكن نخبر الموديل:
+
+      userContent.push({
+
+        type: "text",
+
+        text:
+
+          "Note: The user also sent a voice note (audio file). " +
+
+          "Assume they verbally described the same issue in more detail. " +
+
+          "Ask them to type any extra important details if needed.",
+
+      });
+
+    }
+
+
+
+    const completion = await client.chat.completions.create({
+
+      model: "gpt-4o-mini",
+
+      messages: [
+
+        { role: "system", content: systemPrompt },
+
+        { role: "user", content: userContent },
 
       ],
 
-    });
+      temperature: 0.4,
 
-
-
-    // استخراج النص من استجابة OpenAI
-
-    const output = response.output?.[0]?.content?.[0]?.text || "";
-
-    const answer = output.trim() || "I analyzed your issue but couldn't generate a detailed answer.";
-
-
-
-    return res.status(200).json({
-
-      answer,
+      max_tokens: 900,
 
     });
+
+
+
+    const reply =
+
+      completion.choices?.[0]?.message?.content ||
+
+      "I couldn't generate a response. Please try again.";
+
+
+
+    return res.status(200).json({ reply });
 
   } catch (err) {
 
-    console.error("FixLens Brain error:", err);
+    console.error("FixLens diagnose error:", err);
 
     return res.status(500).json({
 
-      error: "FixLens Brain internal error.",
+      error: "FixLens Brain internal error",
+
+      details: err?.message || String(err),
 
     });
 
   }
 
-};
+}
