@@ -18,6 +18,8 @@ export default async function handler(req, res) {
 
   try {
 
+    // السماح بـ POST فقط
+
     if (req.method !== "POST") {
 
       return res.status(405).json({ error: "Only POST allowed" });
@@ -34,21 +36,23 @@ export default async function handler(req, res) {
 
       imageMime,
 
-      audioBase64,
-
-      audioFormat = "wav",
-
       languageCode = "en",
+
+      // لو حاب ترسل فلاغ من الموبايل أن هناك صوت
+
+      hasAudio = false,
 
     } = req.body || {};
 
 
 
-    if (!issue && !imageBase64 && !audioBase64) {
+    // لو ماكو نص ولا صورة ولا صوت
+
+    if (!issue && !imageBase64 && !hasAudio) {
 
       return res.status(400).json({
 
-        error: "You must provide text, imageBase64, or audioBase64.",
+        error: "You must provide issue text, imageBase64, or audio.",
 
       });
 
@@ -56,7 +60,23 @@ export default async function handler(req, res) {
 
 
 
-    // 👁️ ضبط الـ MIME للصورة
+    // حالياً: الصوت غير مدعوم، لكن لا نُسقط الـ API
+
+    if (hasAudio && !issue && !imageBase64) {
+
+      return res.status(200).json({
+
+        reply:
+
+          "I'm currently unable to process voice notes directly. Please type a short description of the issue so I can help you step by step.",
+
+      });
+
+    }
+
+
+
+    // معالجة نوع الصورة
 
     let mime = imageMime || "image/jpeg";
 
@@ -68,11 +88,15 @@ export default async function handler(req, res) {
 
 
 
+    // ==== بناء الرسائل ====
+
+
+
     const messages = [];
 
 
 
-    // 🧠 SYSTEM
+    // SYSTEM MESSAGE
 
     messages.push({
 
@@ -86,9 +110,11 @@ export default async function handler(req, res) {
 
           text:
 
-            "You are FixLens Brain. You analyze text, images, and short voice notes to diagnose real-world problems (home appliances, vehicles, home issues). " +
+            "You are FixLens Brain, an AI technician that analyzes images and user descriptions to troubleshoot real-world problems (home appliances, vehicles, home issues). " +
 
-            "Always respond in the same language the user uses. Be clear, step-by-step, and practical. If safety is involved, warn the user clearly.",
+            "Always reply in the same language the user used (English or Arabic). " +
+
+            "Be calm, friendly, and very clear. Start with safety steps if there is any risk of electric shock, gas leak, or injury, then give step-by-step diagnosis.",
 
         },
 
@@ -98,7 +124,7 @@ export default async function handler(req, res) {
 
 
 
-    // 👤 USER – نجهز الكونتنت في رسالة واحدة
+    // USER CONTENT (نجمع النص + الصورة في رسالة واحدة)
 
     const userContent = [];
 
@@ -128,8 +154,6 @@ export default async function handler(req, res) {
 
           url: `data:${mime};base64,${imageBase64}`,
 
-          detail: "high",
-
         },
 
       });
@@ -138,21 +162,17 @@ export default async function handler(req, res) {
 
 
 
-    if (audioBase64) {
+    // لو لأي سبب ماكو شيء، نضيف نص بسيط
+
+    if (userContent.length === 0) {
 
       userContent.push({
 
-        type: "input_audio",
+        type: "text",
 
-        input_audio: {
+        text:
 
-          data: audioBase64,
-
-          // لازم تكون نفس الفورمات الي تبعتها من الموبايل (يفضل wav)
-
-          format: audioFormat || "wav",
-
-        },
+          "The user did not send any description or image. Please kindly ask them to describe their problem.",
 
       });
 
@@ -170,7 +190,9 @@ export default async function handler(req, res) {
 
 
 
-    // 🧠 CALL OPENAI
+    // ==== الاتصال مع OpenAI ====
+
+
 
     const completion = await openai.chat.completions.create({
 
@@ -178,7 +200,7 @@ export default async function handler(req, res) {
 
       messages,
 
-      max_tokens: 600,
+      max_tokens: 700,
 
     });
 
@@ -196,13 +218,13 @@ export default async function handler(req, res) {
 
   } catch (err) {
 
-    console.error("FixLens API ERROR:", err?.response?.data || err.message);
+    console.error("FixLens API ERROR:", err?.response?.data || err);
 
     return res.status(500).json({
 
       error: "FixLens Brain internal error",
 
-      details: err.message,
+      details: err?.message || "Unknown error",
 
     });
 
