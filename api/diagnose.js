@@ -6,6 +6,14 @@ import OpenAI from "openai";
 
 
 
+const openai = new OpenAI({
+
+  apiKey: process.env.OPENAI_API_KEY,
+
+});
+
+
+
 export default async function handler(req, res) {
 
   try {
@@ -18,7 +26,7 @@ export default async function handler(req, res) {
 
 
 
-    const { issue, imageBase64, imageMime, languageCode = "en" } = req.body;
+    const { issue, imageBase64, imageMime } = req.body || {};
 
 
 
@@ -34,33 +42,25 @@ export default async function handler(req, res) {
 
 
 
+    // ---------- IMAGE MIME ----------
+
     let mime = imageMime || "image/jpeg";
-
-
-
-    // Fix HEIC → JPG issue
 
     if (mime === "image/heic" || mime === "image/heif") {
 
-      mime = "image/jpeg";
+      mime = "image/jpeg"; // نحول HEIC إلى JPEG
 
     }
 
 
 
-    const openai = new OpenAI({
-
-      apiKey: process.env.OPENAI_API_KEY,
-
-    });
-
-
+    // ---------- BUILD MESSAGES ----------
 
     const messages = [];
 
 
 
-    // SYSTEM
+    // SYSTEM MESSAGE
 
     messages.push({
 
@@ -72,7 +72,9 @@ export default async function handler(req, res) {
 
           type: "text",
 
-          text: `You are FixLens Brain. You analyze images + voice + text and respond in ${languageCode}.`,
+          text:
+
+            "You are FixLens Brain. You analyze photos and text about real-world problems (home appliances, vehicles, home issues) and give clear, safe, step-by-step troubleshooting. Always answer in the same language the user used.",
 
         },
 
@@ -82,45 +84,37 @@ export default async function handler(req, res) {
 
 
 
-    // USER TEXT
+    // USER MESSAGE (TEXT + OPTIONAL IMAGE في نفس الرسالة)
+
+    const userContent = [];
+
+
 
     if (issue) {
 
-      messages.push({
+      userContent.push({
 
-        role: "user",
+        type: "text",
 
-        content: [{ type: "text", text: issue }],
+        text: issue,
 
       });
 
     }
 
 
-
-    // USER IMAGE (NEW FORMAT)
 
     if (imageBase64) {
 
-      messages.push({
+      userContent.push({
 
-        role: "user",
+        type: "image_url",
 
-        content: [
+        image_url: {
 
-          {
+          url: `data:${mime};base64,${imageBase64}`,
 
-            type: "image_url",
-
-            image_url: {
-
-              url: `data:${mime};base64,${imageBase64}`,
-
-            },
-
-          },
-
-        ],
+        },
 
       });
 
@@ -128,15 +122,25 @@ export default async function handler(req, res) {
 
 
 
-    // CALL OPENAI
+    messages.push({
+
+      role: "user",
+
+      content: userContent,
+
+    });
+
+
+
+    // ---------- CALL OPENAI ----------
 
     const completion = await openai.chat.completions.create({
 
-      model: "gpt-4.1",   // best for images
+      model: "gpt-4o-mini",
 
       messages,
 
-      max_tokens: 500,
+      max_tokens: 700,
 
     });
 
@@ -154,13 +158,13 @@ export default async function handler(req, res) {
 
   } catch (err) {
 
-    console.error("FixLens API ERROR:", err);
+    console.error("FixLens API ERROR:", err?.response?.data || err);
 
     return res.status(500).json({
 
       error: "FixLens Brain internal error",
 
-      details: err.message,
+      details: err?.response?.data || err.message || String(err),
 
     });
 
