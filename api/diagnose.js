@@ -4,6 +4,10 @@
 
 import OpenAI from "openai";
 
+import fs from "fs";
+
+import path from "path";
+
 
 
 const client = new OpenAI({
@@ -18,9 +22,7 @@ export default async function handler(req, res) {
 
   if (req.method !== "POST") {
 
-    res.status(405).json({ message: "Method not allowed" });
-
-    return;
+    return res.status(405).json({ error: "Method not allowed" });
 
   }
 
@@ -46,41 +48,83 @@ export default async function handler(req, res) {
 
 
 
-    let finalIssue = issue || "";
+    let finalIssue =
+
+      (issue && issue.trim()) ||
+
+      "The user is asking for help with a real-world problem. Ask clarifying questions if needed.";
 
 
 
-    // لو في Voice Note نخبر النموذج (مستقبلاً ممكن نضيف Transcription حقيقية)
+    // ------------ 1) لو فيه صوت: نعمل له Transcription ونضيفه للنص ------------
 
     if (audioBase64) {
 
-      finalIssue +=
+      try {
 
-        "\n\nThe user also attached a voice note describing the issue. " +
+        const tmpFile = path.join(
 
-        "If needed, ask them to type any extra details.";
+          "/tmp",
+
+          `fixlens_voice_${Date.now().toString()}.m4a`
+
+        );
+
+        const buffer = Buffer.from(audioBase64, "base64");
+
+        fs.writeFileSync(tmpFile, buffer);
+
+
+
+        const transcription = await client.audio.transcriptions.create({
+
+          model: "gpt-4o-transcribe",
+
+          file: fs.createReadStream(tmpFile),
+
+          language: languageCode,
+
+        });
+
+
+
+        fs.unlink(tmpFile, () => {});
+
+
+
+        if (transcription?.text) {
+
+          finalIssue +=
+
+            `\n\nVoice note from the user (transcribed): ${transcription.text}`;
+
+        }
+
+      } catch (err) {
+
+        console.error("Audio transcription error:", err);
+
+        // لو فشل الصوت نكمل عادي فقط بدون الصوت
+
+      }
 
     }
 
 
 
-    // نبني محتوى الرسالة (نص + صورة اختيارية)
+    // ------------ 2) نبني محتوى رسالة المستخدم (نص + صورة لو موجودة) ------------
 
-    const content = [];
+    const userContent = [
 
+      {
 
-
-    if (finalIssue.trim().length > 0) {
-
-      content.push({
-
-        type: "input_text",
+        type: "text",
 
         text: finalIssue,
 
-      });
+      },
 
-    }
+    ];
 
 
 
@@ -88,11 +132,15 @@ export default async function handler(req, res) {
 
       const mime = imageMime || "image/jpeg";
 
-      content.push({
+      userContent.push({
 
         type: "input_image",
 
-        image_url: `data:${mime};base64,${imageBase64}`,
+        image_url: {
+
+          url: `data:${mime};base64,${imageBase64}`,
+
+        },
 
       });
 
@@ -100,37 +148,43 @@ export default async function handler(req, res) {
 
 
 
-    if (content.length === 0) {
+    // ------------ 3) نطلب من FixLens Brain الرد ------------
 
-      res.status(400).json({ message: "Missing issue text." });
+    const completion = await client.chat.completions.create({
 
-      return;
+      model: "gpt-4o-mini",
 
-    }
+      messages: [
 
+        {
 
+          role: "system",
 
-    const response = await client.responses.create({
+          content: [
 
-      model: "gpt-4.1-mini",
+            {
 
-      instructions:
+              type: "text",
 
-        "You are FixLens, an AI that diagnoses real-world problems " +
+              text:
 
-        "(home appliances, vehicles, and home issues). " +
+                "You are FixLens Brain, an expert AI for diagnosing real-world problems: home appliances, vehicles, and home issues. " +
 
-        "Give clear, step-by-step troubleshooting. " +
+                "Explain step by step, be practical and safety-conscious. " +
 
-        "Respond in the same language as the user when possible.",
+                "Always answer in the same language the user used.",
 
-      input: [
+            },
+
+          ],
+
+        },
 
         {
 
           role: "user",
 
-          content,
+          content: userContent,
 
         },
 
@@ -140,35 +194,29 @@ export default async function handler(req, res) {
 
 
 
-    let replyText = "I couldn't generate a response.";
+    const reply =
 
-    try {
+      completion.choices?.[0]?.message?.content ||
 
-      const first = response.output[0];
-
-      const firstContent = first?.content?.[0];
-
-      replyText = firstContent?.text || JSON.stringify(response);
-
-    } catch (e) {
-
-      replyText = JSON.stringify(response);
-
-    }
+      "I'm sorry, I couldn't generate a response.";
 
 
 
-    res.status(200).json({ reply: replyText });
+    return res.status(200).json({ reply });
 
   } catch (err) {
 
     console.error("FixLens diagnose error:", err);
 
-    res.status(500).json({
+    // مهم: نرجّع 200 مع رسالة مفهومة حتى لا يكسر التطبيق
 
-      message:
+    return res.status(200).json({
 
-        "FixLens Brain had a problem processing this request. Please try again.",
+      reply:
+
+        "I'm sorry, FixLens Brain ran into a technical issue while analyzing your image or voice note. " +
+
+        "Please type a short description of the problem so I can help you step by step.",
 
     });
 
