@@ -1,0 +1,753 @@
+[
+
+  {
+
+    "id": "car_01",
+
+    "title": "Car will not start, no crank",
+
+    "symptoms": [
+
+      "Turn key or press start, nothing happens",
+
+      "Dash lights may be dim or off"
+
+    ],
+
+    "possible_causes": [
+
+      "Dead battery",
+
+      "Loose battery terminals",
+
+      "Faulty ignition switch or starter relay"
+
+    ],
+
+    "recommended_actions": [
+
+      "Check interior lights and headlamps for brightness",
+
+      "Inspect battery terminals for corrosion and tightness",
+
+      "Try jump-starting with proper cables and safety",
+
+      "If still dead, starter or ignition circuit may need diagnosis"
+
+    ],
+
+    "severity": "high"
+
+  },
+
+  {
+
+    "id": "car_02",
+
+    "title": "Car cranks but does not start",
+
+    "symptoms": [
+
+      "Engine turns over but never fires",
+
+      "May smell fuel or not"
+
+    ],
+
+    "possible_causes": [
+
+      "No fuel pressure",
+
+      "No spark (ignition coil or plugs)",
+
+      "Crank or cam sensor failure"
+
+    ],
+
+    "recommended_actions": [
+
+      "Check fuel gauge and listen for fuel pump buzz when key is ON",
+
+      "If recently ran out of fuel, there may be air in system",
+
+      "Professional scan tool and diagnostic is usually required"
+
+    ],
+
+    "severity": "high"
+
+  },
+
+  {
+
+    "id": "car_03",
+
+    "title": "Check Engine light on (steady)",
+
+    "symptoms": [
+
+      "Light stays on while driving",
+
+      "Car may still drive normally"
+
+    ],
+
+    "possible_causes": [
+
+      "Emission control issues (O2 sensor, EVAP leak)",
+
+      "Minor sensor faults"
+
+    ],
+
+    "recommended_actions": [
+
+      "Have codes read at parts store or mechanic",
+
+      "Do not ignore for weeks; unresolved issues can damage catalytic converter"
+
+    ],
+
+    "severity": "medium"
+
+  },
+
+  {
+
+    "id": "car_04",
+
+    "title": "Check Engine light flashing",
+
+    "symptoms": [
+
+      "Light blinking while driving",
+
+      "Engine may shake or lose power"
+
+    ],
+
+    "possible_causes": [
+
+      "Severe misfire",
+
+      "Unburned fuel damaging catalytic converter"
+
+    ],
+
+    "recommended_actions": [
+
+      "Reduce speed and avoid hard acceleration",
+
+      "Drive carefully to nearest safe location or shop",
+
+      "Have vehicle scanned immediately; continued driving can cause expensive damage"
+
+    ],
+
+    "severity": "critical"
+
+  },
+
+  {
+
+    "id": "car_05",
+
+    "title": "Overheating engine",
+
+    "symptoms": [
+
+      "Temperature gauge in red zone",
+
+      "Steam or coolant smell from hood"
+
+    ],
+
+    "possible_causes": [
+
+      "Low coolant level",
+
+      "Failed water pump or thermostat",
+
+      "Radiator fan not working"
+
+    ],
+
+    "recommended_actions": [
+
+      "Pull over safely and turn engine off",
+
+      "Do not open hot radiator cap",
+
+      "Call for roadside assistance if temperature does not drop",
+
+      "Driving while overheated can ruin the engine"
+
+    ],
+
+    "severity": "critical"
+
+  },
+
+  {
+
+    "id": "car_06",
+
+    "title": "Brake warning light on",
+
+    "symptoms": [
+
+      "Red brake symbol on dash",
+
+      "Pedal may feel soft"
+
+    ],
+
+    "possible_causes": [
+
+      "Low brake fluid",
+
+      "Parking brake partially engaged",
+
+      "Hydraulic leak"
+
+    ],
+
+    "recommended_actions": [
+
+      "Safely stop and check that parking brake is fully released",
+
+      "Check brake fluid level; if very low, do not continue driving",
+
+      "Have brakes inspected immediately"
+
+    ],
+
+    "severity": "critical"
+
+  },
+
+  {
+
+    "id": "car_07",
+
+    "title": "ABS or Traction light on",
+
+    "symptoms": [
+
+      "Yellow ABS or traction symbol",
+
+      "Brakes may still feel normal"
+
+    ],
+
+    "possible_causes": [
+
+      "Wheel speed sensor fault",
+
+      "Damaged tone ring",
+
+      "Control module issue"
+
+    ],
+
+    "recommended_actions": [
+
+      "You still have normal braking but no anti-lock function",
+
+      "Drive cautiously and schedule diagnostic soon"
+
+    ],
+
+    "severity": "medium"
+
+  },
+
+  {
+
+    "id": "car_08",
+
+    "title": "Steering wheel vibration at highway speed",
+
+    "symptoms": [
+
+      "Wheel shakes around 90–120 km/h",
+
+      "Improves at different speeds"
+
+    ],
+
+    "possible_causes": [
+
+      "Wheel imbalance",
+
+      "Bent rim",
+
+      "Worn suspension or steering components"
+
+    ],
+
+    "recommended_actions": [
+
+      "Have wheels balanced and tires inspected",
+
+      "Check for uneven tire wear",
+
+      "If vibration continues, steering and suspension should be inspected"
+
+    ],
+
+    "severity": "medium"
+
+  },
+
+  {
+
+    "id": "car_09",
+
+    "title": "Car pulls to one side while driving",
+
+    "symptoms": [
+
+      "Vehicle drifts left or right when steering wheel is straight",
+
+      "Tire wear may be uneven"
+
+    ],
+
+    "possible_causes": [
+
+      "Wheel alignment out of spec",
+
+      "Unequal tire pressure",
+
+      "Sticking brake caliper"
+
+    ],
+
+    "recommended_actions": [
+
+      "Check and adjust tire pressures to recommended values",
+
+      "If pull remains, schedule alignment check",
+
+      "If one wheel very hot after driving, brake may be dragging"
+
+    ],
+
+    "severity": "medium"
+
+  },
+
+  {
+
+    "id": "car_10",
+
+    "title": "Strange knocking or pinging noise from engine",
+
+    "symptoms": [
+
+      "Rattling or pinging under acceleration",
+
+      "More noticeable on hills"
+
+    ],
+
+    "possible_causes": [
+
+      "Low-octane fuel in engine requiring higher grade",
+
+      "Carbon buildup",
+
+      "Incorrect ignition timing"
+
+    ],
+
+    "recommended_actions": [
+
+      "Use manufacturer-recommended fuel grade",
+
+      "Avoid heavy acceleration until checked",
+
+      "Persistent knock requires mechanic evaluation"
+
+    ],
+
+    "severity": "high"
+
+  },
+
+  {
+
+    "id": "car_11",
+
+    "title": "Battery light on while driving",
+
+    "symptoms": [
+
+      "Red battery symbol lit",
+
+      "Lights may dim, power steering may get heavy"
+
+    ],
+
+    "possible_causes": [
+
+      "Alternator not charging",
+
+      "Loose or broken serpentine belt",
+
+      "Bad battery connections"
+
+    ],
+
+    "recommended_actions": [
+
+      "Turn off non-essential electrical loads",
+
+      "Drive to nearest safe stop; car may die soon",
+
+      "Have charging system tested immediately"
+
+    ],
+
+    "severity": "critical"
+
+  },
+
+  {
+
+    "id": "car_12",
+
+    "title": "Grinding noise when braking",
+
+    "symptoms": [
+
+      "Metal-on-metal sound when pressing brake pedal",
+
+      "Vehicle still stops but noise is loud"
+
+    ],
+
+    "possible_causes": [
+
+      "Brake pads worn completely",
+
+      "Rotor surfaces damaged"
+
+    ],
+
+    "recommended_actions": [
+
+      "Do not ignore; braking performance is reduced",
+
+      "Drive slowly to repair shop if safe, or tow",
+
+      "Expect need for pads and rotor replacement"
+
+    ],
+
+    "severity": "critical"
+
+  },
+
+  {
+
+    "id": "car_13",
+
+    "title": "Soft or spongy brake pedal",
+
+    "symptoms": [
+
+      "Pedal travels far toward floor",
+
+      "Car stops but feels weak"
+
+    ],
+
+    "possible_causes": [
+
+      "Air in brake lines",
+
+      "Leak in system",
+
+      "Failing master cylinder"
+
+    ],
+
+    "recommended_actions": [
+
+      "Do not drive in traffic with poor brakes",
+
+      "Check ground under car for fresh fluid",
+
+      "Have system inspected and bled by professional"
+
+    ],
+
+    "severity": "critical"
+
+  },
+
+  {
+
+    "id": "car_14",
+
+    "title": "Transmission slipping",
+
+    "symptoms": [
+
+      "Engine revs but car accelerates slowly",
+
+      "Jerky or delayed gear changes"
+
+    ],
+
+    "possible_causes": [
+
+      "Low or old transmission fluid",
+
+      "Worn clutches or bands",
+
+      "Control module problems"
+
+    ],
+
+    "recommended_actions": [
+
+      "Check fluid level and color according to manual",
+
+      "If fluid smells burnt, seek transmission specialist",
+
+      "Avoid heavy towing or hard acceleration"
+
+    ],
+
+    "severity": "high"
+
+  },
+
+  {
+
+    "id": "car_15",
+
+    "title": "Power steering very heavy",
+
+    "symptoms": [
+
+      "Wheel hard to turn especially at low speeds",
+
+      "Whining noise when turning"
+
+    ],
+
+    "possible_causes": [
+
+      "Low power steering fluid",
+
+      "Belt slipping",
+
+      "Steering pump failure"
+
+    ],
+
+    "recommended_actions": [
+
+      "Check fluid level; top up with correct type if low",
+
+      "Inspect for leaks under car",
+
+      "If noise and stiffness continue, pump or rack may need repair"
+
+    ],
+
+    "severity": "high"
+
+  },
+
+  {
+
+    "id": "car_16",
+
+    "title": "Oil pressure warning light",
+
+    "symptoms": [
+
+      "Red oil-can symbol on dash",
+
+      "Sometimes ticking noise from engine"
+
+    ],
+
+    "possible_causes": [
+
+      "Low oil level",
+
+      "Oil pump problem",
+
+      "Blocked oil passages"
+
+    ],
+
+    "recommended_actions": [
+
+      "Safely pull over and shut engine off immediately",
+
+      "Check oil level and add if low",
+
+      "If light stays on, do NOT drive; tow vehicle to shop"
+
+    ],
+
+    "severity": "critical"
+
+  },
+
+  {
+
+    "id": "car_17",
+
+    "title": "Fuel smell around car",
+
+    "symptoms": [
+
+      "Strong gasoline odor near rear or under hood",
+
+      "Sometimes puddle under car"
+
+    ],
+
+    "possible_causes": [
+
+      "Leaking fuel line or connection",
+
+      "Faulty EVAP system component",
+
+      "Loose gas cap"
+
+    ],
+
+    "recommended_actions": [
+
+      "Tighten gas cap until it clicks",
+
+      "If smell is strong or you see liquid fuel, do not drive",
+
+      "Have vehicle inspected quickly due to fire risk"
+
+    ],
+
+    "severity": "critical"
+
+  },
+
+  {
+
+    "id": "car_18",
+
+    "title": "Vehicle drifts or feels loose over bumps",
+
+    "symptoms": [
+
+      "Car wanders on highway",
+
+      "Clunking noises over potholes"
+
+    ],
+
+    "possible_causes": [
+
+      "Worn ball joints or tie rods",
+
+      "Damaged control arm bushings",
+
+      "Loose steering components"
+
+    ],
+
+    "recommended_actions": [
+
+      "Drive cautiously and avoid high speeds",
+
+      "Have suspension and steering inspected soon",
+
+      "Severe wear can lead to loss of control"
+
+    ],
+
+    "severity": "high"
+
+  },
+
+  {
+
+    "id": "car_19",
+
+    "title": "Air conditioner in car not cooling",
+
+    "symptoms": [
+
+      "Fan blows but air stays warm",
+
+      "May cool slightly while driving faster"
+
+    ],
+
+    "possible_causes": [
+
+      "Low refrigerant",
+
+      "AC compressor clutch not engaging",
+
+      "Blend door stuck on hot"
+
+    ],
+
+    "recommended_actions": [
+
+      "See if AC clutch on compressor engages when AC is ON",
+
+      "If clutch never engages, fuses, relays, and refrigerant level must be checked",
+
+      "DIY recharge kits can be risky; better to see AC specialist"
+
+    ],
+
+    "severity": "medium"
+
+  },
+
+  {
+
+    "id": "car_20",
+
+    "title": "Car makes clicking sound when turning (front)",
+
+    "symptoms": [
+
+      "Repeated clicking from front wheels on sharp turns",
+
+      "Noise worse during acceleration"
+
+    ],
+
+    "possible_causes": [
+
+      "Worn CV joint on front axle",
+
+      "Boot torn and grease lost"
+
+    ],
+
+    "recommended_actions": [
+
+      "Inspect CV boots for tears and grease splatter",
+
+      "Plan axle or joint replacement; failure can cause loss of drive"
+
+    ],
+
+    "severity": "high"
+
+  }
+
+]
