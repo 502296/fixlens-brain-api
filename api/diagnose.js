@@ -2,21 +2,11 @@
 
 
 
-import OpenAI from "openai";
-
-
-
-const openai = new OpenAI({
-
-  apiKey: process.env.OPENAI_API_KEY,
-
-});
-
-
-
 export default async function handler(req, res) {
 
   try {
+
+    // فقط POST مسموح
 
     if (req.method !== "POST") {
 
@@ -26,25 +16,17 @@ export default async function handler(req, res) {
 
 
 
-    const {
-
-      issue,
-
-      languageCode = "en",
-
-      hasImage,
-
-      hasAudio,
-
-    } = req.body || {};
+    const { issue, imageBase64, imageMime } = req.body || {};
 
 
 
-    if (!issue && !hasImage && !hasAudio) {
+    // لازم يا نص، يا صورة، يا الاثنين معًا
+
+    if (!issue && !imageBase64) {
 
       return res.status(400).json({
 
-        error: "You must provide issue text or an attachment",
+        error: "You must provide issue text OR imageBase64",
 
       });
 
@@ -52,93 +34,181 @@ export default async function handler(req, res) {
 
 
 
-    // نبني نص المستخدم مع ملاحظات عن الصورة/الصوت (بدون إرسال البيكسلات)
+    // نوع الصورة الافتراضي
 
-    let userPrompt = (issue || "").trim();
+    let mime = imageMime || "image/jpeg";
 
+    if (mime === "image/heic" || mime === "image/heif") {
 
-
-    if (hasImage) {
-
-      userPrompt +=
-
-        "\n\n[Note for FixLens Brain: The user attached an image in the app. " +
-
-        "You cannot see the actual pixels in this API version. " +
-
-        "Ask the user to describe what they see in the photo (colors, positions, damaged parts, leaks, noises, etc.) " +
-
-        "and then give your best real-world diagnosis based on their description.]";
+      mime = "image/jpeg";
 
     }
 
 
 
-    if (hasAudio) {
+    // نبني الرسائل لـ Chat Completions
 
-      userPrompt +=
-
-        "\n\n[Note for FixLens Brain: The user recorded a voice note in the app. " +
-
-        "Assume the text above is the transcription. " +
-
-        "If things are unclear, ask short follow-up questions before giving a precise diagnosis.]";
-
-    }
+    const messages = [];
 
 
 
-    const systemPrompt =
+    // SYSTEM MESSAGE
 
-      "You are FixLens Brain, an expert real-world troubleshooter. " +
+    messages.push({
 
-      "You help with cars, appliances, home issues, devices and more. " +
+      role: "system",
 
-      "Explain clearly, step by step, and keep your tone calm, friendly, and confident. " +
-
-      "Always give practical steps the user can try safely at home, and mention when they should call a professional or emergency service.";
-
-
-
-    const completion = await openai.chat.completions.create({
-
-      model: "gpt-4o-mini",
-
-      messages: [
+      content: [
 
         {
 
-          role: "system",
+          type: "text",
 
-          content: systemPrompt,
+          text:
 
-        },
+            "You are FixLens Brain. You analyze images and text to diagnose real-world problems (home appliances, vehicles, home issues). " +
 
-        {
-
-          role: "user",
-
-          content: userPrompt || "The user did not write text. Ask them calmly to describe the issue.",
+            "Always answer step by step, in the same language the user used (English or Arabic).",
 
         },
 
       ],
 
-      max_tokens: 700,
+    });
+
+
+
+    // USER MESSAGE (نمزج النص + الصورة في رسالة واحدة)
+
+    const userContent = [];
+
+
+
+    if (issue) {
+
+      userContent.push({
+
+        type: "text",
+
+        text: issue,
+
+      });
+
+    }
+
+
+
+    if (imageBase64) {
+
+      userContent.push({
+
+        type: "image_url",
+
+        image_url: {
+
+          url: `data:${mime};base64,${imageBase64}`,
+
+        },
+
+      });
+
+    }
+
+
+
+    messages.push({
+
+      role: "user",
+
+      content: userContent,
 
     });
 
 
 
-    const reply =
+    // استدعاء OpenAI Chat Completions مباشرة عبر HTTP
 
-      completion.choices?.[0]?.message?.content ||
+    const response = await fetch("https://api.openai.com/v1/chat/completions", {
 
-      "FixLens Brain could not generate a response.";
+      method: "POST",
+
+      headers: {
+
+        "Content-Type": "application/json",
+
+        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+
+      },
+
+      body: JSON.stringify({
+
+        model: "gpt-4o-mini",
+
+        messages,
+
+        max_tokens: 600,
+
+      }),
+
+    });
 
 
 
-    return res.status(200).json({ reply });
+    const data = await response.json();
+
+
+
+    if (!response.ok) {
+
+      console.error("OpenAI error:", response.status, data);
+
+      return res.status(500).json({
+
+        error: "openai_error",
+
+        details: data,
+
+      });
+
+    }
+
+
+
+    // أحياناً يكون الـ content عبارة عن string أو array
+
+    let replyText = "FixLens Brain could not generate a response.";
+
+
+
+    const msg = data.choices?.[0]?.message;
+
+    if (msg) {
+
+      if (typeof msg.content === "string") {
+
+        replyText = msg.content;
+
+      } else if (Array.isArray(msg.content)) {
+
+        // ندمج كل مقاطع النص في رسالة واحدة
+
+        replyText =
+
+          msg.content
+
+            .filter((c) => c.type === "text" && c.text)
+
+            .map((c) => c.text)
+
+            .join("\n\n") || replyText;
+
+      }
+
+    }
+
+
+
+    return res.status(200).json({ reply: replyText });
 
   } catch (err) {
 
@@ -148,10 +218,10 @@ export default async function handler(req, res) {
 
       error: "FixLens Brain internal error",
 
-      details: err?.message ?? String(err),
+      details: err.message,
 
     });
 
   }
 
-}s
+}
