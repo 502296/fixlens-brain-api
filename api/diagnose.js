@@ -1,7 +1,5 @@
 // api/diagnose.js
 
-
-
 import OpenAI from "openai";
 
 
@@ -18,17 +16,23 @@ export default async function handler(req, res) {
 
   if (req.method !== "POST") {
 
-    return res
+    res.status(405).json({ error: "Method not allowed" });
 
-      .status(405)
-
-      .json({ error: "Method not allowed. Use POST instead." });
+    return;
 
   }
 
 
 
   try {
+
+    // في بعض الأحيان body يأتي كـ string من Vercel
+
+    const body =
+
+      typeof req.body === "string" ? JSON.parse(req.body) : req.body || {};
+
+
 
     const {
 
@@ -40,89 +44,61 @@ export default async function handler(req, res) {
 
       imageMime,
 
-      audioBase64,
+      // حاليا نتجاهل الصوت حتى نضبطه لاحقاً
 
-      audioMime,
+      // audioBase64,
 
-    } = req.body || {};
+      // audioMime,
 
-
-
-    const hasImage = !!imageBase64 && !!imageMime;
-
-    const hasAudio = !!audioBase64 && !!audioMime;
-
-    const hasText = !!(issue && issue.trim());
+    } = body;
 
 
 
-    if (!hasText && !hasImage && !hasAudio) {
+    if (!issue && !imageBase64) {
 
-      return res
+      res
 
         .status(400)
 
-        .json({ error: "Missing issue, imageBase64 or audioBase64" });
+        .json({ error: "Missing issue or image for FixLens diagnosis." });
+
+      return;
 
     }
 
 
 
-    // نبني محتوى رسالة المستخدم (Text + Image + Audio)
+    const systemPrompt = `
 
-    const userContent = [];
+You are **FixLens**, an AI assistant for real-world troubleshooting.
 
-
-
-    if (hasText) {
-
-      const basePrompt = `
-
-You are **FixLens Brain**, an expert troubleshooting assistant for:
-
-- home appliances (refrigerators, dryers, washers, HVAC, etc.)
-
-- vehicles and engines
-
-- general home issues and maintenance
+You help with home appliances, vehicles, and home issues.
 
 
 
-The user might write in English or Arabic. 
+- Always be practical and step-by-step.
 
-Always reply in the requested language code: "${languageCode}".
+- Mention safety steps clearly.
 
+- If you're not sure, say that a professional technician should inspect it.
 
+- Answer in the language of the user. User language code: ${languageCode}.
 
-When images are provided, carefully analyze all visual details (dust, leaks, rust, broken parts, wiring, etc.).
-
-When audio is provided, treat it as a spoken description of the issue.
-
-Give:
-
-1) A short summary of what you think is happening.
-
-2) Step-by-step troubleshooting actions.
-
-3) Clear safety notes (unplug, turn off water/gas, etc.) when needed.
-
-4) When to call a professional technician.
+`.trim();
 
 
 
-User description:
-
-${issue}
-
-      `.trim();
+    const userParts = [];
 
 
 
-      userContent.push({
+    if (issue) {
 
-        type: "input_text",
+      userParts.push({
 
-        text: basePrompt,
+        type: "text",
+
+        text: issue,
 
       });
 
@@ -130,39 +106,15 @@ ${issue}
 
 
 
-    if (hasImage) {
+    if (imageBase64 && imageMime) {
 
-      userContent.push({
+      userParts.push({
 
         type: "input_image",
 
-        image_url: `data:${imageMime};base64,${imageBase64}`,
+        image_url: {
 
-      });
-
-    }
-
-
-
-    if (hasAudio) {
-
-      // نحاول تمرير الصوت كنص مدخل للموديل (الموديل نفسه يتعامل مع الصوت)
-
-      const format =
-
-        (audioMime && audioMime.split("/")[1]) || "m4a";
-
-
-
-      userContent.push({
-
-        type: "input_audio",
-
-        input_audio: {
-
-          data: audioBase64,
-
-          format,
+          url: `data:${imageMime};base64,${imageBase64}`,
 
         },
 
@@ -172,59 +124,49 @@ ${issue}
 
 
 
-    const response = await client.responses.create({
+    const messages = [
 
-      model: "gpt-4.1-mini",
+      { role: "system", content: systemPrompt },
 
-      input: [
+      { role: "user", content: userParts },
 
-        {
-
-          role: "user",
-
-          content: userContent,
-
-        },
-
-      ],
-
-    });
+    ];
 
 
 
-    const text =
+    const completion = await client.chat.completions.create({
 
-      response.output_text ||
+      model: "gpt-4.1-mini", // أو gpt-4o / gpt-4.1 حسب الخطة
 
-      (response.output &&
+      messages,
 
-        response.output[0] &&
-
-        response.output[0].content &&
-
-        response.output[0].content[0] &&
-
-        response.output[0].content[0].text) ||
-
-      JSON.stringify(response);
-
-
-
-    return res.status(200).json({
-
-      reply: text,
+      temperature: 0.4,
 
     });
+
+
+
+    const reply =
+
+      completion.choices?.[0]?.message?.content?.trim() ||
+
+      "Sorry, I couldn't generate a response.";
+
+
+
+    res.status(200).json({ reply });
 
   } catch (err) {
 
-    console.error("FixLens /api/diagnose error:", err);
+    console.error("FixLens diagnose error:", err);
 
-    return res
+    res.status(500).json({
 
-      .status(500)
+      error: "FixLens Brain error",
 
-      .json({ error: "FixLens Brain internal error", details: String(err) });
+      message: err.message || String(err),
+
+    });
 
   }
 
