@@ -4,6 +4,16 @@
 
 import OpenAI from "openai";
 
+import { Readable } from "stream";
+
+
+
+const openai = new OpenAI({
+
+  apiKey: process.env.OPENAI_API_KEY,
+
+});
+
 
 
 export default async function handler(req, res) {
@@ -18,15 +28,31 @@ export default async function handler(req, res) {
 
 
 
-    const { issue, imageBase64, imageMime, languageCode = "en" } = req.body;
+    const {
+
+      issue,
+
+      imageBase64,
+
+      imageMime,
+
+      audioBase64,
+
+      audioMime,
+
+      languageCode = "en",
+
+    } = req.body || {};
 
 
 
-    if (!issue && !imageBase64) {
+    // لازم يكون عندنا واحد على الأقل من: نص أو صورة أو صوت
+
+    if (!issue && !imageBase64 && !audioBase64) {
 
       return res.status(400).json({
 
-        error: "You must provide issue text OR imageBase64",
+        error: "You must provide issue text, imageBase64, or audioBase64",
 
       });
 
@@ -34,11 +60,9 @@ export default async function handler(req, res) {
 
 
 
+    // --- تجهيز الـ MIME للصورة ---
+
     let mime = imageMime || "image/jpeg";
-
-
-
-    // Convert HEIC → JPEG
 
     if (mime === "image/heic" || mime === "image/heif") {
 
@@ -48,19 +72,11 @@ export default async function handler(req, res) {
 
 
 
-    const openai = new OpenAI({
-
-      apiKey: process.env.OPENAI_API_KEY,
-
-    });
-
-
-
     const messages = [];
 
 
 
-    // SYSTEM
+    // --- SYSTEM MESSAGE ---
 
     messages.push({
 
@@ -74,7 +90,15 @@ export default async function handler(req, res) {
 
           text:
 
-            "You are FixLens Brain. You analyze images, diagnose real-world problems, and respond in the user’s language.",
+            "You are FixLens Brain. You give clear, safe, step-by-step troubleshooting for real-world problems " +
+
+            "(home appliances, vehicles, home issues, etc.). " +
+
+            "Always answer in the user's language: " +
+
+            languageCode +
+
+            ". If something is dangerous, tell the user to stop and call a professional.",
 
         },
 
@@ -84,7 +108,7 @@ export default async function handler(req, res) {
 
 
 
-    // USER TEXT
+    // --- نص المشكلة من المستخدم (إن وجد) ---
 
     if (issue) {
 
@@ -100,29 +124,51 @@ export default async function handler(req, res) {
 
 
 
-    // USER IMAGE
+    // --- صورة من المستخدم (إن وجدت) ---
 
     if (imageBase64) {
+
+      const imageContent = [
+
+        {
+
+          type: "input_image",
+
+          image_url: {
+
+            url: `data:${mime};base64,${imageBase64}`,
+
+          },
+
+        },
+
+      ];
+
+
+
+      // لو ماكو نص، نضيف تعليمات بسيطة للصورة
+
+      if (!issue) {
+
+        imageContent.push({
+
+          type: "text",
+
+          text:
+
+            "This is the photo the user sent. Analyze what you see and relate it to the problem.",
+
+        });
+
+      }
+
+
 
       messages.push({
 
         role: "user",
 
-        content: [
-
-          {
-
-            type: "input_image",
-
-            image_url: {
-
-              url: `data:${mime};base64,${imageBase64}`,
-
-            },
-
-          },
-
-        ],
+        content: imageContent,
 
       });
 
@@ -130,7 +176,81 @@ export default async function handler(req, res) {
 
 
 
-    // CALL OPENAI
+    // --- صوت من المستخدم (إن وجد) → Transcription ---
+
+    let audioTranscript = "";
+
+    if (audioBase64) {
+
+      try {
+
+        const buffer = Buffer.from(audioBase64, "base64");
+
+        const stream = Readable.from(buffer);
+
+        // نضيف اسم للـ stream حتى يتصرف مثل ReadStream من ملف
+
+        stream.path = "voice-note.m4a";
+
+
+
+        const transcription = await openai.audio.transcriptions.create({
+
+          file: stream,
+
+          model: "gpt-4o-transcribe",
+
+          // نخلي اللغة نفس languageCode لو حاب
+
+          language: languageCode,
+
+        });
+
+
+
+        audioTranscript = (transcription.text || "").trim();
+
+      } catch (err) {
+
+        console.error("Audio transcription error:", err);
+
+        // لو حدث خطأ بالـ voice، ما نكسر الرد كله
+
+      }
+
+
+
+      if (audioTranscript) {
+
+        messages.push({
+
+          role: "user",
+
+          content: [
+
+            {
+
+              type: "text",
+
+              text:
+
+                "This is a voice note from the user. Here is the transcription:\n\n" +
+
+                audioTranscript,
+
+            },
+
+          ],
+
+        });
+
+      }
+
+    }
+
+
+
+    // --- استدعاء نموذج الدردشة مع الصورة + النص + (نص الصوت إن وجد) ---
 
     const completion = await openai.chat.completions.create({
 
@@ -138,7 +258,7 @@ export default async function handler(req, res) {
 
       messages,
 
-      max_tokens: 500,
+      max_tokens: 700,
 
     });
 
