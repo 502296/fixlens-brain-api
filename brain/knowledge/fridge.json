@@ -2284,5 +2284,434 @@
     "severity": "low"
 
   }
+  {
+
+  "id": "fridge_warm_fridge_cold_freezer",
+
+  "category": "fridge",
+
+  "title": "Freezer is cold but fridge section is warm",
+
+  "symptoms": [
+
+    "Freezer is making ice but fridge food feels warm",
+
+    "Milk or drinks in the fridge are not cold enough",
+
+    "Thermostat seems set correctly"
+
+  ],
+
+  "possible_causes": [
+
+    "Blocked air vents between freezer and fridge section",
+
+    "Evaporator fan not blowing cold air into fridge",
+
+    "Damper door stuck closed",
+
+    "Too much food blocking airflow"
+
+  ],
+
+  "recommended_actions": [
+
+    "Check the vents inside the fridge and freezer and move items away from them to allow airflow",
+
+    "Listen for the fan inside the freezer when the door is closed — if it is silent, the fan motor may be faulty",
+
+    "If you see a mechanical flap (damper) between freezer and fridge, make sure it is not blocked by ice or food packaging",
+
+    "If airflow does not improve, call a professional to test the fan motor and damper control"
+
+  ]
+
+},
+
+{
+
+  "id": "fridge_heavy_ice_evaporator",
+
+  "category": "fridge",
+
+  "title": "Evaporator coils are buried in thick ice",
+
+  "symptoms": [
+
+    "Back panel inside freezer has thick ice or frost",
+
+    "Fridge and freezer temperatures are both too warm",
+
+    "Fan sounds louder or air flow feels weak"
+
+  ],
+
+  "possible_causes": [
+
+    "Auto defrost system failure (heater, thermostat, or control board)",
+
+    "Door left open frequently causing heavy frost",
+
+    "Door gasket leaking warm air inside"
+
+  ],
+
+  "recommended_actions": [
+
+    "Unplug the fridge and keep doors open for 24 hours to fully defrost the ice (protect the floor from water)",
+
+    "After defrost, wipe and dry the inside, then plug the fridge back and monitor cooling for 24–48 hours",
+
+    "Check door gaskets for gaps, cracks, or dirt — clean them and make sure the door closes tightly",
+
+    "If heavy ice returns within a few days, ask a technician to test the defrost heater, defrost thermostat, and control board"
+
+  ]
+
+},
+
+{
+
+  "id": "fridge_water_on_floor_front",
+
+  "category": "fridge",
+
+  "title": "Water leaking on the floor in front of the fridge",
+
+  "symptoms": [
+
+    "Small puddle of water in front or under the fridge",
+
+    "Water appears mostly after defrost cycles or hot days",
+
+    "No visible leak from household water line"
+
+  ],
+
+  "possible_causes": [
+
+    "Clogged or frozen defrost drain line",
+
+    "Drain pan cracked or misaligned",
+
+    "Condensation not draining correctly"
+
+  ],
+
+  "recommended_actions": [
+
+    "Pull the fridge forward and inspect the drain pan at the bottom — make sure it is not cracked and is seated correctly",
+
+    "Look for a small plastic drain hose coming down from the freezer area into the pan — check for clogs or kinks",
+
+    "If you can access the drain hole in the freezer, carefully flush it with warm water using a turkey baster or small squeeze bottle",
+
+    "If leaks continue, have a technician inspect the drain line and pan for hidden cracks"
+
+  ]
+
+},
+
+{
+
+  "id": "fridge_loud_fan_noise",
+
+  "category": "fridge",
+
+  "title": "Loud rattling or scraping noise from inside the fridge",
+
+  "symptoms": [
+
+    "Noise comes from inside the freezer or back wall",
+
+    "Sound changes when door is opened",
+
+    "May sound like a fan hitting something"
+
+  ],
+
+  "possible_causes": [
+
+    "Evaporator fan blade hitting ice buildup",
+
+    "Loose fan blade or worn fan motor",
+
+    "Plastic parts vibrating against each other"
+
+  ],
+
+  "recommended_actions": [
+
+    "Open the freezer and listen carefully near the back panel while the fridge is running",
+
+    "If the noise stops when you gently press on the back panel, there may be ice or loose parts behind it",
+
+    "Unplug the fridge before removing any screws or panels — do not work near live electrical parts",
+
+    "If you see ice on or around the fan, fully defrost the unit and check door gaskets; if noise returns, the fan motor may need replacement by a technician"
+
+  ]
+
+},
+
+{
+
+  "id": "fridge_clicking_compressor_not_starting",
+
+  "category": "fridge",
+
+  "title": "Compressor clicks but does not start",
+
+  "symptoms": [
+
+    "Fridge not cooling at all",
+
+    "You hear a repeating click every few minutes from the back",
+
+    "Compressor feels very hot to the touch"
+
+  ],
+
+  "possible_causes": [
+
+    "Faulty start relay or overload protector",
+
+    "Weak or locked compressor",
+
+    "Low line voltage or bad outlet (less common)"
+
+  ],
+
+  "recommended_actions": [
+
+    "Unplug the fridge for at least 15–20 minutes to let the compressor cool",
+
+    "Check that the outlet is delivering normal voltage by testing another appliance",
+
+    "If the compressor still just clicks and never runs, the start relay/overload may need replacement",
+
+    "Compressor work involves high voltage and sealed refrigerant — call a professional if you are not trained"
+
+  ]
+
+},
+
+{
+
+  "id": "fridge_runs_constantly_not_cold_enough",
+
+  "category": "fridge",
+
+  "title": "Fridge runs almost all the time but is still not cold enough",
+
+  "symptoms": [
+
+    "Compressor and fans run for very long periods",
+
+    "Interior temperature is cool but not at the set point",
+
+    "Exterior side walls may feel warm"
+
+  ],
+
+  "possible_causes": [
+
+    "Dirty condenser coils reducing heat rejection",
+
+    "Room temperature very high with poor ventilation around fridge",
+
+    "Thermostat setting too cold, causing long run time",
+
+    "Door seals leaking, letting warm air in"
+
+  ],
+
+  "recommended_actions": [
+
+    "Clean the condenser coils thoroughly (brush + vacuum) and clear dust from the back and underneath the unit",
+
+    "Make sure there is enough space (at least a few inches) behind and above the fridge for air circulation",
+
+    "Check door seals by closing a sheet of paper in the door — if it pulls out easily, the gasket may need adjustment or replacement",
+
+    "After cleaning and adjustments, give the fridge 24 hours and recheck temperatures"
+
+  ]
+
+},
+
+{
+
+  "id": "fridge_intermittent_cooling_works_then_warm",
+
+  "category": "fridge",
+
+  "title": "Intermittent cooling – sometimes fine, sometimes warm",
+
+  "symptoms": [
+
+    "Fridge sometimes feels perfect, other times too warm",
+
+    "You may notice ticking or clicking from the control area",
+
+    "Unit may shut off for long periods"
+
+  ],
+
+  "possible_causes": [
+
+    "Faulty thermostat or temperature sensor",
+
+    "Control board relay sticking",
+
+    "Overheating compressor with internal thermal cutout"
+
+  ],
+
+  "recommended_actions": [
+
+    "Use a thermometer to log temperatures over 24–48 hours in both the fridge and freezer sections",
+
+    "Note the times when the compressor is not running while temperatures are high",
+
+    "If the unit does not restart until you tap the control area or unplug/replug, the thermostat or control board may be failing",
+
+    "This type of intermittent fault usually requires diagnosis by a professional technician"
+
+  ]
+
+},
+
+{
+
+  "id": "fridge_door_not_sealing_properly",
+
+  "category": "fridge",
+
+  "title": "Door does not seal tightly and warm air leaks in",
+
+  "symptoms": [
+
+    "Door pops open slightly after you close it",
+
+    "You see condensation or frost near the gasket",
+
+    "Paper test between door and frame feels loose"
+
+  ],
+
+  "possible_causes": [
+
+    "Gasket dirty, hardened, or cracked",
+
+    "Door hinges misaligned or sagging",
+
+    "Shelves overloaded causing door to twist"
+
+  ],
+
+  "recommended_actions": [
+
+    "Clean the entire gasket with warm soapy water, then dry it and check for cracks or hard spots",
+
+    "Do a paper test around the whole door — close a paper strip in the door and see where it pulls out too easily",
+
+    "Reduce heavy items stored in the door bins so the door is not pulled out of alignment",
+
+    "If the door is visibly sagging, hinge adjustment or replacement may be needed by a technician"
+
+  ]
+
+},
+
+{
+
+  "id": "fridge_ice_maker_not_producing_ice",
+
+  "category": "fridge",
+
+  "title": "Ice maker not making ice",
+
+  "symptoms": [
+
+    "Ice bin empty or very low",
+
+    "You do not hear water filling into the ice maker",
+
+    "Other parts of the fridge seem to cool normally"
+
+  ],
+
+  "possible_causes": [
+
+    "Water supply valve closed or line kinked",
+
+    "Filter clogged reducing water flow",
+
+    "Ice maker arm stuck in OFF position",
+
+    "Defective water inlet valve or ice maker assembly"
+
+  ],
+
+  "recommended_actions": [
+
+    "Confirm that the household water supply valve to the fridge is fully open",
+
+    "Inspect the water line behind the fridge for kinks or damage",
+
+    "If your fridge has a water filter, replace it if it is older than the recommended interval",
+
+    "Check the metal or plastic shut-off arm on the ice maker — make sure it is in the ON position and moves freely",
+
+    "If there is still no water entering the ice tray, a technician should test the inlet valve and ice maker module"
+
+  ]
+
+},
+
+{
+
+  "id": "fridge_bad_odors_persistent_smell",
+
+  "category": "fridge",
+
+  "title": "Persistent bad odor even after cleaning",
+
+  "symptoms": [
+
+    "Strong smell when opening the fridge",
+
+    "Odor remains after removing spoiled food",
+
+    "Smell seems to come from plastic or insulation"
+
+  ],
+
+  "possible_causes": [
+
+    "Liquids or spoiled food soaked into hidden areas or insulation",
+
+    "Clogged drain pan holding dirty water",
+
+    "Mold growth in hard-to-reach zones"
+
+  ],
+
+  "recommended_actions": [
+
+    "Remove all food, shelves, and drawers, and wash them with warm soapy water and baking soda",
+
+    "Clean the interior walls with a solution of baking soda and water, then dry completely",
+
+    "Locate and clean the drain pan underneath the fridge if accessible",
+
+    "Place open boxes of baking soda or activated charcoal inside for several days to absorb remaining odors",
+
+    "If odor remains extremely strong, the insulation may be contaminated — in severe cases the fridge may not be economically repairable"
+
+  ]
+
+}
 
 ]
