@@ -1,0 +1,463 @@
+[
+
+  {
+
+    "id": "washer_101",
+
+    "category": "washer",
+
+    "title": "Washer drum not spinning but machine turns on",
+
+    "symptoms": [
+
+      "Washer powers on but drum does not spin at all",
+
+      "You can hear a humming sound but no movement",
+
+      "Clothes come out completely wet"
+
+    ],
+
+    "possible_causes": [
+
+      "Broken or loose drive belt",
+
+      "Faulty motor or motor capacitor",
+
+      "Defective lid switch (top-load) or door lock (front-load)",
+
+      "Burned motor control board"
+
+    ],
+
+    "recommended_actions": [
+
+      "Unplug the washer and check if the drum can be turned by hand. If it spins freely, belt might be broken",
+
+      "Inspect the back cover (if safe) to see if the belt is off the pulleys",
+
+      "Make sure the lid/door is closing properly and listen for click of the safety switch",
+
+      "If belt and lid switch look good, call a professional to test the motor and control board"
+
+    ],
+
+    "severity": "high"
+
+  },
+
+  {
+
+    "id": "washer_102",
+
+    "category": "washer",
+
+    "title": "Washer not draining water at the end of cycle",
+
+    "symptoms": [
+
+      "Water remains in the drum after cycle finishes",
+
+      "Washer may show drain error code",
+
+      "Clothes are soaking wet and heavy"
+
+    ],
+
+    "possible_causes": [
+
+      "Clogged drain pump filter",
+
+      "Blocked drain hose or standpipe",
+
+      "Faulty drain pump motor",
+
+      "Kinked or frozen drain line"
+
+    ],
+
+    "recommended_actions": [
+
+      "Locate and clean the drain pump filter (usually behind small access door in front-bottom)",
+
+      "Check the drain hose for kinks or clogs and ensure it is not inserted too far into the standpipe",
+
+      "Listen during drain: if you hear no pump sound, pump motor may be bad",
+
+      "If cleaning does not help, contact a technician to test/replace the drain pump"
+
+    ],
+
+    "severity": "high"
+
+  },
+
+  {
+
+    "id": "washer_103",
+
+    "category": "washer",
+
+    "title": "Washer making loud banging noise during spin",
+
+    "symptoms": [
+
+      "Strong banging or knocking sound in spin cycle",
+
+      "Machine may walk or move across the floor",
+
+      "Excessive vibration felt through the cabinet"
+
+    ],
+
+    "possible_causes": [
+
+      "Load out of balance (heavy items on one side)",
+
+      "Worn suspension rods or shock absorbers",
+
+      "Loose concrete counterweight (front-loaders)",
+
+      "Washer not level on the floor"
+
+    ],
+
+    "recommended_actions": [
+
+      "Pause the cycle, open the door, and redistribute clothes evenly around the drum",
+
+      "Make sure the washer is level front-to-back and side-to-side, adjust legs if needed",
+
+      "If noise continues even with small balanced load, suspension or shocks may need replacement",
+
+      "Call a technician if you suspect broken counterweight or internal damage"
+
+    ],
+
+    "severity": "medium"
+
+  },
+
+  {
+
+    "id": "washer_104",
+
+    "category": "washer",
+
+    "title": "Washer door locked and will not open",
+
+    "symptoms": [
+
+      "Cycle is finished but door stays locked",
+
+      "Error code related to door or lock",
+
+      "You hear clicking but latch does not release"
+
+    ],
+
+    "possible_causes": [
+
+      "Faulty door lock mechanism",
+
+      "Control board not sending unlock signal",
+
+      "Water not fully drained from washer",
+
+      "Child lock or safety mode still active"
+
+    ],
+
+    "recommended_actions": [
+
+      "Wait a few minutes after cycle in case of delayed unlock",
+
+      "Perform a power reset: unplug for 2–3 minutes then plug back in",
+
+      "Check if there is water remaining; run a drain/spin cycle",
+
+      "If still locked, consult manual for emergency release cable or call a professional"
+
+    ],
+
+    "severity": "medium"
+
+  },
+
+  {
+
+    "id": "washer_105",
+
+    "category": "washer",
+
+    "title": "Washer smells like mold or mildew",
+
+    "symptoms": [
+
+      "Strong musty smell inside drum",
+
+      "Clothes come out with bad odor even after washing",
+
+      "Black or slimy residue on rubber door seal"
+
+    ],
+
+    "possible_causes": [
+
+      "Detergent buildup and trapped moisture",
+
+      "Mold growth in door boot seal (front-loaders)",
+
+      "Using only cold water cycles",
+
+      "Leaving door closed between washes"
+
+    ],
+
+    "recommended_actions": [
+
+      "Run a hot wash with washer-cleaner product or white vinegar + baking soda (without clothes)",
+
+      "Carefully wipe and scrub the rubber door seal, removing any visible mold",
+
+      "Leave the door and detergent drawer slightly open between uses to dry out",
+
+      "Switch occasionally to hot or sanitize cycles to kill bacteria"
+
+    ],
+
+    "severity": "low"
+
+  },
+
+  {
+
+    "id": "washer_106",
+
+    "category": "washer",
+
+    "title": "Washer leaking water from front or door",
+
+    "symptoms": [
+
+      "Water puddle in front of washer",
+
+      "Drips visible from door area during wash",
+
+      "Leak worse during high-speed spin"
+
+    ],
+
+    "possible_causes": [
+
+      "Damaged or dirty door boot seal",
+
+      "Loose door glass clamp or retainer",
+
+      "Too much detergent causing excess suds",
+
+      "Clogged dispenser drawer overflowing"
+
+    ],
+
+    "recommended_actions": [
+
+      "Inspect the door seal for tears, foreign objects, or buildup and clean it thoroughly",
+
+      "Reduce detergent amount and use HE (high-efficiency) detergent if required",
+
+      "Remove and clean the detergent drawer and housing",
+
+      "If seal is torn or leak persists, door gasket likely needs replacement by a professional"
+
+    ],
+
+    "severity": "high"
+
+  },
+
+  {
+
+    "id": "washer_107",
+
+    "category": "washer",
+
+    "title": "Washer fills very slowly or not at all",
+
+    "symptoms": [
+
+      "Cycle starts but tub fills extremely slowly",
+
+      "Error for low water or no fill",
+
+      "Only hot or only cold water works"
+
+    ],
+
+    "possible_causes": [
+
+      "Partially blocked inlet screens at water valves",
+
+      "Closed or partially closed household shutoff valves",
+
+      "Faulty water inlet valve coil",
+
+      "Low household water pressure"
+
+    ],
+
+    "recommended_actions": [
+
+      "Check that both hot and cold water faucets are fully open",
+
+      "Turn off water and disconnect hoses to clean inlet screens",
+
+      "Test if problem happens on both hot and cold settings; if one side fails, valve coil may be bad",
+
+      "If other fixtures also have weak flow, contact a plumber for pressure issue"
+
+    ],
+
+    "severity": "medium"
+
+  },
+
+  {
+
+    "id": "washer_108",
+
+    "category": "washer",
+
+    "title": "Washer overfilling or not stopping water",
+
+    "symptoms": [
+
+      "Water level rises too high",
+
+      "Washer may overflow onto floor",
+
+      "Cycle does not advance to wash"
+
+    ],
+
+    "possible_causes": [
+
+      "Faulty water level pressure switch",
+
+      "Blocked air tube to pressure switch",
+
+      "Stuck-open water inlet valve",
+
+      "Control board not shutting valve off"
+
+    ],
+
+    "recommended_actions": [
+
+      "Immediately turn off water supply faucets if overfilling occurs",
+
+      "Unplug washer to stop any electrical control",
+
+      "Have a professional inspect pressure switch, air hose, and inlet valve",
+
+      "Do not continue using the washer until the cause is repaired"
+
+    ],
+
+    "severity": "critical"
+
+  },
+
+  {
+
+    "id": "washer_109",
+
+    "category": "washer",
+
+    "title": "Washer leaving detergent residue on clothes",
+
+    "symptoms": [
+
+      "White streaks or powder left on dark clothing",
+
+      "Detergent clumps seen in drum after wash",
+
+      "Residue more noticeable in cold washes"
+
+    ],
+
+    "possible_causes": [
+
+      "Too much detergent used per load",
+
+      "Detergent not dissolving fully in cold water",
+
+      "Overloaded drum limiting rinsing",
+
+      "Clogged or partially blocked dispenser"
+
+    ],
+
+    "recommended_actions": [
+
+      "Reduce detergent amount, especially for HE washers",
+
+      "Use warmer water or pre-dissolve powdered detergent in hot water",
+
+      "Avoid overloading; leave space for clothes to tumble freely",
+
+      "Clean the detergent drawer and its water channels regularly"
+
+    ],
+
+    "severity": "low"
+
+  },
+
+  {
+
+    "id": "washer_110",
+
+    "category": "washer",
+
+    "title": "Washer stops mid-cycle and does not continue",
+
+    "symptoms": [
+
+      "Machine pauses and stays stuck at certain time",
+
+      "No error code or only generic one",
+
+      "You may hear relay clicks but no action"
+
+    ],
+
+    "possible_causes": [
+
+      "Faulty door/ lid switch intermittently losing contact",
+
+      "Control board relay problem",
+
+      "Overheating motor triggering thermal protection",
+
+      "Power supply fluctuation"
+
+    ],
+
+    "recommended_actions": [
+
+      "Check if opening/closing door causes cycle to resume — if yes, door lock may be weak",
+
+      "Unplug washer for a few minutes then restart the cycle",
+
+      "Avoid running repeated heavy loads back-to-back that can overheat the motor",
+
+      "If problem repeats at same stage, a technician should test control board and sensors"
+
+    ],
+
+    "severity": "medium"
+
+  }
+
+]
