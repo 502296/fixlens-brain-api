@@ -18,7 +18,11 @@ export default async function handler(req, res) {
 
   if (req.method !== "POST") {
 
-    return res.status(405).json({ error: "Method not allowed" });
+    return res
+
+      .status(405)
+
+      .json({ error: "Method not allowed. Use POST instead." });
 
   }
 
@@ -26,23 +30,11 @@ export default async function handler(req, res) {
 
   try {
 
-    // نتأكد أن الـ body دايماً كـ object
-
-    const body =
-
-      typeof req.body === "string"
-
-        ? JSON.parse(req.body || "{}")
-
-        : (req.body || {});
-
-
-
     const {
 
       issue,
 
-      languageCode,
+      languageCode = "en",
 
       imageBase64,
 
@@ -52,71 +44,125 @@ export default async function handler(req, res) {
 
       audioMime,
 
-    } = body;
+    } = req.body || {};
 
 
 
-    if (!issue || typeof issue !== "string") {
+    const hasImage = !!imageBase64 && !!imageMime;
 
-      return res.status(400).json({ error: "Missing 'issue' text" });
+    const hasAudio = !!audioBase64 && !!audioMime;
+
+    const hasText = !!(issue && issue.trim());
+
+
+
+    if (!hasText && !hasImage && !hasAudio) {
+
+      return res
+
+        .status(400)
+
+        .json({ error: "Missing issue, imageBase64 or audioBase64" });
 
     }
 
 
 
-    const lang = languageCode || "en";
+    // نبني محتوى رسالة المستخدم (Text + Image + Audio)
+
+    const userContent = [];
 
 
 
-    const systemPrompt = `
+    if (hasText) {
 
-You are FixLens Brain, an expert AI that diagnoses real-world problems:
+      const basePrompt = `
 
-- home appliances (fridge, washer, dryer, dishwasher, HVAC)
+You are **FixLens Brain**, an expert troubleshooting assistant for:
 
-- cars and vehicles
+- home appliances (refrigerators, dryers, washers, HVAC, etc.)
 
-- home issues (leaks, mold, wiring, etc.)
+- vehicles and engines
 
-Respond in language: ${lang}.
-
-Give step-by-step troubleshooting, safety warnings, and clear next actions.
-
-If an image is provided, use it to improve your diagnosis.
-
-If audio is provided, assume the user described the issue verbally.
-
-`;
+- general home issues and maintenance
 
 
 
-    // نبني محتوى المستخدم (نص + صورة إن وجدت)
+The user might write in English or Arabic. 
 
-    const userContent = [
-
-      {
-
-        type: "text",
-
-        text: `User description:\n${issue}`,
-
-      },
-
-    ];
+Always reply in the requested language code: "${languageCode}".
 
 
 
-    if (imageBase64) {
+When images are provided, carefully analyze all visual details (dust, leaks, rust, broken parts, wiring, etc.).
 
-      const mime = imageMime || "image/jpeg";
+When audio is provided, treat it as a spoken description of the issue.
+
+Give:
+
+1) A short summary of what you think is happening.
+
+2) Step-by-step troubleshooting actions.
+
+3) Clear safety notes (unplug, turn off water/gas, etc.) when needed.
+
+4) When to call a professional technician.
+
+
+
+User description:
+
+${issue}
+
+      `.trim();
+
+
 
       userContent.push({
 
-        type: "image_url",
+        type: "input_text",
 
-        image_url: {
+        text: basePrompt,
 
-          url: `data:${mime};base64,${imageBase64}`,
+      });
+
+    }
+
+
+
+    if (hasImage) {
+
+      userContent.push({
+
+        type: "input_image",
+
+        image_url: `data:${imageMime};base64,${imageBase64}`,
+
+      });
+
+    }
+
+
+
+    if (hasAudio) {
+
+      // نحاول تمرير الصوت كنص مدخل للموديل (الموديل نفسه يتعامل مع الصوت)
+
+      const format =
+
+        (audioMime && audioMime.split("/")[1]) || "m4a";
+
+
+
+      userContent.push({
+
+        type: "input_audio",
+
+        input_audio: {
+
+          data: audioBase64,
+
+          format,
 
         },
 
@@ -126,69 +172,59 @@ If audio is provided, assume the user described the issue verbally.
 
 
 
-    if (audioBase64) {
+    const response = await client.responses.create({
 
-      // حالياً لا نفريغ الصوت، لكن نخبر الموديل:
+      model: "gpt-4.1-mini",
 
-      userContent.push({
+      input: [
 
-        type: "text",
+        {
 
-        text:
+          role: "user",
 
-          "Note: The user also sent a voice note (audio file). " +
+          content: userContent,
 
-          "Assume they verbally described the same issue in more detail. " +
-
-          "Ask them to type any extra important details if needed.",
-
-      });
-
-    }
-
-
-
-    const completion = await client.chat.completions.create({
-
-      model: "gpt-4o-mini",
-
-      messages: [
-
-        { role: "system", content: systemPrompt },
-
-        { role: "user", content: userContent },
+        },
 
       ],
 
-      temperature: 0.4,
-
-      max_tokens: 900,
-
     });
 
 
 
-    const reply =
+    const text =
 
-      completion.choices?.[0]?.message?.content ||
+      response.output_text ||
 
-      "I couldn't generate a response. Please try again.";
+      (response.output &&
+
+        response.output[0] &&
+
+        response.output[0].content &&
+
+        response.output[0].content[0] &&
+
+        response.output[0].content[0].text) ||
+
+      JSON.stringify(response);
 
 
 
-    return res.status(200).json({ reply });
+    return res.status(200).json({
+
+      reply: text,
+
+    });
 
   } catch (err) {
 
-    console.error("FixLens diagnose error:", err);
+    console.error("FixLens /api/diagnose error:", err);
 
-    return res.status(500).json({
+    return res
 
-      error: "FixLens Brain internal error",
+      .status(500)
 
-      details: err?.message || String(err),
-
-    });
+      .json({ error: "FixLens Brain internal error", details: String(err) });
 
   }
 
