@@ -1,0 +1,799 @@
+[
+
+  {
+
+    "id": "washer_01",
+
+    "title": "Washer will not start at all",
+
+    "symptoms": [
+
+      "No lights, no sound when Start is pressed",
+
+      "Outlet may still work for other devices"
+
+    ],
+
+    "possible_causes": [
+
+      "Washer not properly plugged in",
+
+      "Faulty lid switch or door lock",
+
+      "Control board or main fuse failure"
+
+    ],
+
+    "recommended_actions": [
+
+      "Check outlet with another appliance",
+
+      "Verify power cord is fully inserted and not damaged",
+
+      "For top-load: try closing lid firmly; for front-load: listen for door lock click",
+
+      "If still dead, internal fuse or control board may need professional service"
+
+    ],
+
+    "severity": "high"
+
+  },
+
+  {
+
+    "id": "washer_02",
+
+    "title": "Washer fills with water but does not agitate",
+
+    "symptoms": [
+
+      "Tub fills normally",
+
+      "Then silence or only humming sound",
+
+      "Clothes remain still"
+
+    ],
+
+    "possible_causes": [
+
+      "Broken drive belt or coupling",
+
+      "Faulty lid switch (machine thinks lid open)",
+
+      "Motor or transmission problem"
+
+    ],
+
+    "recommended_actions": [
+
+      "Pause and resume cycle to rule out electronics glitch",
+
+      "Listen for motor humming (belt may be broken if motor runs but tub does not move)",
+
+      "Avoid forcing washer; schedule technician to inspect belt/coupling"
+
+    ],
+
+    "severity": "medium"
+
+  },
+
+  {
+
+    "id": "washer_03",
+
+    "title": "Washer not draining",
+
+    "symptoms": [
+
+      "Water remains in tub at end of cycle",
+
+      "Clothes are soaking wet",
+
+      "Sometimes error code for drain issue"
+
+    ],
+
+    "possible_causes": [
+
+      "Clogged drain pump filter",
+
+      "Blocked drain hose",
+
+      "Faulty drain pump"
+
+    ],
+
+    "recommended_actions": [
+
+      "Locate and clean pump filter (front bottom panel on many front-load machines)",
+
+      "Check drain hose for kinks or clogs",
+
+      "Listen for pump sound; if it hums but no water exits, pump may be blocked or burned out"
+
+    ],
+
+    "severity": "high"
+
+  },
+
+  {
+
+    "id": "washer_04",
+
+    "title": "Washer not spinning / clothes come out very wet",
+
+    "symptoms": [
+
+      "Washer completes cycle but clothes dripping",
+
+      "Spin stage seems weak or very short",
+
+      "Sometimes loud banging during spin"
+
+    ],
+
+    "possible_causes": [
+
+      "Unbalanced load",
+
+      "Worn drive belt or clutch",
+
+      "Faulty speed sensor",
+
+      "Shock absorbers or suspension rods worn"
+
+    ],
+
+    "recommended_actions": [
+
+      "Redistribute heavy items and run an extra spin-only cycle",
+
+      "Make sure washer is level on the floor",
+
+      "If problem repeats with different loads, drive system may need service"
+
+    ],
+
+    "severity": "medium"
+
+  },
+
+  {
+
+    "id": "washer_05",
+
+    "title": "Washer leaking water on the floor",
+
+    "symptoms": [
+
+      "Water under or around the washer",
+
+      "Leak may occur only during fill, wash, or drain"
+
+    ],
+
+    "possible_causes": [
+
+      "Loose inlet hose connections",
+
+      "Damaged door boot seal on front-loaders",
+
+      "Cracked drain hose or tub",
+
+      "Over-sudsing from too much detergent"
+
+    ],
+
+    "recommended_actions": [
+
+      "Tighten hot/cold water inlet hoses and check for drips",
+
+      "Inspect door gasket for tears or trapped clothing",
+
+      "Use HE detergent and correct amount to avoid excessive foam",
+
+      "If leak appears from inside cabinet, stop use and call technician"
+
+    ],
+
+    "severity": "high"
+
+  },
+
+  {
+
+    "id": "washer_06",
+
+    "title": "Washer making loud banging during spin",
+
+    "symptoms": [
+
+      "Machine shakes and hits cabinet or walls",
+
+      "Noise mainly during final spin",
+
+      "May move across floor"
+
+    ],
+
+    "possible_causes": [
+
+      "Washer not level",
+
+      "Shock absorbers or suspension springs worn",
+
+      "Very unbalanced heavy load (blankets, rugs)"
+
+    ],
+
+    "recommended_actions": [
+
+      "Adjust legs so washer is solid and does not rock",
+
+      "Avoid mixing heavy items with very light ones",
+
+      "If banging continues even with small balanced loads, suspension parts need inspection"
+
+    ],
+
+    "severity": "medium"
+
+  },
+
+  {
+
+    "id": "washer_07",
+
+    "title": "Washer smells like mold or mildew",
+
+    "symptoms": [
+
+      "Musty odor from drum",
+
+      "Black spots on door gasket (front-loaders)",
+
+      "Smell stronger when door is closed for long time"
+
+    ],
+
+    "possible_causes": [
+
+      "Standing water in door seal or drain areas",
+
+      "Using only cold water and too much detergent",
+
+      "Not leaving door open to dry"
+
+    ],
+
+    "recommended_actions": [
+
+      "Run a hot cleaning cycle with washer cleaner or vinegar + baking soda",
+
+      "Clean rubber door seal gently with diluted bleach",
+
+      "Leave door ajar after each wash to dry interior"
+
+    ],
+
+    "severity": "low"
+
+  },
+
+  {
+
+    "id": "washer_08",
+
+    "title": "Error code for unbalanced load",
+
+    "symptoms": [
+
+      "Machine stops mid-spin with error",
+
+      "Tub full of heavy wet clothes",
+
+      "May repeat multiple times"
+
+    ],
+
+    "possible_causes": [
+
+      "Items tangled to one side",
+
+      "Too small or too large load",
+
+      "Shock absorbers or sensors struggling"
+
+    ],
+
+    "recommended_actions": [
+
+      "Open washer, redistribute items and remove one or two heavy pieces",
+
+      "Run spin-only cycle",
+
+      "If code appears with almost every load, check leveling and suspension"
+
+    ],
+
+    "severity": "low"
+
+  },
+
+  {
+
+    "id": "washer_09",
+
+    "title": "Washer door will not unlock",
+
+    "symptoms": [
+
+      "Cycle completed but door stays locked",
+
+      "Clicking noise but no release",
+
+      "Error code for door lock"
+
+    ],
+
+    "possible_causes": [
+
+      "Control board still senses water in drum",
+
+      "Door lock mechanism stuck",
+
+      "Drain problem preventing unlock"
+
+    ],
+
+    "recommended_actions": [
+
+      "Wait several minutes after cycle end; many machines have delay",
+
+      "Run a short drain/spin program",
+
+      "If still locked, unplug washer for 5–10 minutes then try again",
+
+      "Use manual emergency release if available (see manual)"
+
+    ],
+
+    "severity": "medium"
+
+  },
+
+  {
+
+    "id": "washer_10",
+
+    "title": "Washer fills endlessly and overflows",
+
+    "symptoms": [
+
+      "Water continues flowing even when correct level reached",
+
+      "May spill onto floor",
+
+      "You may hear water entering even when machine is off"
+
+    ],
+
+    "possible_causes": [
+
+      "Stuck water inlet valve",
+
+      "Pressure level sensor hose blocked",
+
+      "Control board not closing valve"
+
+    ],
+
+    "recommended_actions": [
+
+      "Turn off water supply valves immediately",
+
+      "Unplug washer",
+
+      "This issue usually requires replacement of inlet valve or pressure sensor by a technician"
+
+    ],
+
+    "severity": "critical"
+
+  },
+
+  {
+
+    "id": "washer_11",
+
+    "title": "Washer trips circuit breaker",
+
+    "symptoms": [
+
+      "Breaker trips during wash or spin",
+
+      "Sometimes burning smell",
+
+      "Machine may fill with water before trip"
+
+    ],
+
+    "possible_causes": [
+
+      "Motor shorted",
+
+      "Heater element short (on machines with internal heater)",
+
+      "Damaged power cord"
+
+    ],
+
+    "recommended_actions": [
+
+      "Do not repeatedly reset breaker",
+
+      "Unplug washer and inspect cord and outlet",
+
+      "Contact appliance electrician; internal components must be tested"
+
+    ],
+
+    "severity": "critical"
+
+  },
+
+  {
+
+    "id": "washer_12",
+
+    "title": "Clothes not getting clean",
+
+    "symptoms": [
+
+      "Residue or detergent left on fabrics",
+
+      "Odor remains after wash",
+
+      "Stains unchanged"
+
+    ],
+
+    "possible_causes": [
+
+      "Using too much or wrong type of detergent",
+
+      "Overloading drum",
+
+      "Very short or cold cycles only",
+
+      "Hard water deposits in machine"
+
+    ],
+
+    "recommended_actions": [
+
+      "Use HE detergent and correct dose for load size",
+
+      "Do not overfill drum; leave space for clothes to tumble",
+
+      "Use warmer water and longer cycles for heavily soiled items",
+
+      "Run regular maintenance wash with cleaner"
+
+    ],
+
+    "severity": "low"
+
+  },
+
+  {
+
+    "id": "washer_13",
+
+    "title": "Washer makes grinding noise when spinning",
+
+    "symptoms": [
+
+      "Metallic grinding or rumbling",
+
+      "Noise increases with spin speed",
+
+      "Sometimes small water leak from rear"
+
+    ],
+
+    "possible_causes": [
+
+      "Drum bearings worn",
+
+      "Foreign object between drum and tub",
+
+      "Pulley or motor mount loose"
+
+    ],
+
+    "recommended_actions": [
+
+      "Stop using washer to avoid further damage",
+
+      "Drum bearing replacement is major repair often requiring expert",
+
+      "Consider cost vs age of machine"
+
+    ],
+
+    "severity": "high"
+
+  },
+
+  {
+
+    "id": "washer_14",
+
+    "title": "Washer displays error for low water flow",
+
+    "symptoms": [
+
+      "Machine stops during fill",
+
+      "Error code about water supply",
+
+      "Drum has very little water"
+
+    ],
+
+    "possible_causes": [
+
+      "Supply valves partially closed",
+
+      "Inlet hose filter screens clogged",
+
+      "Low household water pressure"
+
+    ],
+
+    "recommended_actions": [
+
+      "Fully open both hot and cold valves",
+
+      "Turn off water, disconnect hoses, and clean small filter screens inside valve ports",
+
+      "Avoid using other large water appliances during wash"
+
+    ],
+
+    "severity": "medium"
+
+  },
+
+  {
+
+    "id": "washer_15",
+
+    "title": "Detergent drawer full of water after cycle",
+
+    "symptoms": [
+
+      "Water remains in detergent or softener compartment",
+
+      "Sometimes mold in drawer"
+
+    ],
+
+    "possible_causes": [
+
+      "Clogged siphon insert",
+
+      "Low water pressure through dispenser",
+
+      "Drawer not fully inserted"
+
+    ],
+
+    "recommended_actions": [
+
+      "Remove drawer and clean all parts under warm water",
+
+      "Check small siphon caps are not blocked",
+
+      "Push drawer firmly until it clicks"
+
+    ],
+
+    "severity": "low"
+
+  },
+
+  {
+
+    "id": "washer_16",
+
+    "title": "Washer pauses repeatedly and takes too long",
+
+    "symptoms": [
+
+      "Cycle time extends much longer than display",
+
+      "Machine often pauses to rebalance"
+
+    ],
+
+    "possible_causes": [
+
+      "Sensor trying to correct unbalanced load",
+
+      "Very heavy or mixed fabrics",
+
+      "Weak suspension"
+
+    ],
+
+    "recommended_actions": [
+
+      "Wash similar fabrics together",
+
+      "Use smaller loads",
+
+      "If time extension happens on almost every cycle, suspension parts should be checked"
+
+    ],
+
+    "severity": "low"
+
+  },
+
+  {
+
+    "id": "washer_17",
+
+    "title": "Burning rubber smell during spin",
+
+    "symptoms": [
+
+      "Smell strongest at high speed",
+
+      "Sometimes slight smoke",
+
+      "Washer may still spin"
+
+    ],
+
+    "possible_causes": [
+
+      "Drive belt slipping on pulley",
+
+      "Object caught between tub and drum",
+
+      "Motor overheating"
+
+    ],
+
+    "recommended_actions": [
+
+      "Stop cycle and unplug washer",
+
+      "Do not continue to use until belt and motor area inspected",
+
+      "Possible fire risk if ignored"
+
+    ],
+
+    "severity": "critical"
+
+  },
+
+  {
+
+    "id": "washer_18",
+
+    "title": "Top-load washer agitator not moving bottom clothes",
+
+    "symptoms": [
+
+      "Clothes on top move, bottom stays still",
+
+      "Center agitator feels loose"
+
+    ],
+
+    "possible_causes": [
+
+      "Worn agitator dogs or cogs",
+
+      "Agitator bolt loose"
+
+    ],
+
+    "recommended_actions": [
+
+      "Remove fabric softener cap and inspect plastic dogs",
+
+      "Replace agitator repair kit (inexpensive parts)",
+
+      "Follow service manual for disassembly"
+
+    ],
+
+    "severity": "low"
+
+  },
+
+  {
+
+    "id": "washer_19",
+
+    "title": "Front-load washer door leaks during wash",
+
+    "symptoms": [
+
+      "Water drips from front of door",
+
+      "Small puddle on floor",
+
+      "More visible on heavy loads"
+
+    ],
+
+    "possible_causes": [
+
+      "Damaged or dirty door boot seal",
+
+      "Objects stuck between glass and gasket",
+
+      "Washer overloaded so clothes push against door"
+
+    ],
+
+    "recommended_actions": [
+
+      "Clean gasket completely and remove coins, hair, or debris",
+
+      "Check for tears or cracks; replace boot if damaged",
+
+      "Use smaller loads to reduce pressure on door"
+
+    ],
+
+    "severity": "medium"
+
+  },
+
+  {
+
+    "id": "washer_20",
+
+    "title": "Washer beeps and refuses to start (child lock)",
+
+    "symptoms": [
+
+      "Buttons make sound but nothing happens",
+
+      "Lock icon on display",
+
+      "Manual mentions child-lock"
+
+    ],
+
+    "possible_causes": [
+
+      "Control panel locked to prevent children from using machine"
+
+    ],
+
+    "recommended_actions": [
+
+      "Hold specified button combination (for example, Temp + Spin) for 3–5 seconds to unlock (see manual)",
+
+      "After unlock, restart cycle"
+
+    ],
+
+    "severity": "low"
+
+  }
+
+]
