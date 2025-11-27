@@ -1,15 +1,3 @@
 {
-
-  "version": 2,
-
-  "functions": {
-
-    "api/diagnose.js": {
-
-      "runtime": "nodejs20.x"
-
-    }
-
-  }
-
+  "version": 2
 }
