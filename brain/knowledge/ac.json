@@ -1,0 +1,787 @@
+[
+
+  {
+
+    "id": "ac_01",
+
+    "title": "AC blowing warm air only",
+
+    "symptoms": [
+
+      "Fan runs but air from vents is not cold",
+
+      "Outdoor unit may or may not run"
+
+    ],
+
+    "possible_causes": [
+
+      "Low refrigerant charge or leak",
+
+      "Compressor not starting",
+
+      "Dirty condenser coil",
+
+      "Thermostat misconfigured"
+
+    ],
+
+    "recommended_actions": [
+
+      "Set thermostat to Cool and lowest temperature and wait 5–10 minutes",
+
+      "Check outdoor unit: is the fan and compressor running?",
+
+      "Clean outdoor coil with gentle water spray (power off first)",
+
+      "If compressor never starts or lines stay warm, licensed HVAC tech must check refrigerant and compressor"
+
+    ],
+
+    "severity": "high"
+
+  },
+
+  {
+
+    "id": "ac_02",
+
+    "title": "AC not turning on at all",
+
+    "symptoms": [
+
+      "Thermostat screen blank or unresponsive",
+
+      "No noise from indoor or outdoor units"
+
+    ],
+
+    "possible_causes": [
+
+      "Tripped breaker",
+
+      "Blown low-voltage fuse on control board",
+
+      "Thermostat batteries dead",
+
+      "Float switch tripped due to clogged drain"
+
+    ],
+
+    "recommended_actions": [
+
+      "Check main electrical panel and reset tripped breakers once",
+
+      "Replace thermostat batteries if present",
+
+      "Inspect condensate drain line for clogs; clear if overflowing",
+
+      "If breaker re-trips or nothing happens, call HVAC technician"
+
+    ],
+
+    "severity": "high"
+
+  },
+
+  {
+
+    "id": "ac_03",
+
+    "title": "Weak airflow from vents",
+
+    "symptoms": [
+
+      "Some cooling but rooms take very long to cool",
+
+      "Air barely felt from vents"
+
+    ],
+
+    "possible_causes": [
+
+      "Dirty air filter",
+
+      "Blower fan wheel clogged",
+
+      "Closed or obstructed vents",
+
+      "Duct leaks"
+
+    ],
+
+    "recommended_actions": [
+
+      "Replace or clean air filter immediately",
+
+      "Open all supply and return vents",
+
+      "Check furniture or curtains blocking vents",
+
+      "If still weak, blower assembly may need cleaning by a pro"
+
+    ],
+
+    "severity": "medium"
+
+  },
+
+  {
+
+    "id": "ac_04",
+
+    "title": "AC freezing up (ice on pipes or indoor coil)",
+
+    "symptoms": [
+
+      "Ice on copper lines near outdoor or indoor unit",
+
+      "Little or no airflow",
+
+      "Unit may shut off then drip water when ice melts"
+
+    ],
+
+    "possible_causes": [
+
+      "Very dirty filter restricting airflow",
+
+      "Blower not running",
+
+      "Low refrigerant",
+
+      "Thermostat set too low in cool weather"
+
+    ],
+
+    "recommended_actions": [
+
+      "Turn system off and let ice completely melt",
+
+      "Replace filter and ensure vents are open",
+
+      "Restart and monitor; if icing returns, tech must check refrigerant and blower"
+
+    ],
+
+    "severity": "high"
+
+  },
+
+  {
+
+    "id": "ac_05",
+
+    "title": "Water leaking from indoor unit",
+
+    "symptoms": [
+
+      "Water around air handler or ceiling stains near vent",
+
+      "AC may still cool"
+
+    ],
+
+    "possible_causes": [
+
+      "Clogged condensate drain line",
+
+      "Damaged drain pan",
+
+      "Improper unit slope"
+
+    ],
+
+    "recommended_actions": [
+
+      "Turn system off to prevent ceiling damage",
+
+      "Use wet/dry vacuum on outside drain line to clear blockage",
+
+      "If leak persists, technician should inspect pan and slope"
+
+    ],
+
+    "severity": "high"
+
+  },
+
+  {
+
+    "id": "ac_06",
+
+    "title": "Bad smell when AC runs",
+
+    "symptoms": [
+
+      "Musty or moldy odor from vents",
+
+      "Smell stronger after unit has been off for a while"
+
+    ],
+
+    "possible_causes": [
+
+      "Mold growth on coil or in drain pan",
+
+      "Dirty filter",
+
+      "Animals or dead rodents in ducts (rare but possible)"
+
+    ],
+
+    "recommended_actions": [
+
+      "Replace filter and run fan-only mode for a while",
+
+      "Have coils and drain pan cleaned by HVAC professional",
+
+      "If odor is burning or electrical, turn off power immediately"
+
+    ],
+
+    "severity": "medium"
+
+  },
+
+  {
+
+    "id": "ac_07",
+
+    "title": "Outdoor unit noisy or rattling",
+
+    "symptoms": [
+
+      "Rattling, clanking, or grinding noises",
+
+      "Noise increases when compressor starts"
+
+    ],
+
+    "possible_causes": [
+
+      "Loose fan blades or panels",
+
+      "Debris inside fan",
+
+      "Compressor mounting issues"
+
+    ],
+
+    "recommended_actions": [
+
+      "Turn power off before inspecting",
+
+      "Remove leaves or debris carefully",
+
+      "Tighten any loose screws on panels",
+
+      "If grinding persists, compressor or fan motor may need service"
+
+    ],
+
+    "severity": "medium"
+
+  },
+
+  {
+
+    "id": "ac_08",
+
+    "title": "Thermostat shows cooling but room stays hot",
+
+    "symptoms": [
+
+      "Thermostat appears normal",
+
+      "No cold air at vents or system short cycles"
+
+    ],
+
+    "possible_causes": [
+
+      "Thermostat located in wrong place (direct sun or draft)",
+
+      "Incorrect thermostat settings or schedule",
+
+      "Sensor issues"
+
+    ],
+
+    "recommended_actions": [
+
+      "Set thermostat to Hold or permanent cool mode",
+
+      "Disable schedules temporarily to test",
+
+      "If unit runs but still does not cool, mechanical issue is more likely than thermostat"
+
+    ],
+
+    "severity": "medium"
+
+  },
+
+  {
+
+    "id": "ac_09",
+
+    "title": "Breaker trips when AC starts",
+
+    "symptoms": [
+
+      "Breaker trips immediately or within seconds",
+
+      "Outdoor unit hums or fails to start"
+
+    ],
+
+    "possible_causes": [
+
+      "Compressor drawing locked-rotor current",
+
+      "Shorted wires or contactor",
+
+      "Incorrect breaker size"
+
+    ],
+
+    "recommended_actions": [
+
+      "Do not keep resetting breaker",
+
+      "Turn system off and call HVAC electrician",
+
+      "Compressor or wiring likely needs professional diagnosis"
+
+    ],
+
+    "severity": "critical"
+
+  },
+
+  {
+
+    "id": "ac_10",
+
+    "title": "AC short cycling (turns on and off frequently)",
+
+    "symptoms": [
+
+      "Runs for 1–5 minutes then stops, repeats often",
+
+      "Room never reaches set temperature"
+
+    ],
+
+    "possible_causes": [
+
+      "Oversized system",
+
+      "Thermostat near supply vent",
+
+      "Low refrigerant or icing",
+
+      "Safety switches tripping"
+
+    ],
+
+    "recommended_actions": [
+
+      "Ensure thermostat not directly in path of cold air",
+
+      "Check filter and coils for ice",
+
+      "If short cycling continues, technician should inspect pressures and safeties"
+
+    ],
+
+    "severity": "high"
+
+  },
+
+  {
+
+    "id": "ac_11",
+
+    "title": "Window AC dripping water inside room",
+
+    "symptoms": [
+
+      "Water dripping from front panel",
+
+      "Back of unit may be higher than front"
+
+    ],
+
+    "possible_causes": [
+
+      "Unit not tilted slightly outward",
+
+      "Drain holes clogged with dirt",
+
+      "Excess humidity and poor drainage"
+
+    ],
+
+    "recommended_actions": [
+
+      "Adjust installation so rear of unit is slightly lower than front",
+
+      "Clear drain channels and holes carefully",
+
+      "Make sure filter is clean"
+
+    ],
+
+    "severity": "medium"
+
+  },
+
+  {
+
+    "id": "ac_12",
+
+    "title": "AC fan runs but compressor silent",
+
+    "symptoms": [
+
+      "Outdoor fan spinning",
+
+      "No change in pipe temperature",
+
+      "No cooling inside"
+
+    ],
+
+    "possible_causes": [
+
+      "Failed capacitor",
+
+      "Compressor overload tripped",
+
+      "Compressor failure"
+
+    ],
+
+    "recommended_actions": [
+
+      "Turn off power to avoid overheating",
+
+      "HVAC tech should test capacitor and compressor windings",
+
+      "Do not attempt to bypass safeties"
+
+    ],
+
+    "severity": "high"
+
+  },
+
+  {
+
+    "id": "ac_13",
+
+    "title": "AC smells like burning plastic",
+
+    "symptoms": [
+
+      "Sharp hot smell from vents or unit",
+
+      "May occur when system first turns on"
+
+    ],
+
+    "possible_causes": [
+
+      "Dust burning off electric heater strips",
+
+      "Electrical component overheating",
+
+      "Motor windings failing"
+
+    ],
+
+    "recommended_actions": [
+
+      "If smell disappears quickly at first use in winter, dust burn-off may be normal",
+
+      "If smell is strong or with smoke, turn system off and call professional immediately"
+
+    ],
+
+    "severity": "critical"
+
+  },
+
+  {
+
+    "id": "ac_14",
+
+    "title": "Uneven cooling between rooms",
+
+    "symptoms": [
+
+      "Some rooms too cold, others hot",
+
+      "System seems to run normally"
+
+    ],
+
+    "possible_causes": [
+
+      "Improper duct balancing",
+
+      "Closed or blocked vents",
+
+      "Weak blower for long ducts"
+
+    ],
+
+    "recommended_actions": [
+
+      "Open vents fully in warm rooms and slightly close in overly cold rooms",
+
+      "Check for blocked returns and supplies",
+
+      "If problem severe, HVAC pro can adjust dampers or evaluate duct design"
+
+    ],
+
+    "severity": "low"
+
+  },
+
+  {
+
+    "id": "ac_15",
+
+    "title": "High energy bills with AC use",
+
+    "symptoms": [
+
+      "Electric bill much higher than usual",
+
+      "AC seems to run constantly"
+
+    ],
+
+    "possible_causes": [
+
+      "Dirty filter and coils",
+
+      "Low refrigerant efficiency",
+
+      "Leaky windows and poor insulation",
+
+      "Very old SEER rating unit"
+
+    ],
+
+    "recommended_actions": [
+
+      "Perform full maintenance: filter, coil cleaning, drain cleaning",
+
+      "Seal windows and doors to reduce heat gain",
+
+      "Consider professional tune-up and long-term replacement plan"
+
+    ],
+
+    "severity": "medium"
+
+  },
+
+  {
+
+    "id": "ac_16",
+
+    "title": "AC indoor blower not running",
+
+    "symptoms": [
+
+      "Outdoor unit runs and gets cold",
+
+      "No air from vents"
+
+    ],
+
+    "possible_causes": [
+
+      "Blower motor failure",
+
+      "Control board or relay failure",
+
+      "Blown internal fuse"
+
+    ],
+
+    "recommended_actions": [
+
+      "Turn system off to avoid freezing coil",
+
+      "Check filter and ensure no ice on coil",
+
+      "HVAC pro should test motor, capacitor, and board"
+
+    ],
+
+    "severity": "high"
+
+  },
+
+  {
+
+    "id": "ac_17",
+
+    "title": "Thermostat changes temperature by itself",
+
+    "symptoms": [
+
+      "Setpoint resets to default",
+
+      "System turns off at unexpected times"
+
+    ],
+
+    "possible_causes": [
+
+      "Programmed schedule overriding manual setting",
+
+      "Low thermostat batteries",
+
+      "Smart thermostat controlled by app or automation"
+
+    ],
+
+    "recommended_actions": [
+
+      "Disable schedules or set to Hold/Manual mode",
+
+      "Replace batteries",
+
+      "Check any phone apps or voice assistants linked to thermostat"
+
+    ],
+
+    "severity": "low"
+
+  },
+
+  {
+
+    "id": "ac_18",
+
+    "title": "Mini-split indoor unit leaking water",
+
+    "symptoms": [
+
+      "Water dripping from wall unit",
+
+      "Stain on wall below"
+
+    ],
+
+    "possible_causes": [
+
+      "Clogged or kinked drain line",
+
+      "Improper installation slope",
+
+      "Frozen coil melting"
+
+    ],
+
+    "recommended_actions": [
+
+      "Turn off unit and place towel below",
+
+      "Have technician clear drain and verify line slope",
+
+      "Check filter and coil condition"
+
+    ],
+
+    "severity": "medium"
+
+  },
+
+  {
+
+    "id": "ac_19",
+
+    "title": "AC making high-pitched whistling sound",
+
+    "symptoms": [
+
+      "Whistling from vents or return grille",
+
+      "Sound changes when doors open"
+
+    ],
+
+    "possible_causes": [
+
+      "Restricted return airflow",
+
+      "Filter too restrictive or very dirty",
+
+      "Vents partially closed"
+
+    ],
+
+    "recommended_actions": [
+
+      "Use correct type of filter and keep it clean",
+
+      "Ensure doors to main return rooms are open",
+
+      "Open vents more fully to reduce pressure"
+
+    ],
+
+    "severity": "low"
+
+  },
+
+  {
+
+    "id": "ac_20",
+
+    "title": "AC outdoor fan not spinning but hums",
+
+    "symptoms": [
+
+      "You hear humming from outdoor unit",
+
+      "Fan blades still",
+
+      "Pipes may be very hot"
+
+    ],
+
+    "possible_causes": [
+
+      "Failed fan capacitor",
+
+      "Stuck fan motor",
+
+      "Debris blocking blades"
+
+    ],
+
+    "recommended_actions": [
+
+      "Turn power off immediately to avoid motor damage",
+
+      "Do not attempt to spin fan by hand with power on (dangerous)",
+
+      "HVAC tech should replace capacitor or motor as needed"
+
+    ],
+
+    "severity": "high"
+
+  }
+
+]
