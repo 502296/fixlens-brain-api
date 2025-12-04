@@ -1,8 +1,9 @@
-// /api/diagnose.js
+// api/diagnose.js (أو pages/api/diagnose.js في Next.js قديم)
+
 import OpenAI from "openai";
 
 const client = new OpenAI({
-apiKey: process.env.OPENAI_API_KEY,
+apiKey: process.env.OPENAI_API_KEY, // ضع مفتاحك في Vercel بهذا الاسم
 });
 
 export default async function handler(req, res) {
@@ -13,110 +14,100 @@ return res.status(405).json({ error: "Method not allowed" });
 try {
 const {
 issue,
-type = "text",
-languageCode = "en",
+type = "text", // "text" | "sound" | "vision"
+languageCode = "auto",
 hasImage = false,
 hasAudio = false,
 } = req.body || {};
 
 if (!issue || typeof issue !== "string") {
-return res.status(400).json({ error: "Missing 'issue' in body." });
+return res.status(400).json({ error: "Missing 'issue' text." });
 }
 
-const trimmed = issue.trim();
+const text = issue.trim();
+const lower = text.toLowerCase();
 
-// 1) 👋 كشف سريع إذا كانت الرسالة مجرد تحية قصيرة بأي لغة تقريباً
-const isShort = trimmed.split(/\s+/).length <= 4;
-const greetings = [
-"hello",
-"hi",
-"hey",
-"سلام",
-"هلو",
-"مرحبا",
-"مرحبا",
-"bonjour",
-"hola",
-"ciao",
-"hallo",
-"ola",
-"привет",
-"مرحباً",
-"selam",
-"こんにちは",
-"안녕하세요",
-"你好",
-];
+// 🔍 كشف إذا كانت فقط تحيّة قصيرة بدون تفاصيل
+const greetingRegex =
+/^(hi|hello|hey|hola|salut|ciao|hallo|hej|merhaba|مرحبا|هلا|هلو|سلام|السلام عليكم|привет|안녕|こんにちわ|こんにちは|नमस्ते|olá)\b/iu;
 
-const lowered = trimmed.toLowerCase();
-const looksLikeGreeting =
-isShort && greetings.some((g) => lowered.includes(g));
+const isGreetingOnly = text.length < 60 && greetingRegex.test(lower);
 
-// 2) لو كانت تحية → نطلب من الموديل رد اجتماعي بسيط بدون فورمات تشخيص
-if (looksLikeGreeting) {
-const chatResponse = await client.chat.completions.create({
-model: "gpt-4.1-mini",
+let systemPrompt;
+let userMessage;
+
+if (isGreetingOnly) {
+// 🧠 مود التحية: رد لطيف بكل اللغات بدون تحليل
+systemPrompt = `
+You are **FixLens Auto**, a friendly AI assistant that helps with real-world car problems.
+
+TASK:
+- When the user sends only a greeting with no clear car issue, you respond as a friendly assistant.
+- Detect the user's language from their message and reply in the **same language**.
+- Your answer must be short (2–4 sentences).
+- 1st sentence: greet the user naturally.
+- 2nd sentence: briefly explain that you specialize in diagnosing car problems (noises, warning lights, vibrations, smells, etc.).
+- Last sentence: ask them a clear question to describe what they notice with their car (what happens, when it happens, any sounds or lights).
+
+STYLE:
+- Conversational, warm, and clear.
+- Do **NOT** output markdown, numbers, bullets, or section titles.
+- Just normal text like human chat.
+`;
+userMessage = text;
+} else {
+// 🧠 مود التشخيص الحقيقي
+systemPrompt = `
+You are **FixLens Auto**, an expert automotive diagnostic assistant.
+
+GOAL:
+- Help drivers understand what might be wrong with their car and what to do next.
+- Always answer in the **same language** the user used.
+
+OUTPUT STYLE:
+- First, write a short, human-sounding paragraph (2–5 sentences) speaking directly to the user.
+- Then, if helpful, add:
+- 2–4 bullet points for possible causes.
+- 2–5 bullet points for "What to check or do next".
+- Only include safety warnings if they are really important (brakes, steering, overheating, fuel leaks, electrical smell, etc.).
+- Be clear and calm, do not scare the user.
+
+RULES:
+- Focus only on car / vehicle issues.
+- If the question is not about a car, gently say that you are specialized in cars and ask them to describe their car issue.
+- Keep the answer reasonably short and easy to read on a phone.
+`;
+userMessage = `
+Type: ${type}
+Has image: ${hasImage}
+Has audio: ${hasAudio}
+Language hint: ${languageCode}
+
+User description:
+${text}
+`;
+}
+
+const completion = await client.chat.completions.create({
+model: "gpt-4.1-mini", // أو أي موديل مفعّل عندك
 messages: [
-{
-role: "system",
-content:
-"You are FixLens Auto, a friendly multi-language assistant. " +
-"Always answer in the SAME language as the user. " +
-"If the user just greets you, reply with a short warm greeting, " +
-"introduce yourself as an AI helper for car problems, and ask them " +
-"to describe what they feel or hear in the car. " +
-"Do NOT return any diagnostic template, bullets, or numbered sections in this mode.",
-},
-{
-role: "user",
-content: trimmed,
-},
+{ role: "system", content: systemPrompt },
+{ role: "user", content: userMessage },
 ],
 temperature: 0.7,
-max_tokens: 220,
-});
-
-const reply = chatResponse.choices[0]?.message?.content?.trim() ?? "";
-return res.status(200).json({ reply });
-}
-
-// 3) 🔍 وضع التشخيص المنظم (هذا نستعمله لما الوصف يبدو مشكلة سيارة)
-const diagnosisResponse = await client.chat.completions.create({
-model: "gpt-4.1-mini",
-messages: [
-{
-role: "system",
-content:
-"You are FixLens Auto, a specialized assistant for real-world vehicle diagnostics. " +
-"Always answer in the SAME language that the user uses in their message. " +
-"The user describes car symptoms (noises, vibrations, smells, warning lights, etc.). " +
-"Return a clear, structured answer with the following sections:\n\n" +
-"1) **Summary** – one short paragraph summarizing the issue in simple words.\n" +
-"2) **Possible Causes** – 3-7 bullet points of mechanical causes (most likely first).\n" +
-"3) **What To Check First** – 1-3 practical checks that a normal driver can start with.\n" +
-"4) **Step-by-Step Fix** – a short sequence of steps, from simple checks to more advanced.\n" +
-"5) **When To See a Mechanic** – when the user should stop driving and go to a professional.\n" +
-"6) **Estimated Severity** – Low / Medium / High in one line.\n" +
-"7) **Safety Warnings** – any serious risks (brake failure, fire risk, loss of control, etc.).\n\n" +
-"Be concise but practical. Assume modern passenger cars. If the description is very vague, " +
-"ask the user for 2-3 clarifying questions instead of inventing details.",
-},
-{
-role: "user",
-content: `Type: ${type}. Has image: ${hasImage}. Has audio: ${hasAudio}. Language hint: ${languageCode}. Problem description: ${trimmed}`,
-},
-],
-temperature: 0.4,
-max_tokens: 700,
+max_tokens: 800,
 });
 
 const reply =
-diagnosisResponse.choices[0]?.message?.content?.trim() ??
-"FixLens could not generate a diagnosis.";
+completion.choices?.[0]?.message?.content?.trim() ??
+"Sorry, I couldn't generate a reply.";
 
 return res.status(200).json({ reply });
 } catch (err) {
 console.error("FixLens diagnose error:", err);
-return res.status(500).json({ error: "Internal server error" });
+return res.status(500).json({
+error: "FixLens Brain internal error.",
+details: String(err),
+});
 }
 }
