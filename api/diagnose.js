@@ -21,7 +21,6 @@ const filePath = path.join(knowledgeDir, file);
 const raw = fs.readFileSync(filePath, 'utf8');
 try {
 const json = JSON.parse(raw);
-// each file is an array
 allData = allData.concat(json);
 } catch (e) {
 console.error(`Error parsing ${file}:`, e);
@@ -96,7 +95,58 @@ if (!languageCode) languageCode = 'en';
 const languageName =
 LANGUAGE_NAMES[languageCode] || "the user's preferred language";
 
-// 1) Retrieve top matches from knowledge
+const lowerIssue = issue.trim().toLowerCase();
+
+// ---------- 0) Small talk / greetings ----------
+const smallTalkPatterns = [
+'hi',
+'hello',
+'hey',
+'good morning',
+'good evening',
+'how are you',
+'thank you',
+'thanks',
+'سلام',
+'مرحبا',
+];
+
+const isSmallTalk = smallTalkPatterns.some((p) =>
+lowerIssue.startsWith(p),
+);
+
+if (isSmallTalk) {
+const completion = await client.chat.completions.create({
+model: 'gpt-4o-mini',
+messages: [
+{
+role: 'system',
+content: `
+You are FixLens Brain, a friendly automotive assistant.
+
+If the user is just greeting you or making casual conversation:
+- Answer in ${languageName}.
+- Be warm and human-like (2–3 short sentences).
+- Do NOT give a full diagnostic structure.
+- You can gently invite them to describe their car issue if they have one.
+`.trim(),
+},
+{ role: 'user', content: issue },
+],
+});
+
+const reply =
+completion.choices[0]?.message?.content ||
+'Hello! I am FixLens Brain. How can I help you with your vehicle today?';
+
+return res.status(200).json({
+reply,
+matchesFound: 0,
+languageCode,
+});
+}
+
+// ---------- 1) Retrieve top matches from knowledge ----------
 const matches = findMatches(issue);
 
 let contextText = 'No matches found in FixLens Knowledge Base.';
@@ -114,7 +164,7 @@ Severity: ${m.severity || 'unknown'}
 .join('\n\n');
 }
 
-// 2) Construct the prompt for GPT-4o
+// ---------- 2) Construct the prompt for GPT-4o ----------
 const prompt = `
 User issue:
 "${issue}"
@@ -138,7 +188,7 @@ Follow this exact structure:
 5) Safety Warnings (if needed)
 `.trim();
 
-// 3) Call GPT-4o
+// ---------- 3) Call GPT-4o ----------
 const completion = await client.chat.completions.create({
 model: 'gpt-4o-mini',
 messages: [
