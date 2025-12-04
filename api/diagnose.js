@@ -8,13 +8,12 @@ const client = new OpenAI({
 apiKey: process.env.OPENAI_API_KEY,
 });
 
-// ---------- Load Knowledge Base (all JSON files) ----------
+// ---------- Load Knowledge Base ----------
 function loadKnowledge() {
 const knowledgeDir = path.join(process.cwd(), 'brain', 'knowledge');
 const files = fs.readdirSync(knowledgeDir);
 
 let allData = [];
-
 for (const file of files) {
 if (file.endsWith('.json')) {
 const filePath = path.join(knowledgeDir, file);
@@ -27,25 +26,10 @@ console.error(`Error parsing ${file}:`, e);
 }
 }
 }
-
 return allData;
 }
 
 const KNOWLEDGE_BASE = loadKnowledge();
-
-// ---------- Language Names ----------
-const LANGUAGE_NAMES = {
-en: 'English',
-ar: 'Arabic',
-es: 'Spanish',
-fr: 'French',
-de: 'German',
-it: 'Italian',
-pt: 'Portuguese',
-hi: 'Hindi',
-zh: 'Chinese (Simplified)',
-ja: 'Japanese',
-};
 
 // ---------- Simple matching engine ----------
 function findMatches(issueText) {
@@ -63,12 +47,8 @@ s.toLowerCase().includes(text),
 : 0;
 
 const score = titleMatch + symptomMatch;
-
 if (score > 0) {
-matches.push({
-...item,
-score,
-});
+matches.push({ ...item, score });
 }
 }
 
@@ -82,7 +62,7 @@ return res.status(405).json({ error: 'Only POST allowed' });
 }
 
 try {
-let { issue, hasImage, hasAudio, languageCode } = req.body || {};
+let { issue, hasImage, hasAudio } = req.body || {};
 
 if (!issue || typeof issue !== 'string') {
 return res
@@ -90,12 +70,8 @@ return res
 .json({ error: 'Missing "issue" field in request body.' });
 }
 
-// default language fallback
-if (!languageCode) languageCode = 'en';
-const languageName =
-LANGUAGE_NAMES[languageCode] || "the user's preferred language";
-
-const lowerIssue = issue.trim().toLowerCase();
+const trimmed = issue.trim();
+const lowerIssue = trimmed.toLowerCase();
 
 // ---------- 0) Small talk / greetings ----------
 const smallTalkPatterns = [
@@ -105,15 +81,19 @@ const smallTalkPatterns = [
 'good morning',
 'good evening',
 'how are you',
-'thank you',
 'thanks',
+'thank you',
 'سلام',
+'هلو',
 'مرحبا',
+'شلونك',
+'كيفك',
+'شكرا',
 ];
 
-const isSmallTalk = smallTalkPatterns.some((p) =>
-lowerIssue.startsWith(p),
-);
+const isShort = trimmed.length <= 80;
+const isSmallTalk = isShort &&
+smallTalkPatterns.some((p) => lowerIssue.includes(p));
 
 if (isSmallTalk) {
 const completion = await client.chat.completions.create({
@@ -124,14 +104,14 @@ role: 'system',
 content: `
 You are FixLens Brain, a friendly automotive assistant.
 
-If the user is just greeting you or making casual conversation:
-- Answer in ${languageName}.
-- Be warm and human-like (2–3 short sentences).
-- Do NOT give a full diagnostic structure.
-- You can gently invite them to describe their car issue if they have one.
+- Detect the user's language from their message.
+- Reply in the SAME language as the user.
+- This is casual small talk: answer with 1–3 short friendly sentences.
+- Do NOT use diagnostic structure (no "Summary / Possible Causes"...).
+- You may gently invite them to describe their vehicle issue if they have one.
 `.trim(),
 },
-{ role: 'user', content: issue },
+{ role: 'user', content: trimmed },
 ],
 });
 
@@ -142,12 +122,11 @@ completion.choices[0]?.message?.content ||
 return res.status(200).json({
 reply,
 matchesFound: 0,
-languageCode,
 });
 }
 
 // ---------- 1) Retrieve top matches from knowledge ----------
-const matches = findMatches(issue);
+const matches = findMatches(trimmed);
 
 let contextText = 'No matches found in FixLens Knowledge Base.';
 if (matches.length > 0) {
@@ -164,10 +143,10 @@ Severity: ${m.severity || 'unknown'}
 .join('\n\n');
 }
 
-// ---------- 2) Construct the prompt for GPT-4o ----------
+// ---------- 2) Construct the prompt for GPT ----------
 const prompt = `
 User issue:
-"${issue}"
+"${trimmed}"
 
 Image Provided: ${hasImage ? 'YES' : 'NO'}
 Audio Provided: ${hasAudio ? 'YES' : 'NO'}
@@ -188,18 +167,19 @@ Follow this exact structure:
 5) Safety Warnings (if needed)
 `.trim();
 
-// ---------- 3) Call GPT-4o ----------
+// ---------- 3) Call GPT ----------
 const completion = await client.chat.completions.create({
 model: 'gpt-4o-mini',
 messages: [
 {
 role: 'system',
 content: `
-You are FixLens Brain V2, a world-class technician AI.
+You are FixLens Brain V2, a world-class automotive technician AI.
 
-Always answer ONLY in ${languageName}.
-Do NOT switch to English unless you must quote a technical term.
-Keep the explanation clear and friendly for a normal user (not an engineer).
+- Detect the user's language from their message automatically.
+- Always answer in the SAME language as the user.
+- Keep the explanation clear and friendly for a normal driver (not an engineer).
+- Follow the requested structure exactly.
 `.trim(),
 },
 { role: 'user', content: prompt },
@@ -212,7 +192,6 @@ completion.choices[0]?.message?.content || 'Diagnostic error.';
 return res.status(200).json({
 reply,
 matchesFound: matches.length,
-languageCode,
 });
 } catch (err) {
 console.error('FixLens ERROR:', err);
