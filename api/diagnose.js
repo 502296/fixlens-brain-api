@@ -1,11 +1,95 @@
-// api/diagnose.js (أو pages/api/diagnose.js في Next.js قديم)
+// api/diagnose.js (أو pages/api/diagnose.js في Next.js)
 
 import OpenAI from "openai";
+import fs from "fs";
+import path from "path";
 
-const client = new OpenAI({
-apiKey: process.env.OPENAI_API_KEY, // ضع مفتاحك في Vercel بهذا الاسم
+const openai = new OpenAI({
+apiKey: process.env.OPENAI_API_KEY,
 });
 
+// 🔥 نظام التفكير العام لـ FixLens Auto Brain
+const systemPrompt = `
+You are **FixLens Auto Brain**, an AI assistant that helps drivers diagnose real-world car problems.
+
+RULES:
+
+1) When the user clearly describes a CAR PROBLEM (noises, vibrations, warning lights, smoke, steering, brakes, battery, transmission, electrical issues, body or paint damage, etc.):
+- Answer in this **diagnostic template**:
+1) **Summary**
+2) **Possible Causes**
+3) **What To Check First**
+4) **Step-by-Step Fix**
+5) **Safety Warnings**
+- Be practical and focused on real cars and real-world situations.
+
+2) When the message is just a **greeting or small talk**
+(for example “hello”, “hi”, “hey”, “هلو”, “مرحبا”, “السلام عليكم”,
+“hola”, “bonjour”, “ciao”, “hallo”, “selam”, “привет”, “안녕”, “こんにちは”, etc.):
+- DO NOT use the diagnostic template.
+- Answer like a friendly assistant:
+- Greet the user back in a warm way.
+- Briefly introduce yourself as “FixLens Auto Brain”.
+- Politely ask them to describe their car problem or symptoms (noises, vibrations, warning lights, smells, leaks, etc.).
+- Keep the answer short (2–4 sentences).
+
+3) LANGUAGE:
+- Always reply in **the same language** the user used in their message,
+or in the language they explicitly ask for.
+- If the user mixes languages, continue in the main language of the message.
+
+4) GENERAL:
+- If the question is not about cars at all, answer briefly and invite the user
+to ask about a car issue.
+- Never invent fake dangerous situations.
+- If you are unsure, say that more details are needed.
+`;
+
+// 🧠 تحميل معرفة الأعطال من ملفات JSON (اختياري – لو موجودة)
+function loadCarKnowledge() {
+try {
+const basePath = path.join(process.cwd(), "brain", "knowledge");
+
+const carPath = path.join(basePath, "car.json");
+const carExtraPath = path.join(basePath, "car_extra.json");
+
+let items = [];
+
+if (fs.existsSync(carPath)) {
+const raw = fs.readFileSync(carPath, "utf8");
+const json = JSON.parse(raw);
+if (Array.isArray(json.items)) {
+items = items.concat(json.items);
+}
+}
+
+if (fs.existsSync(carExtraPath)) {
+const raw = fs.readFileSync(carExtraPath, "utf8");
+const json = JSON.parse(raw);
+if (Array.isArray(json.items)) {
+items = items.concat(json.items);
+}
+}
+
+if (!items.length) return "";
+
+const knowledge = items
+.map((item) => {
+const issue = item.issue || item.title || "";
+const causes = item.causes || item.cause || "";
+const fix = item.fix || item.solution || "";
+return `Issue: ${issue}\nCauses: ${causes}\nFix: ${fix}`;
+})
+.join("\n\n");
+
+return knowledge;
+} catch (err) {
+console.error("Error loading car knowledge:", err);
+return "";
+}
+}
+
+// 🎯 الـ API نفسه
 export default async function handler(req, res) {
 if (req.method !== "POST") {
 return res.status(405).json({ error: "Method not allowed" });
@@ -13,101 +97,61 @@ return res.status(405).json({ error: "Method not allowed" });
 
 try {
 const {
-issue,
-type = "text", // "text" | "sound" | "vision"
-languageCode = "auto",
-hasImage = false,
-hasAudio = false,
+issue, // النص الذي أرسله المستخدم
+type, // "text" | "sound" | "vision"
+languageCode, // مثل "en" أو "ar" أو "es" (اختياري)
+hasImage,
+hasAudio,
 } = req.body || {};
 
 if (!issue || typeof issue !== "string") {
-return res.status(400).json({ error: "Missing 'issue' text." });
+return res.status(400).json({ error: "Field 'issue' (string) is required." });
 }
 
-const text = issue.trim();
-const lower = text.toLowerCase();
+const knowledge = loadCarKnowledge();
 
-// 🔍 كشف إذا كانت فقط تحيّة قصيرة بدون تفاصيل
-const greetingRegex =
-/^(hi|hello|hey|hola|salut|ciao|hallo|hej|merhaba|مرحبا|هلا|هلو|سلام|السلام عليكم|привет|안녕|こんにちわ|こんにちは|नमस्ते|olá)\b/iu;
+const contextLines = [
+languageCode ? `User language code (if provided): ${languageCode}.` : "",
+type ? `Input type: ${type}.` : "Input type: text.",
+hasImage ? "User also attached an image of the car/problem." : "",
+hasAudio ? "User also attached an audio recording of the car sound." : "",
+].filter(Boolean);
 
-const isGreetingOnly = text.length < 60 && greetingRegex.test(lower);
-
-let systemPrompt;
-let userMessage;
-
-if (isGreetingOnly) {
-// 🧠 مود التحية: رد لطيف بكل اللغات بدون تحليل
-systemPrompt = `
-You are **FixLens Auto**, a friendly AI assistant that helps with real-world car problems.
-
-TASK:
-- When the user sends only a greeting with no clear car issue, you respond as a friendly assistant.
-- Detect the user's language from their message and reply in the **same language**.
-- Your answer must be short (2–4 sentences).
-- 1st sentence: greet the user naturally.
-- 2nd sentence: briefly explain that you specialize in diagnosing car problems (noises, warning lights, vibrations, smells, etc.).
-- Last sentence: ask them a clear question to describe what they notice with their car (what happens, when it happens, any sounds or lights).
-
-STYLE:
-- Conversational, warm, and clear.
-- Do **NOT** output markdown, numbers, bullets, or section titles.
-- Just normal text like human chat.
-`;
-userMessage = text;
-} else {
-// 🧠 مود التشخيص الحقيقي
-systemPrompt = `
-You are **FixLens Auto**, an expert automotive diagnostic assistant.
-
-GOAL:
-- Help drivers understand what might be wrong with their car and what to do next.
-- Always answer in the **same language** the user used.
-
-OUTPUT STYLE:
-- First, write a short, human-sounding paragraph (2–5 sentences) speaking directly to the user.
-- Then, if helpful, add:
-- 2–4 bullet points for possible causes.
-- 2–5 bullet points for "What to check or do next".
-- Only include safety warnings if they are really important (brakes, steering, overheating, fuel leaks, electrical smell, etc.).
-- Be clear and calm, do not scare the user.
-
-RULES:
-- Focus only on car / vehicle issues.
-- If the question is not about a car, gently say that you are specialized in cars and ask them to describe their car issue.
-- Keep the answer reasonably short and easy to read on a phone.
-`;
-userMessage = `
-Type: ${type}
-Has image: ${hasImage}
-Has audio: ${hasAudio}
-Language hint: ${languageCode}
-
-User description:
-${text}
-`;
-}
-
-const completion = await client.chat.completions.create({
-model: "gpt-4.1-mini", // أو أي موديل مفعّل عندك
-messages: [
+const messages = [
 { role: "system", content: systemPrompt },
-{ role: "user", content: userMessage },
-],
-temperature: 0.7,
+knowledge
+? {
+role: "system",
+content:
+"Here is domain knowledge about common car problems:\n\n" +
+knowledge,
+}
+: null,
+{
+role: "user",
+content:
+(contextLines.length ? contextLines.join("\n") + "\n\n" : "") +
+`User message:\n${issue}`,
+},
+].filter(Boolean);
+
+const completion = await openai.chat.completions.create({
+model: "gpt-4.1-mini",
+messages,
+temperature: 0.4,
 max_tokens: 800,
 });
 
 const reply =
-completion.choices?.[0]?.message?.content?.trim() ??
-"Sorry, I couldn't generate a reply.";
+completion.choices?.[0]?.message?.content?.trim() ||
+"Sorry, I couldn't generate a response.";
 
 return res.status(200).json({ reply });
 } catch (err) {
 console.error("FixLens diagnose error:", err);
 return res.status(500).json({
 error: "FixLens Brain internal error.",
-details: String(err),
+details: err.message || String(err),
 });
 }
 }
