@@ -1,226 +1,122 @@
-// api/diagnose.js
-
-import fs from 'fs';
-import path from 'path';
-import OpenAI from 'openai';
+// /api/diagnose.js
+import OpenAI from "openai";
 
 const client = new OpenAI({
 apiKey: process.env.OPENAI_API_KEY,
 });
 
-// ---------- Load Knowledge Base (all JSON files) ----------
-function loadKnowledge() {
-const knowledgeDir = path.join(process.cwd(), 'brain', 'knowledge');
-const files = fs.readdirSync(knowledgeDir);
+export default async function handler(req, res) {
+if (req.method !== "POST") {
+return res.status(405).json({ error: "Method not allowed" });
+}
 
-let allData = [];
-
-for (const file of files) {
-if (file.endsWith('.json')) {
-const filePath = path.join(knowledgeDir, file);
-const raw = fs.readFileSync(filePath, 'utf8');
 try {
-const json = JSON.parse(raw);
-allData = allData.concat(json);
-} catch (e) {
-console.error(`Error parsing ${file}:`, e);
-}
-}
-}
+const {
+issue,
+type = "text",
+languageCode = "en",
+hasImage = false,
+hasAudio = false,
+} = req.body || {};
 
-return allData;
-}
-
-const KNOWLEDGE_BASE = loadKnowledge();
-
-// ---------- Simple matching engine ----------
-function findMatches(issueText) {
-if (!issueText || issueText.length < 2) return [];
-
-const text = issueText.toLowerCase();
-const matches = [];
-
-for (const item of KNOWLEDGE_BASE) {
-const titleMatch = item.title?.toLowerCase().includes(text) ? 3 : 0;
-const symptomMatch = item.symptoms?.some((s) =>
-s.toLowerCase().includes(text),
-)
-? 2
-: 0;
-
-const score = titleMatch + symptomMatch;
-if (score > 0) {
-matches.push({
-...item,
-score,
-});
-}
+if (!issue || typeof issue !== "string") {
+return res.status(400).json({ error: "Missing 'issue' in body." });
 }
 
-return matches.sort((a, b) => b.score - a.score).slice(0, 3);
-}
+const trimmed = issue.trim();
 
-// ---------- Greeting detector ----------
-function isGreetingLike(textLower) {
+// 1) 👋 كشف سريع إذا كانت الرسالة مجرد تحية قصيرة بأي لغة تقريباً
+const isShort = trimmed.split(/\s+/).length <= 4;
 const greetings = [
-'hello',
-'hi',
-'hey',
-'hola',
-'bonjour',
-'ciao',
-'hallo',
-'ola',
-'مرحبا',
-'مرحبه',
-'هلو',
-'سلام',
-'السلام عليكم',
-'مرحباً',
+"hello",
+"hi",
+"hey",
+"سلام",
+"هلو",
+"مرحبا",
+"مرحبا",
+"bonjour",
+"hola",
+"ciao",
+"hallo",
+"ola",
+"привет",
+"مرحباً",
+"selam",
+"こんにちは",
+"안녕하세요",
+"你好",
 ];
 
-const trimmed = textLower.trim();
+const lowered = trimmed.toLowerCase();
+const looksLikeGreeting =
+isShort && greetings.some((g) => lowered.includes(g));
 
-// إذا الرسالة قصيرة (تحية + كلمتين مثلاً)
-if (trimmed.length <= 40) {
-for (const g of greetings) {
-if (trimmed === g || trimmed.startsWith(g + ' ') || trimmed.includes(' ' + g + ' ')) {
-return true;
-}
-}
-}
-
-return false;
-}
-
-// ---------- API Handler ----------
-export default async function handler(req, res) {
-if (req.method !== 'POST') {
-return res.status(405).json({ error: 'Only POST allowed' });
-}
-
-try {
-let { issue, hasImage, hasAudio } = req.body || {};
-issue = (issue || '').toString().trim();
-
-if (!issue) {
-return res
-.status(400)
-.json({ error: 'Missing "issue" field in request body.' });
-}
-
-const textLower = issue.toLowerCase();
-
-// 0) إذا كانت فقط "سلام / Hello / Hi ..." → رد لطيف قصير مثل ChatGPT
-if (isGreetingLike(textLower)) {
-const completion = await client.chat.completions.create({
-model: 'gpt-4o-mini',
+// 2) لو كانت تحية → نطلب من الموديل رد اجتماعي بسيط بدون فورمات تشخيص
+if (looksLikeGreeting) {
+const chatResponse = await client.chat.completions.create({
+model: "gpt-4.1-mini",
 messages: [
 {
-role: 'system',
-content: `
-You are FixLens, a friendly AI assistant for real-world car diagnostics.
-When the user is just greeting you or making small talk (no clear car problem),
-you MUST:
-
-- Detect the user's language from their message.
-- Reply in the SAME language.
-- Keep the reply SHORT (1–3 sentences).
-- Say hello back in a warm, human way.
-- Invite them to describe their car problem: noises, vibrations, warning lights, smells, performance issues, etc.
-- DO NOT use numbered sections or "Summary / Possible Causes" format here.
-`.trim(),
+role: "system",
+content:
+"You are FixLens Auto, a friendly multi-language assistant. " +
+"Always answer in the SAME language as the user. " +
+"If the user just greets you, reply with a short warm greeting, " +
+"introduce yourself as an AI helper for car problems, and ask them " +
+"to describe what they feel or hear in the car. " +
+"Do NOT return any diagnostic template, bullets, or numbered sections in this mode.",
 },
-{ role: 'user', content: issue },
+{
+role: "user",
+content: trimmed,
+},
 ],
+temperature: 0.7,
+max_tokens: 220,
+});
+
+const reply = chatResponse.choices[0]?.message?.content?.trim() ?? "";
+return res.status(200).json({ reply });
+}
+
+// 3) 🔍 وضع التشخيص المنظم (هذا نستعمله لما الوصف يبدو مشكلة سيارة)
+const diagnosisResponse = await client.chat.completions.create({
+model: "gpt-4.1-mini",
+messages: [
+{
+role: "system",
+content:
+"You are FixLens Auto, a specialized assistant for real-world vehicle diagnostics. " +
+"Always answer in the SAME language that the user uses in their message. " +
+"The user describes car symptoms (noises, vibrations, smells, warning lights, etc.). " +
+"Return a clear, structured answer with the following sections:\n\n" +
+"1) **Summary** – one short paragraph summarizing the issue in simple words.\n" +
+"2) **Possible Causes** – 3-7 bullet points of mechanical causes (most likely first).\n" +
+"3) **What To Check First** – 1-3 practical checks that a normal driver can start with.\n" +
+"4) **Step-by-Step Fix** – a short sequence of steps, from simple checks to more advanced.\n" +
+"5) **When To See a Mechanic** – when the user should stop driving and go to a professional.\n" +
+"6) **Estimated Severity** – Low / Medium / High in one line.\n" +
+"7) **Safety Warnings** – any serious risks (brake failure, fire risk, loss of control, etc.).\n\n" +
+"Be concise but practical. Assume modern passenger cars. If the description is very vague, " +
+"ask the user for 2-3 clarifying questions instead of inventing details.",
+},
+{
+role: "user",
+content: `Type: ${type}. Has image: ${hasImage}. Has audio: ${hasAudio}. Language hint: ${languageCode}. Problem description: ${trimmed}`,
+},
+],
+temperature: 0.4,
+max_tokens: 700,
 });
 
 const reply =
-completion.choices[0]?.message?.content ||
-'Hello! Tell me what your car is doing, and I’ll help you diagnose it step by step.';
+diagnosisResponse.choices[0]?.message?.content?.trim() ??
+"FixLens could not generate a diagnosis.";
 
-return res.status(200).json({
-reply,
-matchesFound: 0,
-mode: 'greeting',
-});
-}
-
-// 1) Retrieve top matches from knowledge
-const matches = findMatches(issue);
-
-let contextText = 'No matches found in FixLens Knowledge Base.';
-if (matches.length > 0) {
-contextText = matches
-.map(
-(m) => `
-### Possible Match: ${m.title}
-Symptoms: ${m.symptoms?.join(', ') || 'N/A'}
-Possible Causes: ${m.possible_causes?.join(', ') || 'N/A'}
-Recommended Actions: ${m.recommended_actions?.join(', ') || 'N/A'}
-Severity: ${m.severity || 'unknown'}
-`,
-)
-.join('\n\n');
-}
-
-// 2) Construct the prompt for GPT-4o
-const prompt = `
-User issue:
-"${issue}"
-
-Image Provided: ${hasImage ? 'YES' : 'NO'}
-Audio Provided: ${hasAudio ? 'YES' : 'NO'}
-
-Below is internal FixLens expert knowledge (V2):
-
-${contextText}
-
-Using the knowledge + your own reasoning,
-provide a clear, simple, step-by-step diagnosis.
-
-Follow this exact structure:
-
-1) Summary
-2) Possible Causes
-3) What To Check First
-4) Step-by-Step Fix
-5) Safety Warnings (if needed)
-`.trim();
-
-// 3) Call GPT-4o
-const completion = await client.chat.completions.create({
-model: 'gpt-4o-mini',
-messages: [
-{
-role: 'system',
-content: `
-You are FixLens Brain V2, a world-class technician AI for real cars.
-
-- ALWAYS answer in the SAME language the user used in their message (detect automatically).
-- If you must mention technical part names, you can keep those in English, but explain everything else in the user's language.
-- Keep the explanation clear, friendly, and practical for normal drivers (not engineers).
-- Use the numbered structure requested by the developer.
-
-`.trim(),
-},
-{ role: 'user', content: prompt },
-],
-});
-
-const reply =
-completion.choices[0]?.message?.content || 'Diagnostic error.';
-
-return res.status(200).json({
-reply,
-matchesFound: matches.length,
-mode: 'diagnosis',
-});
+return res.status(200).json({ reply });
 } catch (err) {
-console.error('FixLens ERROR:', err);
-return res.status(500).json({
-error: 'FixLens Brain internal error.',
-details: err.message,
-});
+console.error("FixLens diagnose error:", err);
+return res.status(500).json({ error: "Internal server error" });
 }
 }
