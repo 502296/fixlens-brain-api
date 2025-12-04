@@ -21,7 +21,6 @@ const filePath = path.join(knowledgeDir, file);
 const raw = fs.readFileSync(filePath, 'utf8');
 try {
 const json = JSON.parse(raw);
-// each file is an array
 allData = allData.concat(json);
 } catch (e) {
 console.error(`Error parsing ${file}:`, e);
@@ -44,13 +43,12 @@ const matches = [];
 for (const item of KNOWLEDGE_BASE) {
 const titleMatch = item.title?.toLowerCase().includes(text) ? 3 : 0;
 const symptomMatch = item.symptoms?.some((s) =>
-s.toLowerCase().includes(text)
+s.toLowerCase().includes(text),
 )
 ? 2
 : 0;
 
 const score = titleMatch + symptomMatch;
-
 if (score > 0) {
 matches.push({
 ...item,
@@ -62,26 +60,37 @@ score,
 return matches.sort((a, b) => b.score - a.score).slice(0, 3);
 }
 
-// ---------- Helper: detect if the user just said "hello" ----------
-function looksLikeGreeting(issue) {
-const text = issue.trim().toLowerCase();
-
+// ---------- Greeting detector ----------
+function isGreetingLike(textLower) {
 const greetings = [
-'hi',
 'hello',
+'hi',
 'hey',
-'السلام عليكم',
-'هلا',
-'هلو',
-'مرحبا',
-'bonjour',
 'hola',
+'bonjour',
 'ciao',
 'hallo',
 'ola',
+'مرحبا',
+'مرحبه',
+'هلو',
+'سلام',
+'السلام عليكم',
+'مرحباً',
 ];
 
-return greetings.some((g) => text === g || text.startsWith(g + ' '));
+const trimmed = textLower.trim();
+
+// إذا الرسالة قصيرة (تحية + كلمتين مثلاً)
+if (trimmed.length <= 40) {
+for (const g of greetings) {
+if (trimmed === g || trimmed.startsWith(g + ' ') || trimmed.includes(' ' + g + ' ')) {
+return true;
+}
+}
+}
+
+return false;
 }
 
 // ---------- API Handler ----------
@@ -91,12 +100,50 @@ return res.status(405).json({ error: 'Only POST allowed' });
 }
 
 try {
-let { issue, hasImage, hasAudio, languageCode, type } = req.body || {};
+let { issue, hasImage, hasAudio } = req.body || {};
+issue = (issue || '').toString().trim();
 
-if (!issue || typeof issue !== 'string') {
+if (!issue) {
 return res
 .status(400)
 .json({ error: 'Missing "issue" field in request body.' });
+}
+
+const textLower = issue.toLowerCase();
+
+// 0) إذا كانت فقط "سلام / Hello / Hi ..." → رد لطيف قصير مثل ChatGPT
+if (isGreetingLike(textLower)) {
+const completion = await client.chat.completions.create({
+model: 'gpt-4o-mini',
+messages: [
+{
+role: 'system',
+content: `
+You are FixLens, a friendly AI assistant for real-world car diagnostics.
+When the user is just greeting you or making small talk (no clear car problem),
+you MUST:
+
+- Detect the user's language from their message.
+- Reply in the SAME language.
+- Keep the reply SHORT (1–3 sentences).
+- Say hello back in a warm, human way.
+- Invite them to describe their car problem: noises, vibrations, warning lights, smells, performance issues, etc.
+- DO NOT use numbered sections or "Summary / Possible Causes" format here.
+`.trim(),
+},
+{ role: 'user', content: issue },
+],
+});
+
+const reply =
+completion.choices[0]?.message?.content ||
+'Hello! Tell me what your car is doing, and I’ll help you diagnose it step by step.';
+
+return res.status(200).json({
+reply,
+matchesFound: 0,
+mode: 'greeting',
+});
 }
 
 // 1) Retrieve top matches from knowledge
@@ -112,58 +159,49 @@ Symptoms: ${m.symptoms?.join(', ') || 'N/A'}
 Possible Causes: ${m.possible_causes?.join(', ') || 'N/A'}
 Recommended Actions: ${m.recommended_actions?.join(', ') || 'N/A'}
 Severity: ${m.severity || 'unknown'}
-`
+`,
 )
 .join('\n\n');
 }
 
-const isGreetingOnly = looksLikeGreeting(issue);
-
 // 2) Construct the prompt for GPT-4o
 const prompt = `
-User message:
+User issue:
 "${issue}"
 
 Image Provided: ${hasImage ? 'YES' : 'NO'}
 Audio Provided: ${hasAudio ? 'YES' : 'NO'}
-Mode: ${type || 'text'}
 
 Below is internal FixLens expert knowledge (V2):
 
 ${contextText}
 
-Rules:
+Using the knowledge + your own reasoning,
+provide a clear, simple, step-by-step diagnosis.
 
-1) First, DETECT the user's language from their message and always answer in that language.
-2) If the user is only greeting or doing small talk (like "hello", "هلو", "bonjour", "hola", etc.),
-- Do NOT do a full technical diagnosis.
-- Just answer with a short, friendly greeting and then ask them to describe their car problem
-(no numbered sections, no big report).
-3) If the user clearly describes a vehicle problem (noises, vibrations, warning lights, leaks, etc.),
-- Then use this structure in your answer:
+Follow this exact structure:
 
 1) Summary
 2) Possible Causes
 3) What To Check First
 4) Step-by-Step Fix
 5) Safety Warnings (if needed)
-
-4) Keep your explanation clear and friendly for a normal driver (not an engineer).
-5) Focus only on cars / vehicles / mechanical or electrical issues related to driving.
 `.trim();
 
+// 3) Call GPT-4o
 const completion = await client.chat.completions.create({
 model: 'gpt-4o-mini',
 messages: [
 {
 role: 'system',
 content: `
-You are FixLens Brain V2, an expert AI technician for vehicles.
+You are FixLens Brain V2, a world-class technician AI for real cars.
 
-- Always detect the user's language from their message and respond ONLY in that language.
-- If the message is just a greeting or small talk, reply briefly and warmly, then ask them
-to describe the problem with their car – no diagnosis report in that case.
-- If the user actually describes a vehicle issue, follow the required structure carefully.
+- ALWAYS answer in the SAME language the user used in their message (detect automatically).
+- If you must mention technical part names, you can keep those in English, but explain everything else in the user's language.
+- Keep the explanation clear, friendly, and practical for normal drivers (not engineers).
+- Use the numbered structure requested by the developer.
+
 `.trim(),
 },
 { role: 'user', content: prompt },
@@ -176,8 +214,7 @@ completion.choices[0]?.message?.content || 'Diagnostic error.';
 return res.status(200).json({
 reply,
 matchesFound: matches.length,
-languageCode: languageCode || 'auto',
-isGreetingOnly,
+mode: 'diagnosis',
 });
 } catch (err) {
 console.error('FixLens ERROR:', err);
