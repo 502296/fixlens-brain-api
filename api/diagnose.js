@@ -1,13 +1,11 @@
 // api/diagnose.js
-// FixLens Brain – Vehicle-only Text & Image Diagnosis (Vercel Serverless Function)
+// FixLens Brain – Vehicle-only, multi-language, text + image diagnosis
 
 export default async function handler(req, res) {
-// Allow POST only
 if (req.method !== "POST") {
 return res.status(405).json({ error: "Only POST allowed" });
 }
 
-// Parse JSON body safely
 let body = req.body;
 if (!body || typeof body === "string") {
 try {
@@ -19,7 +17,6 @@ return res.status(400).json({ error: "Invalid JSON body" });
 
 const { text, image } = body || {};
 
-// Require at least text OR image
 if (!text && !image) {
 return res
 .status(400)
@@ -36,12 +33,16 @@ return res
 try {
 let messages;
 
-// -------------- IMAGE DIAGNOSIS (VISION) --------------
+// ---------- IMAGE (with optional text) ----------
 if (image) {
-// image is base64 coming from Flutter
 const imageUrl = image.startsWith("data:")
 ? image
 : `data:image/jpeg;base64,${image}`;
+
+const userText =
+(text && String(text).trim().length > 0)
+? String(text).trim()
+: "This is a photo from a vehicle. Identify the most likely car-related problem and explain what the user should check.";
 
 messages = [
 {
@@ -52,13 +53,13 @@ type: "text",
 text:
 "You are FixLens, an expert diagnostic assistant specialized ONLY in vehicles " +
 "(cars, SUVs, pickup trucks). " +
-"You can see and analyze images of car parts, underbody, engine bay, wheels, tires, " +
-"brakes, suspensions, and fluid leaks. " +
-"If the image does NOT appear to be related to a vehicle, politely say that FixLens " +
-"is specialized in car diagnostics only and ask the user to send a car-related photo " +
-"or describe their vehicle problem instead. " +
-"Always start with a short safety note, then provide clear, step-by-step guidance " +
-"to inspect, diagnose, and (when reasonable) fix the issue. Keep the answer practical.",
+"You must ALWAYS answer in the SAME LANGUAGE as the user's last message. " +
+"If the user writes in Arabic, respond in Arabic. If in Spanish, respond in Spanish, etc. " +
+"You help with car noises, vibrations, leaks, underbody photos, engine bay photos, wheels, tires, " +
+"suspension, steering, and braking issues. " +
+"If the image or question is not vehicle-related, politely say that FixLens is only for car diagnostics " +
+"and ask the user to send a car-related description or photo. " +
+"Always start with a short safety reminder, then give clear, step-by-step guidance.",
 },
 ],
 },
@@ -67,12 +68,7 @@ role: "user",
 content: [
 {
 type: "text",
-text:
-"Look carefully at this image from a vehicle. Identify the most likely car-related " +
-"problem, the affected component (for example: control arm, CV joint, power steering line, " +
-"brake hose, tire, wheel, suspension, exhaust, etc.), and provide practical steps to inspect " +
-"and address the issue. If anything looks unsafe (leaks, structural damage, severe rust, " +
-"brake issues), clearly warn the user and recommend seeing a professional mechanic.",
+text: userText,
 },
 {
 type: "image_url",
@@ -82,23 +78,24 @@ image_url: { url: imageUrl },
 },
 ];
 } else {
-// -------------- TEXT DIAGNOSIS --------------
+// ---------- TEXT ONLY ----------
+const userText = String(text).trim();
+
 messages = [
 {
 role: "system",
 content:
 "You are FixLens, an expert diagnostic assistant specialized ONLY in vehicles " +
 "(cars, SUVs, pickup trucks). " +
-"You answer questions about car noises, vibrations, leaks, warning lights, starting issues, " +
-"steering, suspension, brakes, tires, overheating, and similar vehicle problems. " +
-"If the question is NOT related to a vehicle, politely explain that FixLens is only for car " +
-"diagnostics and ask the user to provide a vehicle-related question instead. " +
-"Always begin with a brief safety reminder (engine off, parking brake, protective gear), then " +
-"give clear, step-by-step instructions. Keep the tone friendly, practical, and concise.",
+"You must ALWAYS answer in the SAME LANGUAGE as the user's last message (unless they explicitly ask for a different language). " +
+"You help with car noises, vibrations, leaks, warning lights, starting issues, steering, suspension, brakes, " +
+"tires, overheating and similar vehicle problems. " +
+"If the question is not about a vehicle, explain that FixLens is only for car diagnostics and ask for a vehicle-related question. " +
+"Always begin with a short safety reminder (engine off, parking brake, protective gear), then provide practical, step-by-step instructions.",
 },
 {
 role: "user",
-content: text,
+content: userText,
 },
 ];
 }
@@ -115,7 +112,7 @@ body: JSON.stringify({
 model: "gpt-4o-mini",
 messages,
 temperature: 0.4,
-max_tokens: 600,
+max_tokens: 700,
 }),
 }
 );
@@ -139,7 +136,6 @@ const reply =
 data.choices?.[0]?.message?.content ||
 "FixLens could not generate an answer.";
 
-// Shape expected by Flutter
 return res.status(200).json({ reply });
 } catch (err) {
 console.error("FixLens diagnose error:", err);
