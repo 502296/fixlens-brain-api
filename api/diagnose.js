@@ -1,8 +1,8 @@
 // api/diagnose.js
-// Text & Image diagnosis for FixLens Brain (Vercel Serverless Function)
+// FixLens Brain – Vehicle-only Text & Image Diagnosis (Vercel Serverless Function)
 
 export default async function handler(req, res) {
-// Only allow POST
+// Allow POST only
 if (req.method !== "POST") {
 return res.status(405).json({ error: "Only POST allowed" });
 }
@@ -19,7 +19,7 @@ return res.status(400).json({ error: "Invalid JSON body" });
 
 const { text, image } = body || {};
 
-// Need at least text OR image
+// Require at least text OR image
 if (!text && !image) {
 return res
 .status(400)
@@ -36,9 +36,9 @@ return res
 try {
 let messages;
 
+// -------------- IMAGE DIAGNOSIS (VISION) --------------
 if (image) {
-// ---------- IMAGE DIAGNOSIS (VISION) ----------
-// image هنا هو base64 قادم من Flutter
+// image is base64 coming from Flutter
 const imageUrl = image.startsWith("data:")
 ? image
 : `data:image/jpeg;base64,${image}`;
@@ -50,8 +50,15 @@ content: [
 {
 type: "text",
 text:
-"You are FixLens, an expert diagnostic assistant for cars and home problems. " +
-"You can see and analyze images. Always mention safety first, then give clear, practical steps.",
+"You are FixLens, an expert diagnostic assistant specialized ONLY in vehicles " +
+"(cars, SUVs, pickup trucks). " +
+"You can see and analyze images of car parts, underbody, engine bay, wheels, tires, " +
+"brakes, suspensions, and fluid leaks. " +
+"If the image does NOT appear to be related to a vehicle, politely say that FixLens " +
+"is specialized in car diagnostics only and ask the user to send a car-related photo " +
+"or describe their vehicle problem instead. " +
+"Always start with a short safety note, then provide clear, step-by-step guidance " +
+"to inspect, diagnose, and (when reasonable) fix the issue. Keep the answer practical.",
 },
 ],
 },
@@ -61,27 +68,33 @@ content: [
 {
 type: "text",
 text:
-"Look carefully at this image and describe the most likely problem, " +
-"what part of the car or object is affected, and step-by-step actions to diagnose and fix it. " +
-"If something looks dangerous, warn the user clearly.",
+"Look carefully at this image from a vehicle. Identify the most likely car-related " +
+"problem, the affected component (for example: control arm, CV joint, power steering line, " +
+"brake hose, tire, wheel, suspension, exhaust, etc.), and provide practical steps to inspect " +
+"and address the issue. If anything looks unsafe (leaks, structural damage, severe rust, " +
+"brake issues), clearly warn the user and recommend seeing a professional mechanic.",
 },
 {
 type: "image_url",
-image_url: {
-url: imageUrl,
-},
+image_url: { url: imageUrl },
 },
 ],
 },
 ];
 } else {
-// ---------- TEXT DIAGNOSIS ----------
+// -------------- TEXT DIAGNOSIS --------------
 messages = [
 {
 role: "system",
 content:
-"You are FixLens, an expert diagnostic assistant for cars and home problems. " +
-"Ask for safety first, then give clear, practical steps, short and helpful.",
+"You are FixLens, an expert diagnostic assistant specialized ONLY in vehicles " +
+"(cars, SUVs, pickup trucks). " +
+"You answer questions about car noises, vibrations, leaks, warning lights, starting issues, " +
+"steering, suspension, brakes, tires, overheating, and similar vehicle problems. " +
+"If the question is NOT related to a vehicle, politely explain that FixLens is only for car " +
+"diagnostics and ask the user to provide a vehicle-related question instead. " +
+"Always begin with a brief safety reminder (engine off, parking brake, protective gear), then " +
+"give clear, step-by-step instructions. Keep the tone friendly, practical, and concise.",
 },
 {
 role: "user",
@@ -104,7 +117,7 @@ messages,
 temperature: 0.4,
 max_tokens: 600,
 }),
-},
+}
 );
 
 if (!openaiResponse.ok) {
@@ -112,7 +125,7 @@ const errText = await openaiResponse.text();
 console.error(
 "OpenAI error:",
 openaiResponse.status,
-errText.slice(0, 500),
+errText.slice(0, 500)
 );
 return res.status(500).json({
 error: "OpenAI error",
@@ -126,7 +139,7 @@ const reply =
 data.choices?.[0]?.message?.content ||
 "FixLens could not generate an answer.";
 
-// الشكل الذي ينتظره تطبيق Flutter
+// Shape expected by Flutter
 return res.status(200).json({ reply });
 } catch (err) {
 console.error("FixLens diagnose error:", err);
