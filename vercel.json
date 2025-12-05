@@ -1,14 +1,21 @@
 {
 "version": 2,
 "functions": {
-"api/index.js": {
+"api/diagnose.js": {
+"maxDuration": 60
+},
+"api/audio-diagnose.js": {
 "maxDuration": 60
 }
 },
 "routes": [
 {
-"src": "/api/(.*)",
-"dest": "/api/index.js"
+"src": "/api/diagnose",
+"dest": "/api/diagnose.js"
+},
+{
+"src": "/api/audio-diagnose",
+"dest": "/api/audio-diagnose.js"
 }
 ]
 }
