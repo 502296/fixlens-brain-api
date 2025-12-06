@@ -1,10 +1,14 @@
 // api/audio-diagnose.js
-// FixLens Auto – temporary audio handler
-// الهدف: لا نرجّع أخطاء 500 أبداً، ونرجّع رسالة لطيفة تطلب من المستخدم كتابة وصف المشكلة.
-// لاحقاً نقدر نطوّره ليحلل الصوت فعلياً (Transcription + Diagnosis).
+// FixLens Auto – FULL audio pipeline:
+// 1) Receive base64 audio from the app
+// 2) Transcribe using OpenAI Audio (Whisper)
+// 3) Run full diagnosis using the same logic as text diagnose
+
+import { findMatchingIssues } from "../lib/autoKnowledge.js";
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const FIXLENS_MODEL = process.env.FIXLENS_MODEL || "gpt-4.1-mini";
+const TRANSCRIBE_MODEL = "gpt-4o-mini-transcribe"; // أو أي موديل Audio مناسب من حسابك
 
 export default async function handler(req, res) {
 if (req.method !== "POST") {
@@ -12,35 +16,111 @@ res.setHeader("Allow", "POST");
 return res.status(405).json({ error: "Method not allowed" });
 }
 
-// لو ماكو مفتاح، نرجع رسالة ثابتة بدون AI
 if (!OPENAI_API_KEY) {
-return res.status(200).json({
-reply:
-"I received your voice note, but I can't analyze audio yet. Please type a short description of your car issue so I can help you with a proper diagnosis.",
-});
+return res
+.status(500)
+.json({ error: "Missing OPENAI_API_KEY in environment." });
 }
 
 try {
-const { languageHint } = req.body || {};
+const { audioBase64, languageHint } = req.body || {};
+
+if (!audioBase64) {
+return res.status(400).json({
+error:
+"Missing 'audioBase64' in request body. Please send base64-encoded audio.",
+});
+}
+
+// 1) تحويل الـ base64 إلى Buffer
+const audioBuffer = Buffer.from(audioBase64, "base64");
+
+// 2) تجهيز FormData لطلب الـ transcription
+const formData = new FormData();
+// Node 18 على Vercel يدعم Blob و FormData من undici
+formData.append("file", new Blob([audioBuffer]), "audio.m4a");
+formData.append("model", TRANSCRIBE_MODEL);
+if (languageHint && typeof languageHint === "string") {
+formData.append("language", languageHint); // "ar", "en", الخ
+}
+
+const sttRes = await fetch(
+"https://api.openai.com/v1/audio/transcriptions",
+{
+method: "POST",
+headers: {
+Authorization: `Bearer ${OPENAI_API_KEY}`,
+},
+body: formData,
+}
+);
+
+if (!sttRes.ok) {
+const errText = await sttRes.text();
+console.error("OpenAI transcription error:", errText);
+return res.status(500).json({
+error: "Transcription error",
+details: errText,
+});
+}
+
+const sttData = await sttRes.json();
+const transcript = (sttData?.text || "").trim();
+
+if (!transcript) {
+// لو ما قدر يفهم الصوت، نطلب من المستخدم يكتب الوصف
+return res.status(200).json({
+reply:
+"I received your voice note but couldn’t clearly understand the audio. Please type a short description of your car issue so I can help you with a proper diagnosis.",
+});
+}
+
+// 3) نستخدم النص الناتج من الصوت كـ description
+let kbMatches = [];
+try {
+kbMatches = findMatchingIssues(transcript, 5);
+} catch (err) {
+console.error("Error loading knowledge base:", err);
+kbMatches = [];
+}
 
 const systemPrompt = `
-You are FixLens Auto, an expert vehicle assistant.
+You are **FixLens Auto**, an expert automotive diagnostician.
 
-You have received a **voice note** from the driver, but you CANNOT listen to or analyze audio yet.
-Your job:
-- Politely thank the driver for sending the voice note.
-- Explain that you currently cannot analyze audio.
-- Ask them to type a short description of the problem (noises, warning lights, leaks, smells, when it happens, etc.).
-- ALWAYS respond in the same language as the driver, if possible.
-- Be short, clear, and friendly.
-Do NOT mention that you are an AI model.
+You receive:
+- A transcription of the driver's voice note describing the issue.
+- A small JSON "knowledge base" of common automotive issues.
+
+Language rules:
+- Detect the language of the driver's description.
+- ALWAYS answer in the **same language** the driver used (Arabic in = Arabic out, English in = English out, etc.).
+- Keep the tone clear, friendly, and professional.
+
+Diagnostic rules:
+1. Use the JSON knowledge base as a starting point if any items match the symptoms.
+2. Combine that with your broader professional experience.
+3. Always:
+- Start with a short, clear title line.
+- Then "Most likely causes" as a bullet list.
+- Then "What to check now" as a bullet list.
+- If there is any safety risk, include a final "Safety note:" line.
+4. Do NOT mention JSON, the word "knowledge base", or that you are an AI model.
 `;
 
-// نستخدم languageHint لو حاب تضيفه من التطبيق، وإلا نرسل رسالة عامة
-const userPrompt =
-languageHint && typeof languageHint === "string"
-? `The driver speaks: ${languageHint}. Please respond in that language.`
-: "The driver sent a voice note about a car problem, but we have no text. Please respond in a neutral way and ask them to type a description.";
+const kbText =
+kbMatches.length > 0
+? JSON.stringify(kbMatches, null, 2)
+: "No strong matches from the built-in knowledge base.";
+
+const userPrompt = `
+Transcribed driver description (from voice note):
+${transcript}
+
+Top internal knowledge base matches (for you to consider):
+${kbText}
+
+Now, give the best diagnostic explanation you can, following the required format and replying in the SAME language as the driver's description.
+`;
 
 const openaiRes = await fetch(
 "https://api.openai.com/v1/chat/completions",
@@ -63,27 +143,24 @@ messages: [
 
 if (!openaiRes.ok) {
 const errText = await openaiRes.text();
-console.error("OpenAI audio placeholder error:", errText);
-// حتى لو صار خطأ من OpenAI، ما نطيح الـ app: نرجع رسالة ثابتة لطيفة.
-return res.status(200).json({
-reply:
-"Thanks for your voice note. I couldn't process the audio right now, but if you type a short description of the issue, I’ll gladly help you diagnose it.",
+console.error("OpenAI diagnose-from-audio error:", errText);
+return res.status(500).json({
+error: "FixLens Brain error (from audio)",
+details: errText,
 });
 }
 
 const data = await openaiRes.json();
 const reply =
 data?.choices?.[0]?.message?.content?.trim() ||
-"Thanks for your voice note. Please type a short description of the issue so I can help you diagnose it.";
+"Sorry, I couldn't generate a diagnosis at the moment.";
 
-// شكل الرد متطابق مع diagnose.js: { reply: "..." }
-return res.status(200).json({ reply });
+return res.status(200).json({ reply, transcript });
 } catch (err) {
 console.error("audio-diagnose handler error:", err);
-// حتى في حالة خطأ بالسيرفر، نرجع 200 مع رسالة مفهومة، حتى لا يظهر status 500 داخل التطبيق
-return res.status(200).json({
-reply:
-"Thanks for your voice note. I couldn't analyze the audio, but if you type a short description of the problem, I’ll help you figure out what might be going on.",
+return res.status(500).json({
+error: "Server error in audio-diagnose",
+details: String(err),
 });
 }
 }
