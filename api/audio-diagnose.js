@@ -1,7 +1,7 @@
-// api/diagnose.js
-// Main FixLens Auto diagnosis endpoint (text + optional image)
-
-import { findMatchingIssues } from "../lib/autoKnowledge.js";
+// api/audio-diagnose.js
+// FixLens Auto – temporary audio handler
+// الهدف: لا نرجّع أخطاء 500 أبداً، ونرجّع رسالة لطيفة تطلب من المستخدم كتابة وصف المشكلة.
+// لاحقاً نقدر نطوّره ليحلل الصوت فعلياً (Transcription + Diagnosis).
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const FIXLENS_MODEL = process.env.FIXLENS_MODEL || "gpt-4.1-mini";
@@ -12,76 +12,35 @@ res.setHeader("Allow", "POST");
 return res.status(405).json({ error: "Method not allowed" });
 }
 
+// لو ماكو مفتاح، نرجع رسالة ثابتة بدون AI
 if (!OPENAI_API_KEY) {
-return res
-.status(500)
-.json({ error: "Missing OPENAI_API_KEY in environment." });
-}
-
-try {
-const { text, image } = req.body || {};
-
-if (!text && !image) {
-return res.status(400).json({
-error:
-"Please provide at least 'text' or 'image' in the request body.",
+return res.status(200).json({
+reply:
+"I received your voice note, but I can't analyze audio yet. Please type a short description of your car issue so I can help you with a proper diagnosis.",
 });
 }
 
-const description = text || "";
-
-// 1) نبحث في قاعدة الأعطال عن أكثر الأشياء التي تشبه وصف المستخدم
-let kbMatches = [];
 try {
-kbMatches = findMatchingIssues(description, 5);
-} catch (err) {
-console.error("Error loading knowledge base:", err);
-// ما نكسر الطلب، بس نكمل بدون KB
-kbMatches = [];
-}
+const { languageHint } = req.body || {};
 
 const systemPrompt = `
-You are **FixLens Auto**, an expert automotive diagnostician.
+You are FixLens Auto, an expert vehicle assistant.
 
-You receive:
-- The driver's description of the issue (noises, warning lights, behavior, conditions).
-- Optionally an attached photo from the app (image is referenced but not directly visible to you).
-- A small JSON "knowledge base" of common automotive issues.
-
-Language rules:
-- Detect the language of the driver's description.
-- ALWAYS answer in the **same language** the driver used (Arabic in = Arabic out, English in = English out, etc.).
-- Keep the tone clear, friendly, and professional.
-
-Diagnostic rules:
-1. Use the JSON knowledge base as a starting point if any items match the symptoms.
-2. Combine that with your broader professional experience.
-3. Always:
-- Start with a short, clear title line (e.g. "Possible misfire and ignition issue").
-- Then "Most likely causes" as a clear bullet list.
-- Then "What to check now" as a bullet list the driver or mechanic can actually do.
-- If there is any safety risk, include a final line: "Safety note:".
-4. Do NOT mention JSON, the word "knowledge base", or that you are an AI model.
+You have received a **voice note** from the driver, but you CANNOT listen to or analyze audio yet.
+Your job:
+- Politely thank the driver for sending the voice note.
+- Explain that you currently cannot analyze audio.
+- Ask them to type a short description of the problem (noises, warning lights, leaks, smells, when it happens, etc.).
+- ALWAYS respond in the same language as the driver, if possible.
+- Be short, clear, and friendly.
+Do NOT mention that you are an AI model.
 `;
 
-const kbText =
-kbMatches.length > 0
-? JSON.stringify(kbMatches, null, 2)
-: "No strong matches from the built-in knowledge base.";
-
-const userPrompt = `
-Driver description:
-${description || "(no text, image-only case)"}
-
-Image attached by user: ${
-image ? "YES (base64 sent from mobile app)" : "NO"
-}
-
-Top internal knowledge base matches (for you to consider):
-${kbText}
-
-Now, give the best diagnostic explanation you can, following the required format and replying in the SAME language as the driver's description.
-`;
+// نستخدم languageHint لو حاب تضيفه من التطبيق، وإلا نرسل رسالة عامة
+const userPrompt =
+languageHint && typeof languageHint === "string"
+? `The driver speaks: ${languageHint}. Please respond in that language.`
+: "The driver sent a voice note about a car problem, but we have no text. Please respond in a neutral way and ask them to type a description.";
 
 const openaiRes = await fetch(
 "https://api.openai.com/v1/chat/completions",
@@ -104,22 +63,27 @@ messages: [
 
 if (!openaiRes.ok) {
 const errText = await openaiRes.text();
-console.error("OpenAI error:", errText);
-return res
-.status(500)
-.json({ error: "FixLens Brain error", details: errText });
+console.error("OpenAI audio placeholder error:", errText);
+// حتى لو صار خطأ من OpenAI، ما نطيح الـ app: نرجع رسالة ثابتة لطيفة.
+return res.status(200).json({
+reply:
+"Thanks for your voice note. I couldn't process the audio right now, but if you type a short description of the issue, I’ll gladly help you diagnose it.",
+});
 }
 
 const data = await openaiRes.json();
 const reply =
 data?.choices?.[0]?.message?.content?.trim() ||
-"Sorry, I couldn't generate a diagnosis at the moment.";
+"Thanks for your voice note. Please type a short description of the issue so I can help you diagnose it.";
 
+// شكل الرد متطابق مع diagnose.js: { reply: "..." }
 return res.status(200).json({ reply });
 } catch (err) {
-console.error("diagnose handler error:", err);
-return res
-.status(500)
-.json({ error: "Server error", details: String(err) });
+console.error("audio-diagnose handler error:", err);
+// حتى في حالة خطأ بالسيرفر، نرجع 200 مع رسالة مفهومة، حتى لا يظهر status 500 داخل التطبيق
+return res.status(200).json({
+reply:
+"Thanks for your voice note. I couldn't analyze the audio, but if you type a short description of the problem, I’ll help you figure out what might be going on.",
+});
 }
 }
