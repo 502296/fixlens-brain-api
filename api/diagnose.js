@@ -29,13 +29,12 @@ error: "Please provide at least 'text' or 'image' in the request body.",
 
 const description = text || "";
 
-// 1) نبحث في قاعدة الأعطال عن أكثر الأشياء التي تشبه وصف المستخدم
+// 1) البحث في قاعدة الأعطال
 let kbMatches = [];
 try {
 kbMatches = findMatchingIssues(description, 5);
 } catch (err) {
 console.error("Error loading knowledge base:", err);
-// ما نكسر الطلب، بس نكمل بدون KB
 kbMatches = [];
 }
 
@@ -57,10 +56,10 @@ Diagnostic rules:
 1. Use the JSON knowledge base as a starting point if any items match the symptoms.
 2. Combine that with your broader professional experience.
 3. Always:
-- Start with a short, clear title line (e.g. "Possible misfire and ignition issue").
-- Then "Most likely causes" as a clear bullet list.
+- Start with a short, clear title line.
+- Then "Most likely causes" as a bullet list.
 - Then "What to check now" as a bullet list the driver or mechanic can actually do.
-- If there is any safety risk, include a final line: "Safety note:" (translated to the reply language).
+- If there is any safety risk, include a final line like "Safety note:" (translated to the reply language).
 4. Do NOT mention JSON, the word "knowledge base", or that you are an AI model.
 `;
 
@@ -81,9 +80,7 @@ ${kbText}
 Now, give the best diagnostic explanation you can, following the required format and language rules.
 `;
 
-const openaiRes = await fetch(
-"https://api.openai.com/v1/chat/completions",
-{
+const openaiRes = await fetch("https://api.openai.com/v1/chat/completions", {
 method: "POST",
 headers: {
 Authorization: `Bearer ${OPENAI_API_KEY}`,
@@ -97,8 +94,7 @@ messages: [
 { role: "user", content: userPrompt },
 ],
 }),
-}
-);
+});
 
 if (!openaiRes.ok) {
 const errText = await openaiRes.text();
