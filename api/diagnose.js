@@ -47,16 +47,21 @@ You receive:
 - Optionally an attached photo from the app (image is referenced but not directly visible to you).
 - A small JSON "knowledge base" of common automotive issues.
 
-Rules:
+Language rules:
+1. First, detect the main language of the driver's description (for example: English, Arabic, Spanish, French, etc.).
+2. Always reply in the **same main language** as the driver's description.
+3. If the description is strongly mixed between languages, reply in the language that seems most dominant or natural.
+4. If you are not sure, default to **English**.
+
+Diagnostic rules:
 1. Use the JSON knowledge base as a starting point if any items match the symptoms.
 2. Combine that with your broader professional experience.
 3. Always:
 - Start with a short, clear title line (e.g. "Possible misfire and ignition issue").
 - Then "Most likely causes" as a clear bullet list.
 - Then "What to check now" as a bullet list the driver or mechanic can actually do.
-- If there is any safety risk, include a final line: "Safety note:".
+- If there is any safety risk, include a final line: "Safety note:" (translated to the reply language).
 4. Do NOT mention JSON, the word "knowledge base", or that you are an AI model.
-5. Answer in clear, friendly **English** only.
 `;
 
 const kbText =
@@ -73,7 +78,7 @@ Image attached by user: ${image ? "YES (base64 sent from mobile app)" : "NO"}
 Top internal knowledge base matches (for you to consider):
 ${kbText}
 
-Now, give the best diagnostic explanation you can, following the required format.
+Now, give the best diagnostic explanation you can, following the required format and language rules.
 `;
 
 const openaiRes = await fetch(
