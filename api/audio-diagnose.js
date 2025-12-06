@@ -1,18 +1,13 @@
 // api/audio-diagnose.js
 // Advanced audio diagnosis: audio -> transcription -> full FixLens Auto diagnosis
 
+import { Buffer } from "buffer";
 import { findMatchingIssues } from "../lib/autoKnowledge.js";
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const FIXLENS_MODEL = process.env.FIXLENS_MODEL || "gpt-4.1-mini";
 const TRANSCRIPTION_MODEL =
 process.env.FIXLENS_TRANSCRIBE_MODEL || "whisper-1";
-
-if (!global.FormData) {
-// Node 18+ عنده FormData و Blob بشكل افتراضي، لكن نحط هذا احتياطاً
-// eslint-disable-next-line no-global-assign
-global.FormData = require("form-data");
-}
 
 export default async function handler(req, res) {
 if (req.method !== "POST") {
@@ -27,19 +22,27 @@ return res
 }
 
 try {
-const { audioBase64, mimeType, languageHint } = req.body || {};
+// ندعم اسمين للحقل: audioBase64 أو audio
+const {
+audioBase64,
+audio, // fallback
+mimeType,
+languageHint,
+} = req.body || {};
 
-if (!audioBase64) {
+const base64 = audioBase64 || audio;
+
+if (!base64) {
 return res.status(400).json({
 error:
-"Missing 'audioBase64' in request body. Please send the recorded audio as base64.",
+"Missing 'audioBase64' (or 'audio') in request body. Please send the recorded audio as base64.",
 });
 }
 
-// 1) نحول الـ base64 إلى Buffer
-const audioBuffer = Buffer.from(audioBase64, "base64");
+// 1) تحويل Base64 إلى Buffer
+const audioBuffer = Buffer.from(base64, "base64");
 
-// 2) نرسل الصوت إلى Whisper لعمل Transcription
+// 2) إرسال الصوت إلى Whisper لعمل Transcription
 const formData = new FormData();
 formData.append(
 "file",
@@ -50,7 +53,6 @@ type: mimeType || "audio/m4a",
 );
 formData.append("model", TRANSCRIPTION_MODEL);
 
-// لو حاب تعطي Hint للغة (مثلاً "ar", "en", "es")
 if (languageHint) {
 formData.append("language", languageHint);
 }
@@ -82,7 +84,7 @@ whisperData?.text?.trim() ||
 
 console.log("FixLens – audio transcript:", transcript);
 
-// 3) نستخدم الـ transcript كـ description وندخل على نفس منطق التشخيص
+// 3) استخدام transcript مع نفس منطق التشخيص
 
 let kbMatches = [];
 try {
@@ -109,10 +111,10 @@ Diagnostic rules:
 1. Use the JSON knowledge base as a starting point if any items match the symptoms.
 2. Combine that with your broader professional experience.
 3. Always:
-- Start with a short, clear title line (e.g. "Possible misfire and ignition issue").
-- Then "Most likely causes" as a clear bullet list.
+- Start with a short, clear title line.
+- Then "Most likely causes" as a bullet list.
 - Then "What to check now" as a bullet list the driver or mechanic can actually do.
-- If there is any safety risk, include a final line: "Safety note:" (translated to the reply language).
+- If there is any safety risk, include a final line like "Safety note:" (translated to the reply language).
 4. Do NOT mention JSON, the word "knowledge base", or that you are an AI model.
 `;
 
@@ -131,9 +133,7 @@ ${kbText}
 Now, give the best diagnostic explanation you can, following the required format and language rules.
 `;
 
-const openaiRes = await fetch(
-"https://api.openai.com/v1/chat/completions",
-{
+const openaiRes = await fetch("https://api.openai.com/v1/chat/completions", {
 method: "POST",
 headers: {
 Authorization: `Bearer ${OPENAI_API_KEY}`,
@@ -147,8 +147,7 @@ messages: [
 { role: "user", content: userPrompt },
 ],
 }),
-}
-);
+});
 
 if (!openaiRes.ok) {
 const errText = await openaiRes.text();
@@ -172,7 +171,7 @@ reply,
 console.error("audio-diagnose handler error:", err);
 return res.status(500).json({
 error: "Server error",
-details: String(err),
-});
+details: String(err) },
+);
 }
 }
