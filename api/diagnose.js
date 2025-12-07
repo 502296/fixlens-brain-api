@@ -1,11 +1,15 @@
 // api/diagnose.js
 
 import OpenAI from "openai";
-import autoKnowledge from "../lib/autoKnowledge.js";
+import autoKnowledge from "../lib/autoKnowledge.js"; // نستورد الدماغ
 import fs from "fs";
 import path from "path";
 
-const commonIssuesPath = path.join(process.cwd(), "data/auto_common_issues.json");
+// 👈 نقرأ JSON من الجذر (نفس اللي بالصورة)
+const commonIssuesPath = path.join(
+process.cwd(),
+"auto_common_issues.json"
+);
 const commonIssues = JSON.parse(fs.readFileSync(commonIssuesPath, "utf8"));
 
 const openai = new OpenAI({
@@ -19,12 +23,10 @@ You are **FixLens Auto**, a super-intelligent automotive diagnostic assistant.
 GOALS:
 - Help drivers understand what might be happening with their vehicle.
 - ALWAYS keep the driver safe.
-- Use the knowledge provided (autoKnowledge + commonIssues) as context.
 
 LANGUAGE:
 - Detect the driver's language from their message.
-- Reply in the SAME language as the driver.
-- If unclear, reply in simple English.
+- Reply in the SAME language.
 
 BEHAVIOR:
 - Greeting only → greet + ask for symptoms.
@@ -36,7 +38,8 @@ If clear symptoms exist → follow EXACT format:
 3) What to check now
 4) Safety note
 
-STYLE: friendly, concise.
+STYLE:
+- Friendly, calm, concise, phone-friendly.
 `;
 }
 
@@ -47,6 +50,7 @@ return res.status(405).json({ error: "Method not allowed" });
 
 try {
 const { message, mode = "text", extraContext = {} } = req.body || {};
+
 if (!message || typeof message !== "string" || !message.trim()) {
 return res.status(400).json({ error: "Message is required" });
 }
@@ -71,7 +75,7 @@ messages: [
 {
 role: "system",
 content:
-"BACKGROUND KNOWLEDGE:\n" +
+"BACKGROUND KNOWLEDGE (do NOT show this to the user):\n" +
 JSON.stringify(knowledgeBlob).slice(0, 12000),
 },
 { role: "user", content: userMessage },
