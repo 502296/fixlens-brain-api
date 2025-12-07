@@ -1,8 +1,7 @@
 // api/audio-diagnose.js
-
 import OpenAI from "openai";
 import { Buffer } from "buffer";
-import handlerDiagnose from "./diagnose.js"; // نعيد استخدام نفس المحرك داخليًا
+import handlerDiagnose from "./diagnose.js";
 
 const openai = new OpenAI({
 apiKey: process.env.OPENAI_API_KEY,
@@ -11,7 +10,7 @@ apiKey: process.env.OPENAI_API_KEY,
 export const config = {
 api: {
 bodyParser: {
-sizeLimit: "15mb", // مساحة كافية لتسجيلات قصيرة
+sizeLimit: "15mb",
 },
 },
 };
@@ -29,42 +28,43 @@ if (!audioBase64) {
 return res.status(400).json({ error: "audioBase64 is required" });
 }
 
+// Decode audio
 const audioBuffer = Buffer.from(audioBase64, "base64");
 
-// 1) تحويل الصوت إلى نص
+// 1) Transcribe audio (auto-detect language)
 const transcription = await openai.audio.transcriptions.create({
 file: {
 data: audioBuffer,
-name: `fixlens-voice.${mimeType.split("/")[1] || "m4a"}`,
+name: `voice.${mimeType.split("/")[1] || "m4a"}`,
 },
 model: "whisper-1",
-// language: "auto", // يكتشف اللغة تلقائيًا
+// Whisper automatically detects any language
 });
 
-const transcriptText = transcription.text?.trim() || "";
+const transcript = transcription.text?.trim() || "";
 
-if (!transcriptText) {
+if (!transcript) {
 return res.status(200).json({
 ok: true,
 source: "audio",
 transcript: "",
 answer:
-"I could not understand the voice note clearly. Please try again with a clearer recording or type the problem in text.",
+"I could not clearly understand the voice note. Please record again or type the issue.",
 });
 }
 
-// 2) نمرر النص لمحرك التشخيص نفسه (بطريقة داخلية)
-// نصنع req/res وهمية بسيطة
+// 2) Run the normal diagnosis engine internally
 const fakeReq = {
 method: "POST",
 body: {
-message: transcriptText,
+message: transcript,
 mode: "voice",
 extraContext,
 },
 };
 
 let diagnoseResult = null;
+
 const fakeRes = {
 status(code) {
 this.statusCode = code;
@@ -81,14 +81,14 @@ await handlerDiagnose(fakeReq, fakeRes);
 return res.status(200).json({
 ok: true,
 source: "audio",
-transcript: transcriptText,
+transcript,
 diagnosis: diagnoseResult,
 });
 } catch (err) {
-console.error("FixLens audio-diagnose error:", err);
+console.error("FixLens audio error:", err);
 return res.status(500).json({
 ok: false,
-error: "Internal error while processing audio diagnosis.",
+error: "Internal error while processing audio.",
 });
 }
 }
