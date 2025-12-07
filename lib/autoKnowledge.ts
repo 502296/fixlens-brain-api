@@ -7,12 +7,13 @@ import path from "path";
 let cachedIssues = null;
 
 /**
-* Load the JSON file auto_common_issues.json from /data folder.
+* Load the JSON file auto_common_issues.json from project root.
 */
 function loadIssues() {
 if (cachedIssues) return cachedIssues;
 
-const filePath = path.join(process.cwd(), "data", "auto_common_issues.json");
+// 👈 هنا من الجذر مباشرة، بدون مجلد data
+const filePath = path.join(process.cwd(), "auto_common_issues.json");
 const raw = fs.readFileSync(filePath, "utf-8");
 const data = JSON.parse(raw);
 
@@ -26,9 +27,6 @@ return cachedIssues;
 
 /**
 * Very simple text matching:
-* - normalize description to lower-case
-* - for each issue, count how many symptom_patterns words/phrases appear
-* - return top N issues with score > 0
 */
 export function findMatchingIssues(description, limit = 5) {
 if (!description || typeof description !== "string") {
@@ -49,8 +47,7 @@ const phrase = String(p).toLowerCase();
 if (phrase.length < 3) continue;
 
 if (text.includes(phrase)) {
-// full phrase match
-score += 2;
+score += 2; // full phrase match
 } else {
 const tokens = phrase.split(/\s+/);
 for (const t of tokens) {
@@ -77,12 +74,11 @@ severity: item.issue.severity,
 return scored;
 }
 
-// 👇 هذا هو الـ "default export" اللي يحتاجه diagnose.js
+// default export بسيط علشان import في diagnose.js
 const autoKnowledge = {
 version: "1.0",
 description:
-"Helper utilities for matching driver descriptions to common auto issues. " +
-"Server code can call findMatchingIssues(description) when needed.",
+"Helper utilities for matching driver descriptions to common auto issues.",
 };
 
 export default autoKnowledge;
