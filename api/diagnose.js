@@ -4,7 +4,6 @@
 
 import OpenAI from "openai";
 import { buildIssueSummaryForLLM } from "../lib/autoKnowledge.js";
-import { saveLog, logError, saveMemory } from "../lib/logs.js";
 
 const client = new OpenAI({
 apiKey: process.env.OPENAI_API_KEY,
@@ -31,15 +30,15 @@ return res.status(200).end();
 }
 
 if (req.method !== "POST") {
-return res.status(405).json({ error: "Method not allowed. Use POST." });
+return res
+.status(405)
+.json({ error: "Method not allowed. Use POST." });
 }
-
-const startedAt = Date.now();
 
 try {
 const body = req.body || {};
 
-// 🔴 هنا السر: نقبل كل الأسماء المحتملة من التطبيق
+// 🔴 نقبل كل الأسماء المحتملة من التطبيق
 let description =
 body.description ||
 body.text ||
@@ -48,7 +47,7 @@ body.prompt ||
 body.query ||
 null;
 
-// لو جاية Array (نادرًا) نخليها نص واحد
+// لو جاية Array نخليها نص واحد
 if (Array.isArray(description)) {
 description = description.join(" ");
 }
@@ -80,10 +79,9 @@ audioNotes,
 imageNotes,
 mode,
 preferredLanguage,
-userId, // لو أرسلناه من التطبيق لاحقاً
 } = body;
 
-// 1) استخدم قاعدة المعرفة auto_common_issues.json لمطابقة الأعراض
+// 1) نستخدم قاعدة المعرفة auto_common_issues.json لمطابقة الأعراض
 const knowledgeSummary = buildIssueSummaryForLLM(description, {
 topN: 8,
 minScore: 1,
@@ -121,7 +119,39 @@ language_hint: preferredLanguage || null,
 const systemPrompt = `
 You are **FixLens Brain**, a world-class, multi-language automotive diagnostic assistant.
 
-[نفس النص السابق تماماً هنا بدون تغيير...]
+CORE RULES (VERY IMPORTANT):
+
+1. **Language Detection**
+- First, detect the user's language from "user_description".
+- Respond in the SAME language you detect.
+- If the user mixes languages (e.g., Arabic + English), choose the dominant language but you may keep technical terms in English if natural.
+- You must support ALL human languages (Arabic, English, Spanish, French, Chinese, etc.), similar to ChatGPT.
+
+2. **Knowledge Base Usage**
+- You receive a field "knowledge_base_matches": these are pre-matched issues from FixLens internal database (auto_common_issues.json).
+- Use these matches as a **strong hint** for likely causes, recommended checks, and safety warnings.
+- Do NOT contradict clear safety warnings from the knowledge base.
+- If matches are weak or not relevant, say that these are only possible directions, not confirmed diagnoses.
+
+3. **Safety & Disclaimer**
+- You are NOT a replacement for a real mechanic or emergency service.
+- If there is any serious safety risk (brakes failure, steering loss, fuel leak, fire risk, high-voltage fault, engine severe knock, overheating with steam, etc.),
+clearly warn the user to STOP driving and seek professional help immediately.
+- Always include a short, clear disclaimer at the end.
+
+4. **Structure of Your Answer**
+Answer in a friendly, clear, and practical way. Use short sections. A good structure (adapt in any language):
+
+- **Quick Summary**
+- **Most Likely Causes**
+- **What You Can Check Now**
+- **Safety / When to Stop Driving**
+- **Next Professional Step**
+- **Short Disclaimer**
+
+5. **Tone**
+- Calm, respectful, and reassuring.
+- No jokes about safety.
 `.trim();
 
 // 4) طلب من GPT (مع الحفاظ على تعدد اللغات)
@@ -144,51 +174,7 @@ const answer =
 completion.choices?.[0]?.message?.content?.trim() ||
 "Sorry, I could not generate a response.";
 
-const latencyMs = Date.now() - startedAt;
-
-// استنتاج اللغة من الرد بشكل بسيط جداً (نقدر نطوره لاحقاً)
-let detectedLang = null;
-try {
-if (answer.match(/[\u0600-\u06FF]/)) {
-detectedLang = "ar";
-} else if (answer.match(/[áéíóúñ¿¡]/i)) {
-detectedLang = "es";
-} else if (answer.match(/[äöüß]/i)) {
-detectedLang = "de";
-} else {
-detectedLang = "en";
-}
-} catch (_) {
-detectedLang = null;
-}
-
-// 5) حفظ Log في Supabase
-await saveLog({
-endpoint: "diagnose",
-mode: mode || "text",
-inputType: "free_text",
-userLang: detectedLang,
-userDescription: description,
-aiResponse: answer,
-model: MODEL,
-status: "success",
-latencyMs,
-meta: {
-region: region || country || null,
-troubleCodes: troubleCodes || [],
-knowledge: knowledgeSummary,
-},
-});
-
-// 6) حفظ ذاكرة بسيطة (اختياري الآن، ممكن نطوره لاحقاً)
-await saveMemory({
-userId: userId || null,
-key: "recent_case",
-content: `Case: ${description}\n\nAnswer:\n${answer}`,
-importance: 1,
-});
-
-// 7) نرجع الرد للتطبيق
+// 5) نرجع الرد للتطبيق
 return res.status(200).json({
 ok: true,
 model: MODEL,
@@ -197,14 +183,6 @@ knowledge: knowledgeSummary,
 });
 } catch (err) {
 console.error("[diagnose] Error:", err);
-
-// نحفظ الخطأ في جدول خاص
-await logError({
-endpoint: "diagnose",
-error: err,
-payload: req.body || null,
-});
-
 return res.status(500).json({
 ok: false,
 error: "Internal error in FixLens diagnose endpoint.",
