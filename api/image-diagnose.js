@@ -1,6 +1,3 @@
-// api/image-diagnose.js
-// Receives: { imageBase64: string, userText?: string }
-
 import { runFixLensBrain } from "./brain/index.js";
 
 export default async function handler(req, res) {
@@ -12,23 +9,38 @@ return res.status(405).json({ error: "Method not allowed" });
 try {
 const { imageBase64, userText } = req.body || {};
 
-if (!imageBase64 || typeof imageBase64 !== "string") {
+if (!imageBase64) {
 return res.status(400).json({
-error: "Field 'imageBase64' (base64 image) is required.",
+error: "imageBase64 is required",
 });
 }
 
+const modelInput = [
+{
+role: "user",
+content: [
+{
+type: "input_text",
+text: userText || "",
+},
+{
+type: "input_image",
+image_base64: imageBase64,
+},
+],
+},
+];
+
 const result = await runFixLensBrain({
 mode: "image",
-text: userText || "",
-imageBase64,
+input: modelInput,
 });
 
 return res.status(200).json(result);
 } catch (err) {
-console.error("image-diagnose error:", err);
+console.error("IMAGE ERROR:", err);
 return res.status(500).json({
-error: "Internal error in image-diagnose",
+error: "Internal image error",
 details: String(err),
 });
 }
