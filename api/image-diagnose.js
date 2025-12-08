@@ -1,87 +1,118 @@
-// api/image-diagnose.js
-// Handle car-image diagnosis using OpenAI Vision (Responses API)
+// /api/image-diagnose.js
+// FixLens – IMAGE DIAGNOSIS (multi-language)
 
 import OpenAI from "openai";
+import formidable from "formidable";
+import fs from "fs";
 
 const client = new OpenAI({
 apiKey: process.env.OPENAI_API_KEY,
 });
 
+// لازم نعطل bodyParser لأننا نستقبل ملف
+export const config = {
+api: {
+bodyParser: false,
+},
+};
+
 export default async function handler(req, res) {
 if (req.method !== "POST") {
-res.setHeader("Allow", "POST");
-return res.status(405).json({ error: "Method not allowed" });
+return res
+.status(405)
+.json({ error: { code: 405, message: "Method not allowed" } });
 }
 
 try {
-const { imageBase64, userText, preferredLanguage } = req.body || {};
+const form = formidable({ multiples: false });
 
-if (!imageBase64 || typeof imageBase64 !== "string") {
-return res.status(400).json({
-error: "Field 'imageBase64' (base64 image) is required.",
+const { fields, files } = await new Promise((resolve, reject) => {
+form.parse(req, (err, fields, files) => {
+if (err) reject(err);
+else resolve({ fields, files });
 });
+});
+
+const userText =
+(fields?.description && String(fields.description)) ||
+(fields?.message && String(fields.message)) ||
+"Please diagnose what might be wrong in this car photo.";
+
+// 👇 عدّل الاسم إذا كنت ترسل field آخر من Flutter (مثلاً photo)
+const imageFile = files?.image || files?.file;
+if (!imageFile) {
+return res
+.status(400)
+.json({ error: { code: 400, message: "No image file uploaded." } });
 }
 
-const imageUrl = `data:image/jpeg;base64,${imageBase64}`;
+const imageBytes = await fs.promises.readFile(imageFile.filepath);
+const imageBase64 = imageBytes.toString("base64");
 
-const langNote =
-preferredLanguage && preferredLanguage !== "auto"
-? `Reply ONLY in the language code: ${preferredLanguage}.`
-: userText && userText.trim().length > 0
-? "Reply in the same language as the user's message."
-: "If you can't detect a language, reply in clear English.";
+const completion = await client.chat.completions.create({
+model: "gpt-4o-mini",
+temperature: 0.4,
+messages: [
+{
+role: "system",
+content: `
+You are **FixLens Auto – Image Mode**, a smart assistant specialized in
+understanding **photos of cars, engines, and mechanical parts**.
 
-const basePrompt =
-userText && userText.trim().length > 0
-? `The user sent this car photo and said: "${userText}".`
-: "The user sent this photo of a car issue.";
+GOAL:
+- Look carefully at the photo.
+- Combine what you see with any text description from the user.
+- Explain what the part is, what might be wrong, and what the driver should do.
 
-const prompt =
-basePrompt +
-" You are FixLens Auto, a friendly global mechanic assistant. " +
-"Explain in simple language what you see, what might be wrong, " +
-"and what steps the user can take next. " +
-"Always remind that this is not a final professional diagnosis. " +
-langNote;
+LANGUAGE:
+- Always answer in the **same language as the user's description**.
+- If the user text is Arabic → reply Arabic.
+- If English → reply English.
+- If Spanish / Hindi / any other → reply in that language.
+- Do NOT force English unless the user uses English only.
 
-const response = await client.responses.create({
-model: "gpt-4.1-mini",
-input: [
+STYLE:
+- Be clear, friendly, and not too technical.
+- Use short sections:
+1) Short summary.
+2) What you see in the image.
+3) Possible issues / what might be wrong.
+4) What the user can check now.
+5) Safety note and advice to visit a mechanic.
+
+SAFETY:
+- Never give unsafe instructions.
+- Always remind the user that a real mechanic should inspect the car
+for a final diagnosis.
+`.trim(),
+},
 {
 role: "user",
 content: [
-{ type: "input_text", text: prompt },
 {
-type: "input_image",
-image_url: imageUrl,
+type: "text",
+text: userText,
+},
+{
+type: "image_url",
+image_url: {
+url: `data:image/jpeg;base64,${imageBase64}`,
+},
 },
 ],
 },
 ],
 });
 
-let replyText = "I analyzed the image but could not generate a response.";
-try {
-const first = response.output[0];
-const firstContent = first?.content?.[0];
-if (firstContent?.type === "output_text") {
-replyText = firstContent.text;
-}
-} catch (err) {
-console.error("Parse image response error:", err);
-}
+const answer =
+completion.choices?.[0]?.message?.content ||
+"Sorry, I couldn't analyze this image.";
 
-return res.status(200).json({
-reply: replyText,
-language: preferredLanguage || "auto",
-mode: "image",
-domain: "auto",
-});
+return res.status(200).json({ answer });
 } catch (err) {
-console.error("image-diagnose internal error:", err);
+console.error("FixLens Image Diagnose error:", err);
 return res.status(500).json({
-error: "Internal error in image-diagnose",
-details: String(err),
+error: { code: 500, message: "A server error has occurred (image)." },
 });
 }
 }
