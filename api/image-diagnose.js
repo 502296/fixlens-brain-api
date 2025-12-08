@@ -14,7 +14,7 @@ return res.status(405).json({ error: "Method not allowed" });
 }
 
 try {
-const { imageBase64, userText } = req.body || {};
+const { imageBase64, userText, preferredLanguage } = req.body || {};
 
 if (!imageBase64 || typeof imageBase64 !== "string") {
 return res.status(400).json({
@@ -22,17 +22,27 @@ error: "Field 'imageBase64' (base64 image) is required.",
 });
 }
 
-// نحوله لصيغة data URL يفهمها GPT-4o Vision
 const imageUrl = `data:image/jpeg;base64,${imageBase64}`;
 
-const prompt =
-(userText && userText.trim().length > 0
+const langNote =
+preferredLanguage && preferredLanguage !== "auto"
+? `Reply ONLY in the language code: ${preferredLanguage}.`
+: userText && userText.trim().length > 0
+? "Reply in the same language as the user's message."
+: "If you can't detect a language, reply in clear English.";
+
+const basePrompt =
+userText && userText.trim().length > 0
 ? `The user sent this car photo and said: "${userText}".`
-: "The user sent this photo of a car issue.") +
+: "The user sent this photo of a car issue.";
+
+const prompt =
+basePrompt +
 " You are FixLens Auto, a friendly global mechanic assistant. " +
 "Explain in simple language what you see, what might be wrong, " +
 "and what steps the user can take next. " +
-"Always be clear that this is not a final professional diagnosis.";
+"Always remind that this is not a final professional diagnosis. " +
+langNote;
 
 const response = await client.responses.create({
 model: "gpt-4.1-mini",
@@ -50,7 +60,6 @@ image_url: imageUrl,
 ],
 });
 
-// نحاول استخراج النص من output بأكثر طريقة آمنة
 let replyText = "I analyzed the image but could not generate a response.";
 try {
 const first = response.output[0];
@@ -64,7 +73,7 @@ console.error("Parse image response error:", err);
 
 return res.status(200).json({
 reply: replyText,
-language: "auto",
+language: preferredLanguage || "auto",
 mode: "image",
 domain: "auto",
 });
