@@ -1,6 +1,6 @@
 // api/diagnose.js
 // FixLens Brain – Diagnose endpoint
-// يستخدم autoKnowledge.js + GPT ليعطي تشخيص ذكي بيدعم كل اللغات
+// يستخدم autoKnowledge.js + GPT ليعطي تشخيص ذكي يدعم كل اللغات
 
 import OpenAI from "openai";
 import { buildIssueSummaryForLLM } from "../lib/autoKnowledge.js";
@@ -18,7 +18,10 @@ const MODEL = process.env.FIXLENS_MODEL || "gpt-4.1-mini";
 function setCorsHeaders(res) {
 res.setHeader("Access-Control-Allow-Origin", "*");
 res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
-res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+res.setHeader(
+"Access-Control-Allow-Headers",
+"Content-Type, Authorization",
+);
 }
 
 export default async function handler(req, res) {
@@ -34,9 +37,16 @@ return res.status(405).json({ error: "Method not allowed. Use POST." });
 }
 
 try {
+const body = req.body || {};
+
 const {
-// النص الذي يكتبه المستخدم (أي لغة في العالم)
+// النص الذي يكتبه المستخدم بأي لغة
 description,
+message,
+text,
+userText,
+transcript,
+
 // معلومات إضافية عن السيارة (اختيارية لكن مفيدة للـ GPT)
 vehicleMake,
 vehicleModel,
@@ -44,36 +54,56 @@ vehicleYear,
 engine,
 transmission,
 mileage,
+
 // موقع/منطقة المستخدم (يفيد بنصائح مثل الملح/الشتاء/الحرارة)
 region,
 country,
+
 // أكواد OBD-II إن وجدت
 troubleCodes,
+
 // وسائط إضافية (وصف الصوت، ملاحظات عن الصورة... الخ)
 audioNotes,
 imageNotes,
-// وضع FixLens (text / sound / camera) لو تحب تستخدمه في التحليل
-mode,
-// لغة مفضلة إن حبيت تبعثها من التطبيق (مثلاً "en" أو "ar"),
-// لكن سنعتمد دائماً على "كشف اللغة من النص" أولاً.
-preferredLanguage,
-} = req.body || {};
 
-if (!description || typeof description !== "string") {
+// وضع FixLens (text / sound / camera)
+mode,
+
+// لغة مفضلة (اختياري) – لكن نعتمد أساساً على كشف اللغة من النص
+preferredLanguage,
+} = body;
+
+// 🔥 1) نجمع كل الأسماء المحتملة للنص في متغيّر واحد موحّد
+let mergedDescription =
+description ??
+message ??
+text ??
+userText ??
+transcript ??
+imageNotes ??
+audioNotes ??
+"";
+
+if (typeof mergedDescription !== "string") {
+mergedDescription = String(mergedDescription || "");
+}
+mergedDescription = mergedDescription.trim();
+
+if (!mergedDescription || mergedDescription.length < 2) {
 return res.status(400).json({
 error: "Missing or invalid 'description' in request body.",
 });
 }
 
-// 1) استخدم قاعدة المعرفة auto_common_issues.json لمطابقة الأعراض
-const knowledgeSummary = buildIssueSummaryForLLM(description, {
+// 2) استخدم قاعدة المعرفة auto_common_issues.json لمطابقة الأعراض
+const knowledgeSummary = buildIssueSummaryForLLM(mergedDescription, {
 topN: 8,
 minScore: 1,
 });
 
-// 2) نبني JSON واضح نرسله للـ GPT
+// 3) نبني JSON واضح نرسله للـ GPT
 const llmInput = {
-user_description: description,
+user_description: mergedDescription,
 mode: mode || "text",
 user_region: region || country || null,
 
@@ -99,10 +129,7 @@ knowledge_base_matches: knowledgeSummary.matches,
 language_hint: preferredLanguage || null,
 };
 
-// 3) System Prompt – هنا نركّز على:
-// - كشف اللغة تلقائيًا
-// - الرد بنفس اللغة
-// - استخدام الـ knowledge_base_matches بدون اختراع أشياء خطيرة
+// 4) System Prompt – كشف لغة + استخدام قاعدة المعرفة + أمان
 const systemPrompt = `
 You are **FixLens Brain**, a world-class, multi-language automotive diagnostic assistant.
 
@@ -149,7 +176,7 @@ You will receive all input as a JSON object from FixLens. Read it carefully and 
 If "knowledge_base_matches" is empty, still give your best general guidance, but clearly say that this is a general direction, not a confirmed diagnosis.
 `.trim();
 
-// 4) طلب من GPT (مع الحفاظ على تعدد اللغات)
+// 5) طلب من GPT (مع الحفاظ على تعدد اللغات)
 const completion = await client.chat.completions.create({
 model: MODEL,
 temperature: 0.4,
@@ -170,7 +197,7 @@ const answer =
 completion.choices?.[0]?.message?.content?.trim() ||
 "Sorry, I could not generate a response.";
 
-// 5) نرجع الرد للتطبيق
+// 6) نرجع الرد للتطبيق
 return res.status(200).json({
 ok: true,
 model: MODEL,
