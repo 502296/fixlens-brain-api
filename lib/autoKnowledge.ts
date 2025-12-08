@@ -9,9 +9,19 @@ let cachedIssues = null;
 function loadIssues() {
 if (cachedIssues) return cachedIssues;
 
+try {
 const filePath = path.join(process.cwd(), "data", "auto_common_issues.json");
 const raw = fs.readFileSync(filePath, "utf8");
 cachedIssues = JSON.parse(raw);
+} catch (err) {
+console.error(
+"[FixLens] Failed to load auto_common_issues.json – continuing without KB:",
+err
+);
+// 👉 لا نوقف الـ API، بس نكمل بدون قاعدة معرفة
+cachedIssues = [];
+}
+
 return cachedIssues;
 }
 
@@ -22,10 +32,13 @@ return cachedIssues;
 export function findRelevantIssues(description, maxMatches = 5) {
 if (!description) return [];
 const issues = loadIssues();
+if (!issues || issues.length === 0) return [];
 
 const text = description.toLowerCase();
 const scored = issues.map((issue) => {
-const keywords = (issue.keywords || []).map((k) => String(k).toLowerCase());
+const keywords = (issue.keywords || []).map((k) =>
+String(k).toLowerCase()
+);
 let score = 0;
 for (const k of keywords) {
 if (text.includes(k)) score += 1;
