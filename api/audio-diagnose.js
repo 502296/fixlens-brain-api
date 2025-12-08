@@ -1,101 +1,127 @@
-// api/audio-diagnose.js
-// Analyze engine / car sounds from audio + respond في نفس لغة المستخدم
+// /api/audio-diagnose.js
+// FixLens – AUDIO DIAGNOSIS (multi-language sound analysis)
 
 import OpenAI from "openai";
+import formidable from "formidable";
 import fs from "fs";
-import os from "os";
-import path from "path";
 
 const client = new OpenAI({
 apiKey: process.env.OPENAI_API_KEY,
 });
 
+// نعطل bodyParser لاستقبال ملف
+export const config = {
+api: {
+bodyParser: false,
+},
+};
+
 export default async function handler(req, res) {
 if (req.method !== "POST") {
-res.setHeader("Allow", "POST");
-return res.status(405).json({ error: "Method not allowed" });
+return res
+.status(405)
+.json({ error: { code: 405, message: "Method not allowed" } });
 }
 
 try {
-const { audioBase64, preferredLanguage } = req.body || {};
+const form = formidable({ multiples: false });
 
-if (!audioBase64 || typeof audioBase64 !== "string") {
-return res.status(400).json({
-error: "Field 'audioBase64' (base64 audio) is required.",
+const { files } = await new Promise((resolve, reject) => {
+form.parse(req, (err, fields, files) => {
+if (err) reject(err);
+else resolve({ fields, files });
+});
+});
+
+// 👇 عدّل الاسم لو كنت تستخدم حقل مختلف من Flutter
+const audioFile = files?.audio || files?.file;
+if (!audioFile) {
+return res
+.status(400)
+.json({ error: { code: 400, message: "No audio file uploaded." } });
+}
+
+const audioStream = fs.createReadStream(audioFile.filepath);
+
+// 1) تفريغ الصوت إلى نص – الموديل يكتشف اللغة تلقائياً
+const transcription = await client.audio.transcriptions.create({
+model: "gpt-4o-transcribe",
+file: audioStream,
+});
+
+const transcriptText = (transcription.text || "").trim();
+if (!transcriptText) {
+return res.status(200).json({
+transcript: "",
+answer:
+"I couldn't understand the audio clearly. Please try again or describe the sound in text.",
 });
 }
 
-// نحفظ الصوت مؤقتاً في /tmp حتى يستخدمه Whisper
-const audioBuffer = Buffer.from(audioBase64, "base64");
-const tmpPath = path.join(
-os.tmpdir(),
-`fixlens-audio-${Date.now()}.m4a`
-);
-fs.writeFileSync(tmpPath, audioBuffer);
+// 2) تحليل النص (نفس اللغة التي تكلم بها المستخدم)
+const completion = await client.chat.completions.create({
+model: "gpt-4o-mini",
+temperature: 0.5,
+messages: [
+{
+role: "system",
+content: `
+You are **FixLens Auto – Sound Mode**, a smart assistant specialized in
+diagnosing **car issues based on sound**.
 
-// 1) Transcribe – نحصل نص + لغة
-const transcription = await client.audio.transcriptions.create({
-file: fs.createReadStream(tmpPath),
-model: "gpt-4o-mini-transcribe",
-});
+INPUT:
+- You receive a transcription of what the user said about the sound.
+- The transcription text is in the **same language** the user spoke.
 
-fs.unlink(tmpPath, () => {});
+LANGUAGE:
+- Always answer in the **same language as the transcription**.
+- If the text is Arabic → reply Arabic.
+- If English → reply English.
+- If Spanish, Hindi, etc. → reply in that language.
 
-const userText = transcription.text || "";
-const detectedLang = transcription.language || "";
+WHAT TO DO:
+1) Interpret the type of sound (knock, click, squeal, whine, rattle, etc.).
+2) Suggest the **most likely causes** (engine internals, belts, pulleys,
+suspension, brakes, transmission, exhaust, etc.).
+3) Indicate **driving risk**:
+- safe for short distance,
+- or avoid driving / stop immediately.
+4) Suggest **what the user can check now** without special tools.
+5) Suggest **the next professional step** (visit mechanic, what to tell them).
 
-const langNote =
-preferredLanguage && preferredLanguage !== "auto"
-? `Reply ONLY in the language code: ${preferredLanguage}.`
-: detectedLang
-? `Reply in the same language as this text (language code: ${detectedLang}).`
-: "Reply in the same language as the user's description, or English if unclear.";
+STYLE:
+- Clear and friendly.
+- Use short sections & bullet points:
+- وصف الصوت / Sound description
+- الأسباب المحتملة / Possible causes
+- ما يمكنك فحصه الآن / What you can check now
+- السلامة / Safety
+- الخطوة المهنية التالية / Professional next step
 
-const prompt =
-"You are FixLens Auto, an expert mechanic focused on diagnosing car issues from sounds and vibrations.\n\n" +
-"The user recorded a sound from their vehicle. Here is the transcription of what is audible / said:\n" +
-`"${userText}"\n\n` +
-"Based only on the sound characteristics and any hints in the transcription, do ALL of the following:\n" +
-"- Describe what the sound is like (for example: knocking, squeaking, grinding, whining, rattling, etc.).\n" +
-"- List a few *possible* causes (bulleted list).\n" +
-"- Explain whether driving is likely safe or risky.\n" +
-"- Suggest simple things the user can check or pay attention to before visiting a mechanic.\n" +
-"- End with a short, friendly reminder that this is not a final professional diagnosis.\n\n" +
-langNote;
-
-const response = await client.responses.create({
-model: "gpt-4.1-mini",
-input: [
+REMEMBER:
+- You are not a replacement for a certified mechanic.
+- Emphasize safety if there is any risk (brakes, steering, severe knocks, etc.).
+`.trim(),
+},
 {
 role: "user",
-content: [{ type: "input_text", text: prompt }],
+content: transcriptText,
 },
 ],
 });
 
-let replyText =
-"I analyzed the sound, but I couldn't generate a detailed explanation.";
-try {
-const first = response.output[0];
-const firstContent = first?.content?.[0];
-if (firstContent?.type === "output_text") {
-replyText = firstContent.text;
-}
-} catch (err) {
-console.error("Parse audio response error:", err);
-}
+const answer =
+completion.choices?.[0]?.message?.content ||
+"Sorry, I couldn't analyze this sound.";
 
 return res.status(200).json({
-reply: replyText,
-language: preferredLanguage || detectedLang || "auto",
-mode: "audio",
-domain: "auto",
+transcript: transcriptText,
+answer,
 });
 } catch (err) {
-console.error("audio-diagnose internal error:", err);
+console.error("FixLens Audio Diagnose error:", err);
 return res.status(500).json({
-error: "Internal error in audio-diagnose",
-details: String(err),
+error: { code: 500, message: "A server error has occurred (audio)." },
 });
 }
 }
