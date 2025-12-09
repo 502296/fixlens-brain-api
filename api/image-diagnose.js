@@ -32,6 +32,8 @@ if (req.method !== "POST") {
 return res.status(405).json({ code: 405, message: "Method not allowed" });
 }
 
+const startTime = Date.now();
+
 try {
 const body =
 typeof req.body === "string" ? JSON.parse(req.body) : req.body || {};
@@ -116,12 +118,18 @@ temperature: 0.5,
 });
 
 const reply = completion.choices[0]?.message?.content?.trim() || "";
+const latencyMs = Date.now() - startTime;
 
 logFixLensEvent({
 source: "mobile-app",
+endpoint: "/api/image-diagnose",
 mode,
+inputType: "image",
+userLang: targetLanguage,
 userMessage: userNote || "[image only]",
 aiReply: reply,
+status: "success",
+latencyMs,
 meta: {
 languageHint,
 targetLanguage,
@@ -136,6 +144,21 @@ reply,
 });
 } catch (err) {
 console.error("FixLens Brain image-diagnose error:", err);
+
+const latencyMs = Date.now() - startTime;
+logFixLensEvent({
+source: "mobile-app",
+endpoint: "/api/image-diagnose",
+mode: "image",
+inputType: "image",
+status: "error",
+errorMessage: err?.message || String(err),
+latencyMs,
+meta: {
+model: "gpt-4.1-mini",
+},
+}).catch(() => {});
+
 return res.status(500).json({
 code: 500,
 message: "A server error has occurred",
