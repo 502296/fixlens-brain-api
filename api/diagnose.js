@@ -1,7 +1,6 @@
 // api/diagnose.js
 import OpenAI from "openai";
 import { findRelevantIssues } from "../lib/autoKnowledge.js";
-import { logFixLensEvent } from "../lib/supabaseClient.js";
 
 const apiKey = process.env.OPENAI_API_KEY || "";
 
@@ -20,7 +19,7 @@ try {
 const body =
 typeof req.body === "string" ? JSON.parse(req.body) : req.body || {};
 
-// نقبل أي اسم قديم / جديد
+// نقبل كل الأسماء القديمة والجديدة
 const message =
 body.message ||
 body.text ||
@@ -37,8 +36,8 @@ return res
 .json({ code: 400, message: "Message required." });
 }
 
-// لو المفتاح مفقود نرجع رسالة واضحة بدل كراش داخلي
 if (!apiKey) {
+// مفتاح OpenAI مفقود → رسالة واضحة بدل 500 غامض
 return res.status(500).json({
 code: 500,
 message:
@@ -46,7 +45,7 @@ message:
 });
 }
 
-// نحاول نقرأ autoKnowledge لكن ما نكسر الـ API لو صار خطأ
+// نحاول نقرأ autoKnowledge لكن ما نسمح له يكسر الـ API
 let autoKnowledgeText = null;
 try {
 autoKnowledgeText = findRelevantIssues(message);
@@ -72,10 +71,7 @@ If extra internal knowledge is provided, use it but do NOT mention "database" or
 const messages = [
 { role: "system", content: systemPrompt },
 autoKnowledgeText
-? {
-role: "system",
-content: autoKnowledgeText,
-}
+? { role: "system", content: autoKnowledgeText }
 : null,
 { role: "user", content: message },
 ].filter(Boolean);
@@ -88,7 +84,13 @@ temperature: 0.5,
 
 const reply = completion.choices[0]?.message?.content?.trim() || "";
 
-// لوج في Supabase (بدون ما يكسّر الرد لو فشل)
+// ================== Supabase Logging (اختياري وآمن) ==================
+try {
+// نستورد الموديل ديناميكياً حتى لو فيه خطأ ما يكسر الملف كله
+const supaModule = await import("../lib/supabaseClient.js");
+const logFixLensEvent = supaModule.logFixLensEvent;
+
+if (typeof logFixLensEvent === "function") {
 try {
 await logFixLensEvent({
 source: "mobile-app",
@@ -103,6 +105,16 @@ model: "gpt-4.1-mini",
 } catch (logErr) {
 console.error("Supabase log error:", logErr);
 }
+} else {
+console.warn(
+"logFixLensEvent is not a function. Supabase logging skipped."
+);
+}
+} catch (moduleErr) {
+// أي خطأ في استيراد supabaseClient.js لن يكسر الـ API
+console.error("Supabase module load error, logging skipped:", moduleErr);
+}
+// =====================================================================
 
 return res.status(200).json({
 code: 200,
