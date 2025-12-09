@@ -2,21 +2,30 @@
 "version": 2,
 "functions": {
 "api/diagnose.js": {
-"runtime": "nodejs18.x",
+"runtime": "nodejs20.x",
 "maxDuration": 60
 },
 "api/image-diagnose.js": {
-"runtime": "nodejs18.x",
+"runtime": "nodejs20.x",
 "maxDuration": 60
 },
 "api/audio-diagnose.js": {
-"runtime": "nodejs18.x",
-"maxDuration": 60"
+"runtime": "nodejs20.x",
+"maxDuration": 60
 }
 },
 "routes": [
-{ "src": "/api/diagnose", "dest": "/api/diagnose.js" },
-{ "src": "/api/image-diagnose", "dest": "/api/image-diagnose.js" },
-{ "src": "/api/audio-diagnose", "dest": "/api/audio-diagnose.js" }
+{
+"src": "/api/diagnose",
+"dest": "/api/diagnose.js"
+},
+{
+"src": "/api/image-diagnose",
+"dest": "/api/image-diagnose.js"
+},
+{
+"src": "/api/audio-diagnose",
+"dest": "/api/audio-diagnose.js"
+}
 ]
 }
