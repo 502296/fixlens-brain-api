@@ -3,17 +3,22 @@ import OpenAI from "openai";
 import { findRelevantIssues } from "../lib/autoKnowledge.js";
 import { logFixLensEvent } from "../lib/supabaseClient.js";
 
+const apiKey = process.env.OPENAI_API_KEY || "";
+
 const openai = new OpenAI({
-apiKey: process.env.OPENAI_API_KEY,
+apiKey,
 });
 
 export default async function handler(req, res) {
 if (req.method !== "POST") {
-return res.status(405).json({ code: 405, message: "Method not allowed" });
+return res
+.status(405)
+.json({ code: 405, message: "Method not allowed" });
 }
 
 try {
-const body = typeof req.body === "string" ? JSON.parse(req.body) : req.body || {};
+const body =
+typeof req.body === "string" ? JSON.parse(req.body) : req.body || {};
 
 // نقبل أي اسم قديم / جديد
 const message =
@@ -32,7 +37,23 @@ return res
 .json({ code: 400, message: "Message required." });
 }
 
-const autoKnowledge = findRelevantIssues(message);
+// لو المفتاح مفقود نرجع رسالة واضحة بدل كراش داخلي
+if (!apiKey) {
+return res.status(500).json({
+code: 500,
+message:
+"OPENAI_API_KEY is not configured on the server. Please add it in Vercel Environment Variables.",
+});
+}
+
+// نحاول نقرأ autoKnowledge لكن ما نكسر الـ API لو صار خطأ
+let autoKnowledgeText = null;
+try {
+autoKnowledgeText = findRelevantIssues(message);
+} catch (err) {
+console.error("autoKnowledge error:", err);
+autoKnowledgeText = null;
+}
 
 const systemPrompt = `
 You are FixLens Brain – a world-class multilingual diagnostic assistant for cars, home appliances, and general mechanical issues.
@@ -50,10 +71,10 @@ If extra internal knowledge is provided, use it but do NOT mention "database" or
 
 const messages = [
 { role: "system", content: systemPrompt },
-autoKnowledge
+autoKnowledgeText
 ? {
 role: "system",
-content: autoKnowledge,
+content: autoKnowledgeText,
 }
 : null,
 { role: "user", content: message },
@@ -68,7 +89,8 @@ temperature: 0.5,
 const reply = completion.choices[0]?.message?.content?.trim() || "";
 
 // لوج في Supabase (بدون ما يكسّر الرد لو فشل)
-logFixLensEvent({
+try {
+await logFixLensEvent({
 source: "mobile-app",
 mode,
 userMessage: message,
@@ -77,7 +99,10 @@ meta: {
 languageHint,
 model: "gpt-4.1-mini",
 },
-}).catch(() => {});
+});
+} catch (logErr) {
+console.error("Supabase log error:", logErr);
+}
 
 return res.status(200).json({
 code: 200,
@@ -89,7 +114,8 @@ console.error("FixLens Brain diagnose error:", err);
 return res.status(500).json({
 code: 500,
 message: "A server error has occurred",
-details: process.env.NODE_ENV === "development" ? err.message : undefined,
+details:
+process.env.NODE_ENV === "development" ? err.message : undefined,
 });
 }
 }
