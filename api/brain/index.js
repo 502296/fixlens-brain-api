@@ -1,9 +1,4 @@
-import { loadKnowledge } from './database-utility.js';
-
-
-
+// api/brain/index.js
 export const brainIndex = {
-
-  knowledge: loadKnowledge(),
-
+knowledge: "FixLens Brain core index placeholder",
 };
