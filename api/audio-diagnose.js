@@ -32,6 +32,8 @@ if (req.method !== "POST") {
 return res.status(405).json({ code: 405, message: "Method not allowed" });
 }
 
+const started = Date.now();
+
 try {
 const body =
 typeof req.body === "string" ? JSON.parse(req.body) : req.body || {};
@@ -56,7 +58,7 @@ file: {
 data: audioBuffer,
 name: `voice-note.${mimeType.split("/")[1] || "m4a"}`,
 },
-// نترك اللغة auto، حتى يتعرّف على العربية / الإسبانية / ...
+// نخلي اللغة auto حتى يتعرف على العربية / الإسبانية / ...
 });
 
 const transcriptText = (transcription.text || "").trim();
@@ -103,6 +105,7 @@ General rules:
 - Ask 2–3 smart follow-up questions if needed.
 - Be honest about uncertainty and give safety warnings when needed.
 ${autoKnowledge ? "\nInternal hints:\n" + autoKnowledge : ""}
+
 Transcript:
 """${transcriptText}"""
 `;
@@ -118,16 +121,21 @@ temperature: 0.5,
 
 const reply = completion.choices[0]?.message?.content?.trim() || "";
 
+const latencyMs = Date.now() - started;
+
 logFixLensEvent({
 source: "mobile-app",
 mode,
 userMessage: transcriptText,
 aiReply: reply,
 meta: {
+endpoint: "/api/audio-diagnose",
 languageHint,
 targetLanguage,
 model: "gpt-4.1-mini",
 transcriptionModel: "gpt-4o-mini-transcribe",
+latencyMs,
+success: true,
 },
 }).catch(() => {});
 
@@ -135,9 +143,25 @@ return res.status(200).json({
 code: 200,
 message: "OK",
 reply,
+language: targetLanguage,
 });
 } catch (err) {
 console.error("FixLens Brain audio-diagnose error:", err);
+
+const latencyMs = Date.now() - started;
+logFixLensEvent({
+source: "mobile-app",
+mode: "audio",
+userMessage: null,
+aiReply: null,
+meta: {
+endpoint: "/api/audio-diagnose",
+error: err?.message || String(err),
+latencyMs,
+success: false,
+},
+}).catch(() => {});
+
 return res.status(500).json({
 code: 500,
 message: "A server error has occurred",
