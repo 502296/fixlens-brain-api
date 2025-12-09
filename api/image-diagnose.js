@@ -1,169 +1,63 @@
-// api/image-diagnose.js
 import OpenAI from "openai";
-import { findRelevantIssues } from "../lib/autoKnowledge.js";
-import { logFixLensEvent } from "../lib/supabaseClient.js";
+import { loadIssues } from "../lib/autoKnowledge.js";
 
-const openai = new OpenAI({
-apiKey: process.env.OPENAI_API_KEY,
+export const config = {
+runtime: "edge",
+};
+
+const client = new OpenAI({
+apiKey: process.env.OPENAI_API_KEY
 });
 
-function guessLanguage(text) {
-if (!text || !text.trim()) return null;
-const t = text.trim();
-
-if (/[\u0600-\u06FF]/.test(t)) return "ar";
-if (/[\u0400-\u04FF]/.test(t)) return "ru";
-if (/[\u0370-\u03FF]/.test(t)) return "el";
-if (/[\u4E00-\u9FFF]/.test(t)) return "zh";
-
-const lower = t.toLowerCase();
-
-if (/[ñáéíóúü]|hola\b|gracias\b|buenos\s+d[ií]as/.test(lower)) return "es";
-if (/[àâçéèêëîïôùûüÿœ]|bonjour\b|merci\b/.test(lower)) return "fr";
-if (/[äöüß]|hallo\b|danke\b/.test(lower)) return "de";
-
-if (/^[\x00-\x7F]+$/.test(t)) return "en";
-
-return null;
-}
-
-export default async function handler(req, res) {
-if (req.method !== "POST") {
-return res.status(405).json({ code: 405, message: "Method not allowed" });
-}
-
-const startTime = Date.now();
-
+export default async function handler(req) {
 try {
-const body =
-typeof req.body === "string" ? JSON.parse(req.body) : req.body || {};
-
-const imageBase64 = body.imageBase64;
-const userNote = body.note || body.userText || "";
-const languageHint = body.language || "auto";
-const mode = "image";
-
-if (!imageBase64) {
-return res
-.status(400)
-.json({ code: 400, message: "imageBase64 is required." });
+const body = await req.json();
+const base64 = body.imageBase64 || "";
+if (!base64) {
+return new Response(JSON.stringify({ error: "Missing image" }), { status: 400 });
 }
 
-const autoKnowledge = userNote
-? findRelevantIssues(userNote)
-: null;
-
-let targetLanguage = null;
-if (languageHint && languageHint !== "auto") {
-targetLanguage = languageHint;
-} else {
-targetLanguage = guessLanguage(userNote) || "en";
-}
-
-const languageInstruction =
-targetLanguage === "en"
-? "Reply in natural English, unless the note is clearly in another language."
-: `Reply strictly in this language: ${targetLanguage}.`;
+const issues = loadIssues();
 
 const systemPrompt = `
-You are FixLens Brain – a world-class multilingual diagnostic assistant for cars, home appliances, and general mechanical issues.
+You are FixLens Auto — an AI expert in vehicle visual diagnostics.
+You ALWAYS speak in the user's detected language.
+Describe what you see in the image and then give:
+1) Possible problems.
+2) Severity.
+3) Safety warnings.
+4) Steps to verify the problem.
 
-Language rule:
-- ${languageInstruction}
-- NEVER switch to another language unless the user clearly switches.
-- If there's any Arabic, answer fully in Arabic. If Spanish, answer in Spanish, etc.
-
-General rules:
-- You are now analyzing an image related to a possible mechanical/auto issue.
-- Describe briefly what you see that is relevant to the problem.
-- Then follow the same structure:
-- **Quick Summary**
-- **Most Likely Causes**
-- **What You Can Check Now**
-- **Safety / When to Stop Driving or Using the device**
-- **Next Professional Step**
-- If the user note gives extra context, use it.
-- Be honest about uncertainty and give safety warnings when needed.
-${autoKnowledge ? "\nInternal hints:\n" + autoKnowledge : ""}
+Be confident and helpful.
 `;
 
-const userText =
-userNote && userNote.trim().length > 0
-? userNote
-: "Please analyze this image and explain any possible issues, in the correct language.";
-
-const messages = [
-{
-role: "system",
-content: systemPrompt,
-},
+const completion = await client.chat.completions.create({
+model: "gpt-4o-mini",
+messages: [
+{ role: "system", content: systemPrompt },
 {
 role: "user",
 content: [
-{ type: "text", text: userText },
 {
-type: "input_image",
-image_url: {
-url: `data:image/jpeg;base64,${imageBase64}`,
+type: "image_url",
+image_url: `data:image/jpeg;base64,${base64}`
 },
-},
-],
-},
-];
-
-const completion = await openai.chat.completions.create({
-model: "gpt-4.1-mini",
-messages,
-temperature: 0.5,
+{ type: "text", text: "Analyze this car photo." }
+]
+}
+]
 });
 
-const reply = completion.choices[0]?.message?.content?.trim() || "";
-const latencyMs = Date.now() - startTime;
+const reply = completion.choices[0].message.content;
 
-logFixLensEvent({
-source: "mobile-app",
-endpoint: "/api/image-diagnose",
-mode,
-inputType: "image",
-userLang: targetLanguage,
-userMessage: userNote || "[image only]",
-aiReply: reply,
-status: "success",
-latencyMs,
-meta: {
-languageHint,
-targetLanguage,
-model: "gpt-4.1-mini",
-},
-}).catch(() => {});
+return new Response(JSON.stringify({
+reply
+}), { status: 200 });
 
-return res.status(200).json({
-code: 200,
-message: "OK",
-reply,
-});
 } catch (err) {
-console.error("FixLens Brain image-diagnose error:", err);
-
-const latencyMs = Date.now() - startTime;
-logFixLensEvent({
-source: "mobile-app",
-endpoint: "/api/image-diagnose",
-mode: "image",
-inputType: "image",
-status: "error",
-errorMessage: err?.message || String(err),
-latencyMs,
-meta: {
-model: "gpt-4.1-mini",
-},
-}).catch(() => {});
-
-return res.status(500).json({
-code: 500,
-message: "A server error has occurred",
-details:
-process.env.NODE_ENV === "development" ? err.message : undefined,
-});
+return new Response(JSON.stringify({
+error: "SERVER_ERROR",
+details: err.message
+}), { status: 500 });
 }
 }
