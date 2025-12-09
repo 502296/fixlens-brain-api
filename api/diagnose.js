@@ -1,31 +1,49 @@
 // api/diagnose.js
 import OpenAI from "openai";
 import { findRelevantIssues } from "../lib/autoKnowledge.js";
-
-const apiKey = process.env.OPENAI_API_KEY || "";
+import { logFixLensEvent } from "../lib/supabaseClient.js";
 
 const openai = new OpenAI({
-apiKey,
+apiKey: process.env.OPENAI_API_KEY,
 });
+
+// دالة بسيطة لمحاولة تخمين اللغة من النص
+function guessLanguage(text) {
+if (!text || !text.trim()) return null;
+const t = text.trim();
+
+// Arabic
+if (/[\u0600-\u06FF]/.test(t)) return "ar";
+// Cyrillic → Russian تقريباً
+if (/[\u0400-\u04FF]/.test(t)) return "ru";
+// Greek
+if (/[\u0370-\u03FF]/.test(t)) return "el";
+// CJK
+if (/[\u4E00-\u9FFF]/.test(t)) return "zh";
+
+const lower = t.toLowerCase();
+
+if (/[ñáéíóúü]|hola\b|gracias\b|buenos\s+d[ií]as/.test(lower)) return "es";
+if (/[àâçéèêëîïôùûüÿœ]|bonjour\b|merci\b/.test(lower)) return "fr";
+if (/[äöüß]|hallo\b|danke\b/.test(lower)) return "de";
+
+// ASCII فقط → غالباً إنجليزي
+if (/^[\x00-\x7F]+$/.test(t)) return "en";
+
+return null;
+}
 
 export default async function handler(req, res) {
 if (req.method !== "POST") {
-return res
-.status(405)
-.json({ code: 405, message: "Method not allowed" });
+return res.status(405).json({ code: 405, message: "Method not allowed" });
 }
 
 try {
 const body =
 typeof req.body === "string" ? JSON.parse(req.body) : req.body || {};
 
-// نقبل كل الأسماء القديمة والجديدة
 const message =
-body.message ||
-body.text ||
-body.user_message ||
-body.prompt ||
-"";
+body.message || body.text || body.user_message || body.prompt || "";
 
 const languageHint = body.language || "auto";
 const mode = body.mode || "text";
@@ -36,30 +54,35 @@ return res
 .json({ code: 400, message: "Message required." });
 }
 
-if (!apiKey) {
-// مفتاح OpenAI مفقود → رسالة واضحة بدل 500 غامض
-return res.status(500).json({
-code: 500,
-message:
-"OPENAI_API_KEY is not configured on the server. Please add it in Vercel Environment Variables.",
-});
+const autoKnowledge = findRelevantIssues(message);
+
+let targetLanguage = null;
+if (languageHint && languageHint !== "auto") {
+targetLanguage = languageHint;
+} else {
+targetLanguage = guessLanguage(message) || "en";
 }
 
-// نحاول نقرأ autoKnowledge لكن ما نسمح له يكسر الـ API
-let autoKnowledgeText = null;
-try {
-autoKnowledgeText = findRelevantIssues(message);
-} catch (err) {
-console.error("autoKnowledge error:", err);
-autoKnowledgeText = null;
-}
+const languageInstruction =
+targetLanguage === "en"
+? "Reply in natural English, unless the text is clearly in another language."
+: `Reply strictly in this language: ${targetLanguage}.`;
 
 const systemPrompt = `
 You are FixLens Brain – a world-class multilingual diagnostic assistant for cars, home appliances, and general mechanical issues.
 
-Rules:
-- ALWAYS reply in the SAME LANGUAGE as the user's message.
+Language rule:
+- ${languageInstruction}
+- NEVER switch to another language unless the user clearly switches.
+- If there's any Arabic, answer fully in Arabic. If Spanish, answer in Spanish, etc.
+
+General rules:
 - Be friendly, clear, and step-by-step.
+- Start with a short **Quick Summary**.
+- Then list **Most Likely Causes** as bullet points.
+- Then **What You Can Check Now**.
+- Then **Safety / When to Stop Driving or Using the device**.
+- Then **Next Professional Step**.
 - Ask 2–3 smart follow-up questions if needed.
 - If the user describes a car problem, think like a professional mechanic.
 - If it's a different type of problem (home, appliance, etc.), think like the right pro.
@@ -70,8 +93,11 @@ If extra internal knowledge is provided, use it but do NOT mention "database" or
 
 const messages = [
 { role: "system", content: systemPrompt },
-autoKnowledgeText
-? { role: "system", content: autoKnowledgeText }
+autoKnowledge
+? {
+role: "system",
+content: autoKnowledge,
+}
 : null,
 { role: "user", content: message },
 ].filter(Boolean);
@@ -84,37 +110,18 @@ temperature: 0.5,
 
 const reply = completion.choices[0]?.message?.content?.trim() || "";
 
-// ================== Supabase Logging (اختياري وآمن) ==================
-try {
-// نستورد الموديل ديناميكياً حتى لو فيه خطأ ما يكسر الملف كله
-const supaModule = await import("../lib/supabaseClient.js");
-const logFixLensEvent = supaModule.logFixLensEvent;
-
-if (typeof logFixLensEvent === "function") {
-try {
-await logFixLensEvent({
+// Log إلى Supabase (بدون ما يكسر لو فشل)
+logFixLensEvent({
 source: "mobile-app",
 mode,
 userMessage: message,
 aiReply: reply,
 meta: {
 languageHint,
+targetLanguage,
 model: "gpt-4.1-mini",
 },
-});
-} catch (logErr) {
-console.error("Supabase log error:", logErr);
-}
-} else {
-console.warn(
-"logFixLensEvent is not a function. Supabase logging skipped."
-);
-}
-} catch (moduleErr) {
-// أي خطأ في استيراد supabaseClient.js لن يكسر الـ API
-console.error("Supabase module load error, logging skipped:", moduleErr);
-}
-// =====================================================================
+}).catch(() => {});
 
 return res.status(200).json({
 code: 200,
