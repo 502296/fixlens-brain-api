@@ -4,6 +4,9 @@
 "api/diagnose.js": {
 "maxDuration": 60
 },
+"api/image-diagnose.js": {
+"maxDuration": 60
+},
 "api/audio-diagnose.js": {
 "maxDuration": 60
 }
@@ -12,6 +15,10 @@
 {
 "src": "/api/diagnose",
 "dest": "/api/diagnose.js"
+},
+{
+"src": "/api/image-diagnose",
+"dest": "/api/image-diagnose.js"
 },
 {
 "src": "/api/audio-diagnose",
