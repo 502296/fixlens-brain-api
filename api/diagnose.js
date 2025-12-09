@@ -38,6 +38,8 @@ if (req.method !== "POST") {
 return res.status(405).json({ code: 405, message: "Method not allowed" });
 }
 
+const startTime = Date.now();
+
 try {
 const body =
 typeof req.body === "string" ? JSON.parse(req.body) : req.body || {};
@@ -109,13 +111,19 @@ temperature: 0.5,
 });
 
 const reply = completion.choices[0]?.message?.content?.trim() || "";
+const latencyMs = Date.now() - startTime;
 
 // Log إلى Supabase (بدون ما يكسر لو فشل)
 logFixLensEvent({
 source: "mobile-app",
+endpoint: "/api/diagnose",
 mode,
+inputType: "text",
+userLang: targetLanguage,
 userMessage: message,
 aiReply: reply,
+status: "success",
+latencyMs,
 meta: {
 languageHint,
 targetLanguage,
@@ -130,6 +138,22 @@ reply,
 });
 } catch (err) {
 console.error("FixLens Brain diagnose error:", err);
+
+const latencyMs = Date.now() - startTime;
+// نحفظ لوج خطأ (اختياري)
+logFixLensEvent({
+source: "mobile-app",
+endpoint: "/api/diagnose",
+mode: "text",
+inputType: "text",
+status: "error",
+errorMessage: err?.message || String(err),
+latencyMs,
+meta: {
+model: "gpt-4.1-mini",
+},
+}).catch(() => {});
+
 return res.status(500).json({
 code: 500,
 message: "A server error has occurred",
