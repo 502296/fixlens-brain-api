@@ -1,119 +1,157 @@
 // api/audio-diagnose.js
-import fs from "fs";
-import path from "path";
 import OpenAI from "openai";
+import { toFile } from "openai/uploads";
 import { findRelevantIssues } from "../lib/autoKnowledge.js";
-import { logFixLensEvent } from "../lib/supabaseClient.js";
+
+const apiKey = process.env.OPENAI_API_KEY || "";
 
 const openai = new OpenAI({
-apiKey: process.env.OPENAI_API_KEY,
+apiKey,
 });
 
 export default async function handler(req, res) {
 if (req.method !== "POST") {
-return res.status(405).json({ code: 405, message: "Method not allowed" });
+return res
+.status(405)
+.json({ code: 405, message: "Method not allowed" });
 }
 
 try {
-const body = typeof req.body === "string" ? JSON.parse(req.body) : req.body || {};
+const body =
+typeof req.body === "string" ? JSON.parse(req.body) : req.body || {};
 
-const audioBase64 = body.audioBase64;
+const audioBase64 = body.audioBase64 || body.audio || "";
 const mimeType = body.mimeType || "audio/m4a";
-const userNote = body.note || "";
+const note = body.note || "";
+const languageHint = body.language || "auto";
+const mode = "audio";
 
-if (!audioBase64) {
-return res
-.status(400)
-.json({ code: 400, message: "audioBase64 required." });
+if (!audioBase64 || !audioBase64.trim()) {
+return res.status(400).json({
+code: 400,
+message: "audioBase64 is required.",
+});
 }
 
-// نحفظ الملف مؤقتاً في /tmp
-const buffer = Buffer.from(audioBase64, "base64");
-const tmpDir = "/tmp";
-const filePath = path.join(tmpDir, `fixlens-audio-${Date.now()}.m4a`);
-fs.writeFileSync(filePath, buffer);
+if (!apiKey) {
+return res.status(500).json({
+code: 500,
+message:
+"OPENAI_API_KEY is not configured on the server. Please add it in Vercel Environment Variables.",
+});
+}
 
-// 1) تحويل الصوت إلى نص
-const transcriptResp = await openai.audio.transcriptions.create({
-file: fs.createReadStream(filePath),
+// 1) نحول الـ base64 إلى ملف مؤقت لاستخدامه مع Whisper
+const extension =
+mimeType.split("/")[1]?.split(";")[0] || "m4a";
+
+const audioFile = await toFile(
+Buffer.from(audioBase64, "base64"),
+`voice.${extension}`
+);
+
+// 2) نستخدم Whisper (gpt-4o-mini-transcribe) لتحويل الصوت إلى نص
+const transcription =
+await openai.audio.transcriptions.create({
+file: audioFile,
 model: "gpt-4o-mini-transcribe",
-response_format: "json",
-language: "auto",
 });
 
-const transcript = transcriptResp.text?.trim() || "";
+const transcriptText =
+transcription.text?.trim() || "";
 
-// نمسح الملف المؤقت
-try {
-fs.unlinkSync(filePath);
-} catch (_) {}
-
-if (!transcript) {
+if (!transcriptText) {
 return res.status(200).json({
 code: 200,
 message: "OK",
-transcript: "",
 reply:
-"FixLens could not clearly understand the audio. Please try again with a closer recording or add a text description.",
+"I received your voice note but could not understand the audio clearly. Please try again or describe the problem in text.",
 });
 }
 
-const autoKnowledge = findRelevantIssues(transcript);
+// نستخدم الـ transcript + الملاحظة (إن وجدت)
+let userCombinedText = transcriptText;
+if (note && note.trim().length > 0) {
+userCombinedText = `${note.trim()}\n\nVoice note transcript:\n${transcriptText}`;
+}
+
+let autoKnowledgeText = null;
+try {
+autoKnowledgeText = findRelevantIssues(userCombinedText);
+} catch (err) {
+console.error("autoKnowledge (audio) error:", err);
+autoKnowledgeText = null;
+}
 
 const systemPrompt = `
-You are FixLens Brain – an audio diagnostic assistant.
-User just recorded a sound from a car or mechanical system.
+You are FixLens Brain – a world-class multilingual diagnostic assistant.
+
+You will receive:
+- A transcription of the user's voice note
+- Optional extra note they typed
 
 Rules:
-- First, summarize what the noise sounds like (rhythm, pitch, pattern).
-- Then suggest 2–3 possible causes and what the user should check.
-- Use internal knowledge if provided.
-- Reply in the same language as the user if possible.
+- ALWAYS reply in the SAME LANGUAGE as the transcription (or note).
+- First, confirm briefly that you understood the voice note.
+- Then give a clear step-by-step diagnostic plan.
+- Use mechanic thinking for car issues, and appliance/technical thinking for other issues.
+- Give safety warnings when appropriate.
 `;
 
 const messages = [
 { role: "system", content: systemPrompt },
-autoKnowledge
-? {
-role: "system",
-content: autoKnowledge,
-}
-: null,
-userNote
-? { role: "user", content: `Extra note from user: ${userNote}` }
+autoKnowledgeText
+? { role: "system", content: autoKnowledgeText }
 : null,
 {
 role: "user",
-content: `Here is the transcription of the noise: "${transcript}"`,
+content: userCombinedText,
 },
 ].filter(Boolean);
 
 const completion = await openai.chat.completions.create({
 model: "gpt-4.1-mini",
 messages,
-temperature: 0.4,
+temperature: 0.5,
 });
 
 const reply = completion.choices[0]?.message?.content?.trim() || "";
 
-logFixLensEvent({
+// ============ Supabase logging (اختياري وآمن) ============
+try {
+const supaModule = await import("../lib/supabaseClient.js");
+const logFixLensEvent = supaModule.logFixLensEvent;
+
+if (typeof logFixLensEvent === "function") {
+await logFixLensEvent({
 source: "mobile-app",
-mode: "audio",
-userMessage: transcript,
+mode,
+userMessage: userCombinedText,
 aiReply: reply,
-meta: { mimeType },
-}).catch(() => {});
+meta: {
+languageHint,
+model: "gpt-4.1-mini",
+hasAudio: true,
+},
+});
+}
+} catch (logErr) {
+console.error("Supabase audio log error (ignored):", logErr);
+}
+// =========================================================
 
 return res.status(200).json({
 code: 200,
 message: "OK",
-transcript,
 reply,
 });
 } catch (err) {
 console.error("FixLens Brain audio-diagnose error:", err);
-return res
-.status(500)
-.json({ code: 500, message: "A server error has occurred" });
+return res.status(500).json({
+code: 500,
+message: "A server error has occurred",
+details:
+process.env.NODE_ENV === "development" ? err.message : undefined,
+});
 }
 }
