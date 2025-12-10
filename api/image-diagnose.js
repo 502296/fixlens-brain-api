@@ -118,14 +118,11 @@ ${
         ? userNote
         : "Please analyze this image and explain any possible issues, in the correct language.";
 
-    const completion = await openai.responses.create({
+    const response = await openai.responses.create({
       model: "gpt-4.1-mini",
+      instructions: systemPrompt,
       max_output_tokens: 900,
       input: [
-        {
-          role: "system",
-          content: [{ type: "input_text", text: systemPrompt }],
-        },
         {
           role: "user",
           content: [
@@ -140,7 +137,7 @@ ${
     });
 
     const reply =
-      (completion.output_text && completion.output_text.trim()) ||
+      (response.output_text && response.output_text.trim()) ||
       "I could not analyze the image.";
 
     const latencyMs = Date.now() - started;
