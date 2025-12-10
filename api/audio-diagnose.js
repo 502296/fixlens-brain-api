@@ -6,7 +6,9 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-// نفس دالة تخمين اللغة التي استخدمناها في image-diagnose
+// ===================== Helpers =====================
+
+// تخمين اللغة من النص
 function guessLanguage(text) {
   if (!text || !text.trim()) return "en";
   const t = text.trim();
@@ -21,25 +23,90 @@ function guessLanguage(text) {
   return "en";
 }
 
-// 🧠 برومبت عام لتحليل مشاكل السيارات
+// هل الترانسكربت فعلاً يشبه وصف مشكلة سيارة؟
+function looksLikeCarDescription(text) {
+  if (!text) return false;
+  const t = text.toLowerCase().trim();
+
+  const words = t.split(/\s+/).filter((w) => /[a-z\u0600-\u06FF]/i.test(w));
+  if (words.length < 3) return false;
+
+  const carWords = [
+    "engine",
+    "motor",
+    "car",
+    "vehicle",
+    "noise",
+    "sound",
+    "knock",
+    "rattle",
+    "click",
+    "tapping",
+    "vibration",
+    "shake",
+    "brake",
+    "brakes",
+    "belt",
+    "timing",
+    "chain",
+    "transmission",
+    "gear",
+    "start",
+    "starting",
+    "idle",
+    "rpm",
+    "exhaust",
+    "smoke",
+    "leak",
+    "oil",
+    "coolant",
+    "overheat",
+    "overheating",
+
+    "محرك",
+    "المحرك",
+    "سيارة",
+    "السيارة",
+    "صوت",
+    "ضجيج",
+    "طرق",
+    "طقطقة",
+    "رجة",
+    "رجه",
+    "اهتزاز",
+    "فرامل",
+    "بنزين",
+    "ديزل",
+    "دخان",
+    "تهريب",
+    "زيت",
+    "ماء",
+    "حرارة",
+    "قير",
+    "جير",
+  ];
+
+  const hasCarWord = carWords.some((w) => t.includes(w));
+  return hasCarWord;
+}
+
+// برومبت FixLens
 const BASE_SYSTEM_PROMPT = `
 You are **FixLens Auto**, an intelligent automotive diagnosis assistant.
+You ONLY talk about vehicles (cars, SUVs, trucks, vans).
+
 You receive:
-- A short **transcription of what the user said in the voice note** (could be any language).
-- Optional **notes** from the user.
-- Optional **matched common issues JSON** from auto_common_issues.json.
+- A short transcription of what the user said in a voice note (any language).
+- Optional extra notes.
+- Optional relevant issues JSON from auto_common_issues.json.
 
 Your job:
-1. Understand the described symptoms (noises, vibrations, leaks, warning lights, smells, performance issues, starting problems, etc.).
-2. Combine:
-   - The voice transcription,
-   - Any extra user notes,
-   - And the relevant issues JSON (if provided)
-   to produce a high-quality, structured answer for a car owner or mechanic.
+1. Understand the symptoms (noises, vibrations, leaks, warning lights, smells, performance issues, starting problems, etc.).
+2. Combine transcription + notes + JSON hints to produce a clear, honest diagnosis.
 
-Always answer in the **same language as the user** (if it seems Arabic, answer Arabic; if English, answer English, etc.).
+Always answer in the **same language as the user** if possible.
 
-Your reply MUST follow this structure (markdown):
+Your reply MUST follow this markdown structure:
 
 **Quick Summary:**
 - ...
@@ -57,102 +124,92 @@ Your reply MUST follow this structure (markdown):
 **Next Professional Step:**
 - ...
 
-If information is not enough, be honest and politely ask for more details instead of guessing blindly.
+If information is not enough, say so and ask for more details instead of guessing.
 `;
 
-// دالة صغيرة لاستخراج النص من response من نوع OpenAI Responses API
+// استخراج النص من Responses API
 function extractTextFromResponse(resp) {
   try {
     const first = resp.output?.[0];
     if (!first || !first.content) return null;
-
     const textPart = first.content.find((c) => c.type === "output_text");
     if (textPart && textPart.text) return textPart.text.toString();
-
-    // fallback قديم
-    if (typeof first.output_text === "string") return first.output_text;
   } catch (e) {
     console.error("Failed to extract text from OpenAI response:", e);
   }
   return null;
 }
 
+// ===================== Handler =====================
 export default async function handler(req, res) {
   if (req.method !== "POST") {
     res.setHeader("Allow", ["POST"]);
-    return res.status(405).json({ error: "Method not allowed" });
+    return res
+      .status(405)
+      .json({ error: "Method not allowed. Use POST." });
   }
 
   try {
-    // 📨 نقرأ الجسم (JSON) من Flutter
     const body =
       typeof req.body === "string" ? JSON.parse(req.body) : req.body || {};
 
     const {
       audioBase64,
       mimeType,
-      language: preferredLanguage, // "auto" أو "en" أو "ar" ...
-      note, // ملاحظة إضافية من المستخدم (اختياري)
-      mode, // متروك للمستقبل
+      language: clientLanguage, // من Flutter
+      note,
     } = body;
 
-    if (!audioBase64) {
-      return res
-        .status(400)
-        .json({ error: "Missing 'audioBase64' in request body." });
+    if (!audioBase64 || typeof audioBase64 !== "string") {
+      return res.status(400).json({
+        error: "Missing 'audioBase64' field (base64 string).",
+      });
     }
 
-    // 🧊 نحول الـ base64 إلى Buffer
     const audioBuffer = Buffer.from(audioBase64, "base64");
 
-    // نخبر toFile باسم و نوع الملف (Whisper يدعم m4a, mp3, mp4, wav, webm, ogg, mpeg, mpga ...)
-    const file = await toFile(
-      audioBuffer,
-      "recording.m4a", // الاسم فقط – الامتداد لأغراض التوافق
-      {
-        type: mimeType || "audio/m4a",
-      }
-    );
+    // نحول base64 إلى ملف باستخدام toFile (الطريقة الصحيحة مع openai-node)
+    const file = await toFile(audioBuffer, "recording.m4a", {
+      type: mimeType || "audio/m4a",
+    });
 
-    // 🎧 أولاً: نعمل Transcription باستخدام Whisper
+    // 1) Transcription باستخدام Whisper
     const transcription = await openai.audio.transcriptions.create({
       model: "whisper-1",
       file,
-      // إذا المستخدم حدّد اللغة يدويًا غير "auto" نمررها، غير ذلك نخلي Whisper يكتشف
-      ...(preferredLanguage &&
-      preferredLanguage !== "auto" &&
-      typeof preferredLanguage === "string"
-        ? { language: preferredLanguage }
+      ...(clientLanguage &&
+      clientLanguage !== "auto" &&
+      typeof clientLanguage === "string"
+        ? { language: clientLanguage }
         : {}),
     });
 
     const transcriptText = (transcription.text || "").trim();
     console.log("FixLens audio transcript:", transcriptText);
 
-    // نحدد لغة الرد
     let finalLanguage =
-      preferredLanguage && preferredLanguage !== "auto"
-        ? preferredLanguage
+      clientLanguage && clientLanguage !== "auto"
+        ? clientLanguage
         : guessLanguage(transcriptText || note || "");
 
-    // 🧩 إذا لم يوجد كلام واضح في التسجيل (فقط ضوضاء / محرك)، نرد برد خاص محترم
-    if (!transcriptText || transcriptText.length < 5) {
+    // لو الترانسكربت لا يشبه وصف مشكلة سيارة → لا نشخّص
+    if (!looksLikeCarDescription(transcriptText)) {
       const politeReply =
         finalLanguage === "ar"
-          ? `يبدو أن التسجيل الصوتي يحتوي على أصوات عامة (مثل صوت محرك أو ضوضاء) بدون كلام واضح يمكنني فهمه.
+          ? `استلمت التسجيل الصوتي، لكن يبدو أنه يحتوي على صوت محرك أو ضوضاء عامة بدون وصف واضح للمشكلة بالكلام.
 
-حتى أستطيع مساعدتك بدقة، أرجو منك واحد من الخيارين:
-1. تسجيل مقطع جديد تشرح فيه بصوتك ما هي المشكلة (مثل: "يوجد صوت طقطقة عند تشغيل المحرك وهو بارد"، أو "السيارة تهتز عندما أتوقف عند الإشارة").
+حتى أستطيع أن أساعدك بدقة وأعطيك تشخيصًا مفيدًا، أرجو منك أحد الخيارين:
+1. تسجيل مقطع صوتي جديد تشرح فيه *بالكلام* ما الذي يحدث في السيارة (مثلاً: "يوجد صوت طقطقة من جهة المحرك عند التشغيل وهو بارد"، أو "السيارة تهتز عندما أتوقف عند الإشارة").
 2. أو كتابة وصف قصير للمشكلة في خانة النص.
 
-كلما كان الوصف أدق، استطعت أن أقدّم لك تشخيصًا أدق وخطوات عملية لما يمكنك فحصه أو مناقشته مع الميكانيكي. 🚗🔍`
-          : `It seems that the voice note contains general sound (engine/noise) but no clear speech that I can understand.
+كلما كان الوصف أوضح، استطعتُ أن أحدد الأسباب المحتملة وخطوات الفحص بشكل أفضل. 🚗🔍`
+          : `I received your voice note, but it sounds more like general engine noise without enough spoken description of the problem.
 
-To help you accurately, please either:
-1. Record a new voice note where you *describe the problem in words* (for example: "there is a rattling noise on cold start" or "the car vibrates when I stop at a light"),  
+To give you an accurate diagnosis, please either:
+1. Record a new voice note where you *describe the issue in words* (for example: "there is a rattling noise from the engine on cold start", or "the car vibrates when I stop at a red light"),  
 2. Or type a short description of the problem in the text box.
 
-The more details you share, the better I can guide you with likely causes and next steps. 🚗🔍`;
+The clearer your description, the better I can suggest likely causes and next steps. 🚗🔍`;
 
       return res.status(200).json({
         reply: politeReply,
@@ -161,7 +218,7 @@ The more details you share, the better I can guide you with likely causes and ne
       });
     }
 
-    // 🔍 نجلب المشاكل القريبة من auto_common_issues.json
+    // 2) نجلب المشاكل القريبة من auto_common_issues.json
     let matchedIssues = [];
     try {
       matchedIssues = await findRelevantIssues(transcriptText);
@@ -169,20 +226,18 @@ The more details you share, the better I can guide you with likely causes and ne
       console.warn("findRelevantIssues failed:", e);
     }
 
-    // نجهز نص JSON للمشاكل (إن وجد)
     const issuesJson =
       matchedIssues && matchedIssues.length
         ? JSON.stringify(matchedIssues, null, 2)
         : "[]";
 
-    // 🧾 نبني رسالة المستخدم التي نرسلها لـ GPT
     const userBundle = `
-Voice transcription (what the user said, any language):
+Voice transcription:
 """
 ${transcriptText}
 """
 
-Additional note from user (if any):
+User note (if any):
 """
 ${note || "N/A"}
 """
@@ -190,30 +245,20 @@ ${note || "N/A"}
 Matched issues from auto_common_issues.json:
 ${issuesJson}
 
-Please respond in the same language as the user (detected: ${finalLanguage}).
+Please respond in language: ${finalLanguage}
 `;
 
-    // 🤖 نستدعي Responses API لتحليل المشكلة وإرجاع الرد المنسق
+    // 3) تحليل نهائي عن طريق Responses API
     const response = await openai.responses.create({
       model: "gpt-4.1-mini",
       input: [
         {
           role: "system",
-          content: [
-            {
-              type: "input_text",
-              text: BASE_SYSTEM_PROMPT,
-            },
-          ],
+          content: [{ type: "input_text", text: BASE_SYSTEM_PROMPT }],
         },
         {
           role: "user",
-          content: [
-            {
-              type: "input_text",
-              text: userBundle,
-            },
-          ],
+          content: [{ type: "input_text", text: userBundle }],
         },
       ],
     });
@@ -232,7 +277,6 @@ Please respond in the same language as the user (detected: ${finalLanguage}).
   } catch (err) {
     console.error("FixLens audio diagnose error:", err);
 
-    // نحاول استخراج تفاصيل مفيدة من الخطأ
     const details =
       err?.response?.data ||
       err?.body ||
