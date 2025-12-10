@@ -1,109 +1,162 @@
 // api/audio-diagnose.js
-import OpenAI, { toFile } from "openai";
-import { findRelevantIssues } from "../lib/autoKnowledge.js";
+import OpenAI from "openai";
+import formidable from "formidable";
+import fs from "fs";
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+export const config = {
+  api: {
+    bodyParser: false,
+  },
+};
 
-function guessLanguage(t) {
-  if (!t) return "en";
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+});
+
+// نفس دالة التخمين من ملفاتك الأخرى
+function guessLanguage(text) {
+  if (!text || !text.trim()) return null;
+  const t = text.trim();
+
+  // Arabic
   if (/[\u0600-\u06FF]/.test(t)) return "ar";
+  // Russian
+  if (/[\u0400-\u04FF]/.test(t)) return "ru";
+  // Spanish-ish
+  if (/[áéíóúñüÁÉÍÓÚÑÜ]/.test(t)) return "es";
+  // German-ish
+  if (/[äöüßÄÖÜ]/.test(t)) return "de";
+  // French-ish
+  if (/[àâçéèêëîïôûùüÿÀÂÇÉÈÊËÎÏÔÛÙÜŸ]/.test(t)) return "fr";
+
   return "en";
 }
 
-const SYSTEM_PROMPT = `
-You are FixLens Auto, an intelligent automotive sound-diagnosis system.
-Analyze the audio carefully: clicking, knocking, rattling, squealing, grinding, misfire patterns.
-Reply ONLY in the user's language with structured output.
-`;
-
-function extractText(resp) {
-  try {
-    const part = resp.output?.[0]?.content?.find((c) => c.type === "output_text");
-    return part?.text || null;
-  } catch {
-    return null;
-  }
-}
-
 export default async function handler(req, res) {
-  if (req.method !== "POST")
-    return res.status(405).json({ error: "POST only" });
+  if (req.method !== "POST") {
+    res.setHeader("Allow", "POST");
+    return res.status(405).json({ error: "Method not allowed" });
+  }
 
   try {
-    const body = typeof req.body === "string" ? JSON.parse(req.body) : req.body;
+    const form = formidable({ multiples: false });
 
-    const { audioBase64, mimeType = "audio/m4a", note, language } = body;
+    form.parse(req, async (err, fields, files) => {
+      if (err) {
+        console.error("Form parse error:", err);
+        return res.status(400).json({ error: "Invalid form data" });
+      }
 
-    if (!audioBase64)
-      return res.status(400).json({ error: "Missing audioBase64" });
+      const audioFile = Array.isArray(files.audio)
+        ? files.audio[0]
+        : files.audio;
 
-    // Convert base64 → Buffer
-    const audioBuffer = Buffer.from(audioBase64, "base64");
+      if (!audioFile) {
+        return res.status(400).json({ error: "No audio file provided" });
+      }
 
-    // Convert to File (required by API)
-    const localFile = await toFile(audioBuffer, "sound.m4a", { type: mimeType });
+      const preferredLanguage =
+        (Array.isArray(fields.preferredLanguage)
+          ? fields.preferredLanguage[0]
+          : fields.preferredLanguage) ||
+        req.query.preferredLanguage ||
+        "auto";
 
-    // ---- STEP 1: Upload file to OpenAI ----
-    const uploaded = await openai.files.create({
-      file: localFile,
-      purpose: "input",
-    });
+      const filePath = audioFile.filepath || audioFile.path;
 
-    const fileId = uploaded.id; // REAL ID 🎯
+      try {
+        // 1) نرفع ملف الصوت إلى OpenAI Files
+        // ⚠️ هنا كان الخطأ: سابقاً كانت purpose = "input"
+        // الآن نستخدم قيمة صحيحة "user_data"
+        const uploadedFile = await openai.files.create({
+          file: fs.createReadStream(filePath),
+          purpose: "user_data",
+        });
 
-    // ---- STEP 2: Whisper Transcription ----
-    const whisper = await openai.audio.transcriptions.create({
-      model: "whisper-1",
-      file: localFile,
-    });
+        // 2) نطلب من النموذج تحليل الصوت عن طريق Responses API
+        const response = await openai.responses.create({
+          model:
+            process.env.FIXLENS_AUDIO_MODEL ||
+            process.env.FIXLENS_MODEL ||
+            "gpt-4o-mini",
+          input: [
+            {
+              role: "system",
+              content: [
+                {
+                  type: "input_text",
+                  text: `
+You are FixLens Auto, an expert AI assistant for car diagnostics.
+You receive an AUDIO recording of a car sound (engine, brakes, suspension, etc.).
 
-    const transcript = whisper.text?.trim() || "";
-    const lang = language && language !== "auto"
-      ? language
-      : guessLanguage(transcript || note);
+Your job:
+1. Infer what kind of sound it is (knocking, squeaking, grinding, hissing, etc.).
+2. List the most likely causes, from most to least likely.
+3. Indicate how urgent the issue is (now, soon, or can wait).
+4. Give clear next steps for the driver (what to check, what to tell the mechanic).
 
-    const kb = await findRelevantIssues(transcript || note || "");
-
-    const userBundle = `
-Transcription: "${transcript || "N/A"}"
-Note: "${note || "N/A"}"
-Matched issues: ${JSON.stringify(kb, null, 2)}
-Language: ${lang}
-    `;
-
-    // ---- STEP 3: GPT DIAGNOSIS REQUEST ----
-    const resp = await openai.responses.create({
-      model: "gpt-4.1-mini",
-      input: [
-        {
-          role: "system",
-          content: [{ type: "input_text", text: SYSTEM_PROMPT }],
-        },
-        {
-          role: "user",
-          content: [
-            { type: "input_file", file_id: fileId }, // ✅ CORRECT
-            { type: "input_text", text: userBundle },
+LANGUAGE:
+- If preferredLanguage is provided, answer in that language.
+- If preferredLanguage = "auto", reply in the same language you detect from the driver if possible, otherwise use English.
+Keep the tone friendly and clear, like a smart mechanic explaining to a normal driver.
+                  `.trim(),
+                },
+              ],
+            },
+            {
+              role: "user",
+              content: [
+                {
+                  type: "input_text",
+                  text:
+                    preferredLanguage && preferredLanguage !== "auto"
+                      ? `Analyze this car sound recording and answer in language code: ${preferredLanguage}.`
+                      : `Analyze this car sound recording. Reply in the same language as the driver's voice if possible; otherwise use English.`,
+                },
+                {
+                  // 👇 هنا النوع الصحيح: input_file
+                  type: "input_file",
+                  file_id: uploadedFile.id,
+                },
+              ],
+            },
           ],
-        },
-      ],
+        });
+
+        const outputItem = response.output?.[0];
+        const outputContent = outputItem?.content?.[0];
+
+        const replyText =
+          outputContent?.output_text?.text ||
+          outputContent?.text ||
+          JSON.stringify(response);
+
+        const detectedLang = guessLanguage(replyText);
+        const finalLang =
+          preferredLanguage && preferredLanguage !== "auto"
+            ? preferredLanguage
+            : detectedLang || "en";
+
+        return res.status(200).json({
+          reply: replyText,
+          language: finalLang,
+        });
+      } catch (apiError) {
+        console.error("FixLens audio diagnosis error:", apiError);
+        return res.status(500).json({
+          error: "Audio diagnosis failed",
+          details:
+            apiError?.response?.data ||
+            apiError.message ||
+            String(apiError),
+        });
+      }
     });
-
-    let reply = extractText(resp);
-    if (!reply) reply = "Could not analyze audio.";
-
-    return res.status(200).json({
-      reply,
-      transcript,
-      issues: kb,
-      language: lang,
-    });
-
-  } catch (err) {
-    console.error("AUDIO ERROR:", err);
+  } catch (e) {
+    console.error("Unexpected audio handler error:", e);
     return res.status(500).json({
       error: "Audio diagnosis failed",
-      details: err?.response?.data || err?.message || err,
+      details: e.message || String(e),
     });
   }
 }
