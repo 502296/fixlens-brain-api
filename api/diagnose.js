@@ -3,67 +3,80 @@
 
 import OpenAI from "openai";
 import { findRelevantIssues } from "../lib/autoKnowledge.js";
-import { logFixLensEvent } from "../lib/supabaseClient.js";
 
 const openai = new OpenAI({
-apiKey: process.env.OPENAI_API_KEY,
+  apiKey: process.env.OPENAI_API_KEY,
 });
 
 // Helper: clean text
 function cleanText(value) {
-if (!value) return "";
-if (typeof value === "string") return value.trim();
-return String(value).trim();
+  if (!value) return "";
+  if (typeof value === "string") return value.trim();
+  return String(value).trim();
+}
+
+// Supabase logging – safe (لا يكسر الـ API لو في خطأ)
+async function safeLogFixLensEvent(payload) {
+  try {
+    const mod = await import("../lib/supabaseClient.js");
+    const fn = mod.logFixLensEvent;
+    if (typeof fn === "function") {
+      await fn(payload);
+    } else {
+      console.error("logFixLensEvent is not a function (ignored).");
+    }
+  } catch (e) {
+    console.error("Supabase logging error (ignored):", e.message);
+  }
 }
 
 export default async function handler(req, res) {
-if (req.method !== "POST") {
-return res.status(405).json({ error: "Method not allowed. Use POST." });
-}
+  if (req.method !== "POST") {
+    return res.status(405).json({ error: "Method not allowed. Use POST." });
+  }
 
-const started = Date.now();
-const mode = "text";
+  const started = Date.now();
+  const mode = "text";
 
-try {
-let body = req.body;
+  try {
+    let body = req.body;
 
-// Sometimes Vercel sends body as string → try to parse
-if (typeof body === "string") {
-try {
-body = JSON.parse(body);
-} catch {
-// ignore
-}
-}
+    if (typeof body === "string") {
+      try {
+        body = JSON.parse(body);
+      } catch {
+        // ignore
+      }
+    }
 
-const message = cleanText(body?.message || body?.text || body?.prompt);
-const languageHint = cleanText(body?.languageHint || body?.lang);
+    const message = cleanText(body?.message || body?.text || body?.prompt);
+    const languageHint = cleanText(body?.languageHint || body?.lang);
 
-if (!message) {
-return res
-.status(400)
-.json({ error: "message is required in request body." });
-}
+    if (!message) {
+      return res
+        .status(400)
+        .json({ error: "message is required in request body." });
+    }
 
-// Try to fetch relevant issues from knowledge base
-let issuesSummary = "No matched issues from the knowledge base.";
-try {
-const issues = await findRelevantIssues(message);
-if (issues && issues.length > 0) {
-issuesSummary = JSON.stringify(issues, null, 2);
-}
-} catch (err) {
-console.error("autoKnowledge error:", err);
-issuesSummary = "Knowledge base unavailable (internal error).";
-}
+    // Knowledge base
+    let issuesSummary = "No matched issues from the knowledge base.";
+    try {
+      const issues = await findRelevantIssues(message);
+      if (issues && issues.length > 0) {
+        issuesSummary = JSON.stringify(issues, null, 2);
+      }
+    } catch (err) {
+      console.error("autoKnowledge error:", err);
+      issuesSummary = "Knowledge base unavailable (internal error).";
+    }
 
-const systemPrompt = `
+    const systemPrompt = `
 You are FixLens Auto, a global intelligent automotive assistant.
 
 - Detect the user's language automatically and ALWAYS reply in the same language
-(Arabic if the user writes in Arabic, Spanish for Spanish, etc.).
+  (Arabic if the user writes in Arabic, Spanish for Spanish, etc.).
 - You specialize in car problems: noises, leaks, warning lights, vibrations, smells,
-starting issues, rough idle, shaking, braking issues, steering, and other common symptoms.
+  starting issues, rough idle, shaking, braking issues, steering, and other common symptoms.
 - Use the "reference issues" below only as internal hints. Don't show raw JSON to the user.
 - Your answer must be friendly, clear, and not scary, but honest about safety.
 
@@ -72,7 +85,7 @@ Your reply structure:
 2) Brief summary of what might be happening (1–3 sentences).
 3) 2–4 likely causes with simple explanations (bullet points).
 4) 3–5 practical next steps (what the driver should check, how urgent it is,
-and whether it's safe to drive or should tow the car).
+   and whether it's safe to drive or should tow the car).
 5) Always add a short safety note: this is not a replacement for an in-person mechanic.
 
 If the user message is just "hello" or something very short with no symptoms,
@@ -82,7 +95,7 @@ If the user is NOT talking about cars at all, give a short polite answer
 in their language, and then remind them that FixLens Auto is mainly for cars.
 `.trim();
 
-const combinedPrompt = `
+    const combinedPrompt = `
 System instructions:
 ${systemPrompt}
 
@@ -96,75 +109,74 @@ Reference issues from autoKnowledge (for your internal reasoning only):
 ${issuesSummary}
 `.trim();
 
-const response = await openai.responses.create({
-model: "gpt-4.1-mini",
-input: combinedPrompt,
-max_output_tokens: 900,
-});
+    const response = await openai.responses.create({
+      model: "gpt-4.1-mini",
+      input: combinedPrompt,
+      max_output_tokens: 900,
+    });
 
-const replyText = cleanText(response.output_text);
+    const replyText = cleanText(response.output_text);
 
-// very simple language detection from reply (fallback)
-let detectedLanguage = languageHint || null;
-if (!detectedLanguage) {
-if (/[\u0600-\u06FF]/.test(replyText)) {
-detectedLanguage = "ar";
-} else if (/[áéíóúñ¿¡]/i.test(replyText)) {
-detectedLanguage = "es";
-} else if (/[а-яё]/i.test(replyText)) {
-detectedLanguage = "ru";
-} else {
-detectedLanguage = "en";
-}
-}
+    // very simple language detection from reply (fallback)
+    let detectedLanguage = languageHint || null;
+    if (!detectedLanguage) {
+      if (/[\u0600-\u06FF]/.test(replyText)) {
+        detectedLanguage = "ar";
+      } else if (/[áéíóúñ¿¡]/i.test(replyText)) {
+        detectedLanguage = "es";
+      } else if (/[а-яё]/i.test(replyText)) {
+        detectedLanguage = "ru";
+      } else {
+        detectedLanguage = "en";
+      }
+    }
 
-const latencyMs = Date.now() - started;
+    const latencyMs = Date.now() - started;
 
-// Log to Supabase (non-blocking)
-logFixLensEvent({
-source: "mobile-app",
-mode,
-userMessage: message,
-aiReply: replyText,
-meta: {
-endpoint: "/api/diagnose",
-languageHint,
-detectedLanguage,
-model: "gpt-4.1-mini",
-latencyMs,
-success: true,
-},
-}).catch(() => {});
+    // Log (لا ننتظر النتيجة)
+    safeLogFixLensEvent({
+      source: "mobile-app",
+      mode,
+      userMessage: message,
+      aiReply: replyText,
+      meta: {
+        endpoint: "/api/diagnose",
+        languageHint,
+        detectedLanguage,
+        model: "gpt-4.1-mini",
+        latencyMs,
+        success: true,
+      },
+    });
 
-return res.status(200).json({
-reply: replyText || "FixLens Auto could not generate a reply.",
-language: detectedLanguage,
-});
-} catch (err) {
-console.error("FixLens diagnose.js error:", err);
+    return res.status(200).json({
+      reply: replyText || "FixLens Auto could not generate a reply.",
+      language: detectedLanguage,
+    });
+  } catch (err) {
+    console.error("FixLens diagnose.js error:", err);
 
-const latencyMs = Date.now() - started;
+    const latencyMs = Date.now() - started;
 
-// Log error to Supabase
-logFixLensEvent({
-source: "mobile-app",
-mode,
-userMessage: null,
-aiReply: null,
-meta: {
-endpoint: "/api/diagnose",
-error: String(err?.message || err),
-latencyMs,
-success: false,
-},
-}).catch(() => {});
+    safeLogFixLensEvent({
+      source: "mobile-app",
+      mode,
+      userMessage: null,
+      aiReply: null,
+      meta: {
+        endpoint: "/api/diagnose",
+        error: String(err?.message || err),
+        latencyMs,
+        success: false,
+      },
+    });
 
-return res.status(500).json({
-error: "FixLens Brain internal error.",
-details:
-process.env.NODE_ENV === "development"
-? String(err?.stack || err?.message || err)
-: undefined,
-});
-}
+    return res.status(500).json({
+      error: "FixLens Brain internal error.",
+      details:
+        process.env.NODE_ENV === "development"
+          ? String(err?.stack || err?.message || err)
+          : undefined,
+    });
+  }
 }
