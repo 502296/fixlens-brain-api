@@ -3,13 +3,13 @@
 
 import OpenAI from "openai";
 import { findRelevantIssues } from "../lib/autoKnowledge.js";
+import { logFixLensEvent } from "../lib/supabaseClient.js";
 
-// تأكد أن متغير البيئة موجود في Vercel باسم OPENAI_API_KEY
 const openai = new OpenAI({
 apiKey: process.env.OPENAI_API_KEY,
 });
 
-// مساعد صغير: تنظيف النص
+// Helper: clean text
 function cleanText(value) {
 if (!value) return "";
 if (typeof value === "string") return value.trim();
@@ -17,20 +17,22 @@ return String(value).trim();
 }
 
 export default async function handler(req, res) {
-// نسمح فقط بـ POST
 if (req.method !== "POST") {
 return res.status(405).json({ error: "Method not allowed. Use POST." });
 }
 
+const started = Date.now();
+const mode = "text";
+
 try {
 let body = req.body;
 
-// أحياناً Vercel يرسل body كنص، فنحاول نفكّه
+// Sometimes Vercel sends body as string → try to parse
 if (typeof body === "string") {
 try {
 body = JSON.parse(body);
 } catch {
-// تجاهل، نخليها نص لو فشل
+// ignore
 }
 }
 
@@ -43,7 +45,7 @@ return res
 .json({ error: "message is required in request body." });
 }
 
-// نجيب أقرب مشاكل من قاعدة المعرفة (auto_common_issues.json)
+// Try to fetch relevant issues from knowledge base
 let issuesSummary = "No matched issues from the knowledge base.";
 try {
 const issues = await findRelevantIssues(message);
@@ -51,7 +53,6 @@ if (issues && issues.length > 0) {
 issuesSummary = JSON.stringify(issues, null, 2);
 }
 } catch (err) {
-// لو صار خطأ بملف المعرفة لا نكسر الـ API كله
 console.error("autoKnowledge error:", err);
 issuesSummary = "Knowledge base unavailable (internal error).";
 }
@@ -96,14 +97,14 @@ ${issuesSummary}
 `.trim();
 
 const response = await openai.responses.create({
-model: "gpt-4.1-mini", // سريع ورخيص وقوي كفاية
+model: "gpt-4.1-mini",
 input: combinedPrompt,
 max_output_tokens: 900,
 });
 
 const replyText = cleanText(response.output_text);
 
-// نحاول نخمن اللغة من الرد نفسه (بسيطة لكن تكفي)
+// very simple language detection from reply (fallback)
 let detectedLanguage = languageHint || null;
 if (!detectedLanguage) {
 if (/[\u0600-\u06FF]/.test(replyText)) {
@@ -117,12 +118,46 @@ detectedLanguage = "en";
 }
 }
 
+const latencyMs = Date.now() - started;
+
+// Log to Supabase (non-blocking)
+logFixLensEvent({
+source: "mobile-app",
+mode,
+userMessage: message,
+aiReply: replyText,
+meta: {
+endpoint: "/api/diagnose",
+languageHint,
+detectedLanguage,
+model: "gpt-4.1-mini",
+latencyMs,
+success: true,
+},
+}).catch(() => {});
+
 return res.status(200).json({
 reply: replyText || "FixLens Auto could not generate a reply.",
 language: detectedLanguage,
 });
 } catch (err) {
 console.error("FixLens diagnose.js error:", err);
+
+const latencyMs = Date.now() - started;
+
+// Log error to Supabase
+logFixLensEvent({
+source: "mobile-app",
+mode,
+userMessage: null,
+aiReply: null,
+meta: {
+endpoint: "/api/diagnose",
+error: String(err?.message || err),
+latencyMs,
+success: false,
+},
+}).catch(() => {});
 
 return res.status(500).json({
 error: "FixLens Brain internal error.",
