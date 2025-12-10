@@ -33,6 +33,7 @@ return res.status(405).json({ code: 405, message: "Method not allowed" });
 }
 
 const started = Date.now();
+const mode = "image";
 
 try {
 const body =
@@ -41,7 +42,6 @@ typeof req.body === "string" ? JSON.parse(req.body) : req.body || {};
 const imageBase64 = body.imageBase64;
 const userNote = body.note || body.userText || "";
 const languageHint = body.language || "auto";
-const mode = "image";
 
 if (!imageBase64) {
 return res
@@ -49,7 +49,18 @@ return res
 .json({ code: 400, message: "imageBase64 is required." });
 }
 
-const autoKnowledge = userNote ? findRelevantIssues(userNote) : null;
+// Knowledge base
+let autoKnowledge = null;
+try {
+if (userNote && userNote.trim().length > 0) {
+const issues = await findRelevantIssues(userNote);
+if (issues && issues.length > 0) {
+autoKnowledge = JSON.stringify(issues, null, 2);
+}
+}
+} catch (err) {
+console.error("autoKnowledge (image) error:", err);
+}
 
 let targetLanguage = null;
 if (languageHint && languageHint !== "auto") {
@@ -82,23 +93,32 @@ General rules:
 - **Next Professional Step**
 - If the user note gives extra context, use it.
 - Be honest about uncertainty and give safety warnings when needed.
-${autoKnowledge ? "\nInternal hints:\n" + autoKnowledge : ""}
-`;
+${autoKnowledge ? "\nInternal hints (from knowledge base):\n" + autoKnowledge : ""}
+`.trim();
 
 const userText =
 userNote && userNote.trim().length > 0
 ? userNote
 : "Please analyze this image and explain any possible issues, in the correct language.";
 
-const messages = [
+// ---------- OpenAI Responses (vision) ----------
+const completion = await openai.responses.create({
+model: "gpt-4.1-mini", // supports vision
+max_output_tokens: 900,
+input: [
 {
 role: "system",
-content: systemPrompt,
+content: [
+{
+type: "input_text",
+text: systemPrompt,
+},
+],
 },
 {
 role: "user",
 content: [
-{ type: "text", text: userText },
+{ type: "input_text", text: userText },
 {
 type: "input_image",
 image_url: {
@@ -107,18 +127,16 @@ url: `data:image/jpeg;base64,${imageBase64}`,
 },
 ],
 },
-];
-
-const completion = await openai.chat.completions.create({
-model: "gpt-4.1-mini",
-messages,
-temperature: 0.5,
+],
 });
 
-const reply = completion.choices[0]?.message?.content?.trim() || "";
+const reply =
+(completion.output_text && completion.output_text.trim()) ||
+"I could not analyze the image.";
 
 const latencyMs = Date.now() - started;
 
+// Log success
 logFixLensEvent({
 source: "mobile-app",
 mode,
@@ -146,12 +164,12 @@ console.error("FixLens Brain image-diagnose error:", err);
 const latencyMs = Date.now() - started;
 logFixLensEvent({
 source: "mobile-app",
-mode: "image",
+mode,
 userMessage: null,
 aiReply: null,
 meta: {
 endpoint: "/api/image-diagnose",
-error: err?.message || String(err),
+error: String(err?.message || err),
 latencyMs,
 success: false,
 },
@@ -161,7 +179,7 @@ return res.status(500).json({
 code: 500,
 message: "A server error has occurred",
 details:
-process.env.NODE_ENV === "development" ? err.message : undefined,
+process.env.NODE_ENV === "development" ? String(err?.message || err) : undefined,
 });
 }
 }
