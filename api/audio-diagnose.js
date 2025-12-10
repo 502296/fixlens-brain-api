@@ -8,17 +8,21 @@ const openai = new OpenAI({
 
 // ===================== Helpers =====================
 
-// تخمين اللغة من النص
+// تخمين اللغة من النص إذا ما جاء شيء من التطبيق
 function guessLanguage(text) {
   if (!text || !text.trim()) return "en";
   const t = text.trim();
 
-  if (/[\u0600-\u06FF]/.test(t)) return "ar"; // Arabic
-  if (/[\u0400-\u04FF]/.test(t)) return "ru"; // Russian
-  if (/[\u0370-\u03FF]/.test(t)) return "el"; // Greek
-  if (/[\u4E00-\u9FFF]/.test(t)) return "zh"; // Chinese
-  if (/[\u3040-\u30FF]/.test(t)) return "ja"; // Japanese
-  if (/[\u1100-\u11FF]/.test(t)) return "ko"; // Korean
+  // Arabic
+  if (/[\u0600-\u06FF]/.test(t)) return "ar";
+  // Russian
+  if (/[\u0400-\u04FF]/.test(t)) return "ru";
+  // Greek
+  if (/[\u0370-\u03FF]/.test(t)) return "el";
+  // CJK
+  if (/[\u4E00-\u9FFF]/.test(t)) return "zh";
+  if (/[\u3040-\u30FF]/.test(t)) return "ja";
+  if (/[\u1100-\u11FF]/.test(t)) return "ko";
 
   return "en";
 }
@@ -90,26 +94,33 @@ function looksLikeCarDescription(text) {
   return hasCarWord;
 }
 
-// برومبت FixLens
+// برومبت عام لFixLens
 const BASE_SYSTEM_PROMPT = `
 You are **FixLens Auto**, an intelligent automotive diagnosis assistant.
+
 You ONLY talk about vehicles (cars, SUVs, trucks, vans).
+You NEVER talk about home appliances or non-vehicle devices.
 
 You receive:
-- A short transcription of what the user said in a voice note (any language).
-- Optional extra notes.
-- Optional relevant issues JSON from auto_common_issues.json.
+- A voice recording of a car-related sound (engine, belt, brakes, etc.).
+- A short transcription of what the user said (if any).
+- Optional extra text notes.
+- Optional matched issues from auto_common_issues.json.
 
 Your job:
-1. Understand the symptoms (noises, vibrations, leaks, warning lights, smells, performance issues, starting problems, etc.).
-2. Combine transcription + notes + JSON hints to produce a clear, honest diagnosis.
+1. LISTEN carefully to the audio: focus on the pattern of the sound (knocking, ticking, squealing, grinding, whining, etc.).
+2. Combine what you hear + any transcript text + JSON hints.
+3. Produce a clear diagnostic explanation.
 
-Always answer in the **same language as the user** if possible.
+Always be honest about uncertainty.
 
 Your reply MUST follow this markdown structure:
 
 **Quick Summary:**
 - ...
+
+**What the Sound Feels Like:**
+- (e.g. "metallic knocking that follows engine speed", "high-pitched squeal on rotation", etc.)
 
 **Most Likely Causes:**
 1. ...
@@ -124,7 +135,7 @@ Your reply MUST follow this markdown structure:
 **Next Professional Step:**
 - ...
 
-If information is not enough, say so and ask for more details instead of guessing.
+If the audio is too noisy or unclear, say so and ask the user for another recording or a text description instead of guessing.
 `;
 
 // استخراج النص من Responses API
@@ -141,6 +152,7 @@ function extractTextFromResponse(resp) {
 }
 
 // ===================== Handler =====================
+
 export default async function handler(req, res) {
   if (req.method !== "POST") {
     res.setHeader("Allow", ["POST"]);
@@ -156,7 +168,7 @@ export default async function handler(req, res) {
     const {
       audioBase64,
       mimeType,
-      language: clientLanguage, // من Flutter
+      language: clientLanguage, // من Flutter (مثل "ar" أو "en")
       note,
     } = body;
 
@@ -168,12 +180,11 @@ export default async function handler(req, res) {
 
     const audioBuffer = Buffer.from(audioBase64, "base64");
 
-    // نحول base64 إلى ملف باستخدام toFile (الطريقة الصحيحة مع openai-node)
+    // 🔹 نستخدم Whisper فقط للحصول على أي كلام مسموع (لو المستخدم يتكلم)
     const file = await toFile(audioBuffer, "recording.m4a", {
       type: mimeType || "audio/m4a",
     });
 
-    // 1) Transcription باستخدام Whisper
     const transcription = await openai.audio.transcriptions.create({
       model: "whisper-1",
       file,
@@ -192,36 +203,12 @@ export default async function handler(req, res) {
         ? clientLanguage
         : guessLanguage(transcriptText || note || "");
 
-    // لو الترانسكربت لا يشبه وصف مشكلة سيارة → لا نشخّص
-    if (!looksLikeCarDescription(transcriptText)) {
-      const politeReply =
-        finalLanguage === "ar"
-          ? `استلمت التسجيل الصوتي، لكن يبدو أنه يحتوي على صوت محرك أو ضوضاء عامة بدون وصف واضح للمشكلة بالكلام.
-
-حتى أستطيع أن أساعدك بدقة وأعطيك تشخيصًا مفيدًا، أرجو منك أحد الخيارين:
-1. تسجيل مقطع صوتي جديد تشرح فيه *بالكلام* ما الذي يحدث في السيارة (مثلاً: "يوجد صوت طقطقة من جهة المحرك عند التشغيل وهو بارد"، أو "السيارة تهتز عندما أتوقف عند الإشارة").
-2. أو كتابة وصف قصير للمشكلة في خانة النص.
-
-كلما كان الوصف أوضح، استطعتُ أن أحدد الأسباب المحتملة وخطوات الفحص بشكل أفضل. 🚗🔍`
-          : `I received your voice note, but it sounds more like general engine noise without enough spoken description of the problem.
-
-To give you an accurate diagnosis, please either:
-1. Record a new voice note where you *describe the issue in words* (for example: "there is a rattling noise from the engine on cold start", or "the car vibrates when I stop at a red light"),  
-2. Or type a short description of the problem in the text box.
-
-The clearer your description, the better I can suggest likely causes and next steps. 🚗🔍`;
-
-      return res.status(200).json({
-        reply: politeReply,
-        language: finalLanguage,
-        transcript: transcriptText,
-      });
-    }
-
-    // 2) نجلب المشاكل القريبة من auto_common_issues.json
+    // 🔹 نجرب نجيب قضايا قريبة من الـ knowledge base
     let matchedIssues = [];
     try {
-      matchedIssues = await findRelevantIssues(transcriptText);
+      matchedIssues = await findRelevantIssues(
+        transcriptText || note || ""
+      );
     } catch (e) {
       console.warn("findRelevantIssues failed:", e);
     }
@@ -231,13 +218,14 @@ The clearer your description, the better I can suggest likely causes and next st
         ? JSON.stringify(matchedIssues, null, 2)
         : "[]";
 
+    // 🔹 الـ bundle النصي اللي يروح للموديل مع الصوت
     const userBundle = `
-Voice transcription:
+Transcription of the voice (if any words were detected):
 """
-${transcriptText}
+${transcriptText || "N/A"}
 """
 
-User note (if any):
+User note (if any text was provided in the app):
 """
 ${note || "N/A"}
 """
@@ -245,34 +233,56 @@ ${note || "N/A"}
 Matched issues from auto_common_issues.json:
 ${issuesJson}
 
-Please respond in language: ${finalLanguage}
+User language code (for your reply): ${finalLanguage}
 `;
 
-    // 3) تحليل نهائي عن طريق Responses API
+    // 🔥 هنا السحر: نرسل الصوت نفسه + النص للموديل
     const response = await openai.responses.create({
       model: "gpt-4.1-mini",
       input: [
         {
           role: "system",
-          content: [{ type: "input_text", text: BASE_SYSTEM_PROMPT }],
+          content: [
+            {
+              type: "input_text",
+              text: BASE_SYSTEM_PROMPT,
+            },
+          ],
         },
         {
           role: "user",
-          content: [{ type: "input_text", text: userBundle }],
+          content: [
+            {
+              type: "input_audio",
+              audio: {
+                data: audioBase64,
+                format: (mimeType && mimeType.split("/").pop()) || "m4a",
+              },
+            },
+            {
+              type: "input_text",
+              text: userBundle,
+            },
+          ],
         },
       ],
     });
 
-    const replyText =
-      extractTextFromResponse(response) ||
-      (finalLanguage === "ar"
-        ? "حدث خطأ غير متوقع أثناء تحليل الصوت. من فضلك حاول مرة أخرى لاحقاً أو أرسل وصفاً مكتوباً للمشكلة."
-        : "An unexpected error occurred while analyzing the audio. Please try again later or send a written description of the problem.");
+    let replyText = extractTextFromResponse(response);
+
+    if (!replyText) {
+      replyText =
+        finalLanguage === "ar"
+          ? "استلمت التسجيل الصوتي لكن لم أستطع تحليل الصوت بشكل واضح. رجاءً أعد التسجيل في مكان أكثر هدوءاً أو أضف وصفاً مكتوباً للمشكلة في السيارة."
+          : "I received the voice note but couldn't clearly analyze the sound. Please try again in a quieter environment or add a short written description of the problem.";
+    }
 
     return res.status(200).json({
       reply: replyText,
       language: finalLanguage,
       transcript: transcriptText,
+      issues: matchedIssues || [],
+      source: "fixlens-audio-waveform",
     });
   } catch (err) {
     console.error("FixLens audio diagnose error:", err);
