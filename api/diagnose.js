@@ -15,7 +15,7 @@ function cleanText(value) {
   return String(value).trim();
 }
 
-// Supabase logging – safe (لا يكسر الـ API لو في خطأ)
+// Helper: safe logging to Supabase (doesn't break API if logging fails)
 async function safeLogFixLensEvent(payload) {
   try {
     const mod = await import("../lib/supabaseClient.js");
@@ -32,7 +32,9 @@ async function safeLogFixLensEvent(payload) {
 
 export default async function handler(req, res) {
   if (req.method !== "POST") {
-    return res.status(405).json({ error: "Method not allowed. Use POST." });
+    return res
+      .status(405)
+      .json({ code: 405, message: "Method not allowed. Use POST." });
   }
 
   const started = Date.now();
@@ -45,7 +47,7 @@ export default async function handler(req, res) {
       try {
         body = JSON.parse(body);
       } catch {
-        // ignore
+        // keep as string if JSON.parse fails
       }
     }
 
@@ -55,10 +57,10 @@ export default async function handler(req, res) {
     if (!message) {
       return res
         .status(400)
-        .json({ error: "message is required in request body." });
+        .json({ code: 400, message: "message is required in request body." });
     }
 
-    // Knowledge base
+    // Load knowledge base
     let issuesSummary = "No matched issues from the knowledge base.";
     try {
       const issues = await findRelevantIssues(message);
@@ -117,7 +119,7 @@ ${issuesSummary}
 
     const replyText = cleanText(response.output_text);
 
-    // very simple language detection from reply (fallback)
+    // Detect language from reply (simple heuristic)
     let detectedLanguage = languageHint || null;
     if (!detectedLanguage) {
       if (/[\u0600-\u06FF]/.test(replyText)) {
@@ -133,7 +135,7 @@ ${issuesSummary}
 
     const latencyMs = Date.now() - started;
 
-    // Log (لا ننتظر النتيجة)
+    // Log to Supabase (non-blocking)
     safeLogFixLensEvent({
       source: "mobile-app",
       mode,
@@ -150,6 +152,8 @@ ${issuesSummary}
     });
 
     return res.status(200).json({
+      code: 200,
+      message: "OK",
       reply: replyText || "FixLens Auto could not generate a reply.",
       language: detectedLanguage,
     });
@@ -172,7 +176,8 @@ ${issuesSummary}
     });
 
     return res.status(500).json({
-      error: "FixLens Brain internal error.",
+      code: 500,
+      message: "A server error has occurred",
       details:
         process.env.NODE_ENV === "development"
           ? String(err?.stack || err?.message || err)
