@@ -1,0 +1,13 @@
+{
+"functions": {
+"api/diagnose.js": {
+"runtime": "nodejs20.x"
+},
+"api/image-diagnose.js": {
+"runtime": "nodejs20.x"
+},
+"api/audio-diagnose.js": {
+"runtime": "nodejs20.x"
+}
+}
+}
