@@ -6,6 +6,7 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
+// نفس دالة تخمين اللغة
 function guessLanguage(text) {
   if (!text || !text.trim()) return null;
   const t = text.trim();
@@ -26,6 +27,7 @@ function guessLanguage(text) {
   return null;
 }
 
+// لوج آمن مع Supabase (نفس أسلوب audio)
 async function safeLogFixLensEvent(payload) {
   try {
     const mod = await import("../lib/supabaseClient.js");
@@ -62,7 +64,7 @@ export default async function handler(req, res) {
         .json({ code: 400, message: "imageBase64 is required." });
     }
 
-    // Knowledge base
+    // ================= Knowledge Base =================
     let autoKnowledge = null;
     try {
       if (userNote && userNote.trim().length > 0) {
@@ -75,6 +77,7 @@ export default async function handler(req, res) {
       console.error("autoKnowledge (image) error:", err);
     }
 
+    // ================= Language =================
     let targetLanguage = null;
     if (languageHint && languageHint !== "auto") {
       targetLanguage = languageHint;
@@ -87,6 +90,7 @@ export default async function handler(req, res) {
         ? "Reply in natural English, unless the note is clearly in another language."
         : `Reply strictly in this language: ${targetLanguage}.`;
 
+    // ================= System Prompt =================
     const systemPrompt = `
 You are FixLens Brain – a world-class multilingual diagnostic assistant for cars, home appliances, and general mechanical issues.
 
@@ -118,15 +122,17 @@ ${
         ? userNote
         : "Please analyze this image and explain any possible issues, in the correct language.";
 
-    const response = await openai.responses.create({
+    // ================= Call OpenAI (chat.completions) =================
+    const completion = await openai.chat.completions.create({
       model: "gpt-4.1-mini",
-      instructions: systemPrompt,
-      max_output_tokens: 900,
-      input: [
+      max_tokens: 900,
+      temperature: 0.5,
+      messages: [
+        { role: "system", content: systemPrompt },
         {
           role: "user",
           content: [
-            { type: "input_text", text: userText },
+            { type: "text", text: userText },
             {
               type: "input_image",
               image_url: { url: `data:image/jpeg;base64,${imageBase64}` },
@@ -137,11 +143,12 @@ ${
     });
 
     const reply =
-      (response.output_text && response.output_text.trim()) ||
+      completion.choices[0]?.message?.content?.trim() ||
       "I could not analyze the image.";
 
     const latencyMs = Date.now() - started;
 
+    // ================= Logging =================
     safeLogFixLensEvent({
       source: "mobile-app",
       mode,
@@ -184,10 +191,8 @@ ${
     return res.status(500).json({
       code: 500,
       message: "A server error has occurred",
-      details:
-        process.env.NODE_ENV === "development"
-          ? String(err?.message || err)
-          : undefined,
+      // لو حبيت نقدر لاحقاً نرجّع التفاصيل وقت الـ debug فقط
+      // details: String(err?.message || err),
     });
   }
 }
