@@ -4,49 +4,22 @@ import { findRelevantIssues } from "../lib/autoKnowledge.js";
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-// LANGUAGE GUESS
-function guessLanguage(text) {
-  if (!text || !text.trim()) return "en";
-  if (/[\u0600-\u06FF]/.test(text)) return "ar";
+function guessLanguage(t) {
+  if (!t) return "en";
+  if (/[\u0600-\u06FF]/.test(t)) return "ar";
   return "en";
 }
 
-// SYSTEM PROMPT
 const SYSTEM_PROMPT = `
-You are FixLens Auto, an intelligent vehicle diagnostics assistant.
-You ONLY diagnose sounds from vehicles and NEVER talk about anything else.
-
-You will receive:
-- An audio FILE of the sound (engine knock, tick, squeal, etc.)
-- A short Whisper transcription (if any speech exists)
-- Optional notes
-- Auto-knowledge-base matched issues
-
-Your job:
-1. LISTEN to the audio carefully.
-2. Identify the sound pattern (knock, tick, squeal, grind, etc.)
-3. Combine with transcription + notes + KB
-4. Produce structured diagnosis.
-
-Reply ONLY in the user's language.
-
-Format:
-**Quick Summary:**
-**What the Sound Feels Like:**
-**Most Likely Causes:**
-**Recommended Checks:**
-**Safety Notes:**
-**Next Step:**
+You are FixLens Auto, an intelligent automotive sound-diagnosis system.
+Analyze the audio carefully: clicking, knocking, rattling, squealing, grinding, misfire patterns.
+Reply ONLY in the user's language with structured output.
 `;
 
-// Helper extract text
 function extractText(resp) {
   try {
-    const first = resp.output?.[0];
-    const textPart = first?.content?.find(
-      (c) => c.type === "output_text"
-    );
-    return textPart?.text || null;
+    const part = resp.output?.[0]?.content?.find((c) => c.type === "output_text");
+    return part?.text || null;
   } catch {
     return null;
   }
@@ -57,105 +30,80 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: "POST only" });
 
   try {
-    const body = typeof req.body === "string"
-      ? JSON.parse(req.body)
-      : req.body || {};
+    const body = typeof req.body === "string" ? JSON.parse(req.body) : req.body;
 
-    const {
-      audioBase64,
-      mimeType = "audio/m4a",
-      language: clientLang,
-      note
-    } = body;
+    const { audioBase64, mimeType = "audio/m4a", note, language } = body;
 
     if (!audioBase64)
       return res.status(400).json({ error: "Missing audioBase64" });
 
-    // Convert base64 → file
+    // Convert base64 → Buffer
     const audioBuffer = Buffer.from(audioBase64, "base64");
 
-    const audioFile = await toFile(
-      audioBuffer,
-      "sound.m4a",
-      { type: mimeType }
-    );
+    // Convert to File (required by API)
+    const localFile = await toFile(audioBuffer, "sound.m4a", { type: mimeType });
 
-    // Whisper transcription
-    const whisper = await openai.audio.transcriptions.create({
-      model: "whisper-1",
-      file: audioFile,
+    // ---- STEP 1: Upload file to OpenAI ----
+    const uploaded = await openai.files.create({
+      file: localFile,
+      purpose: "input",
     });
 
-    const transcript = (whisper.text || "").trim();
-    const lang = clientLang && clientLang !== "auto"
-      ? clientLang
+    const fileId = uploaded.id; // REAL ID 🎯
+
+    // ---- STEP 2: Whisper Transcription ----
+    const whisper = await openai.audio.transcriptions.create({
+      model: "whisper-1",
+      file: localFile,
+    });
+
+    const transcript = whisper.text?.trim() || "";
+    const lang = language && language !== "auto"
+      ? language
       : guessLanguage(transcript || note);
 
-    // Knowledge base results
-    let issues = [];
-    try {
-      issues = await findRelevantIssues(transcript || note || "");
-    } catch {}
+    const kb = await findRelevantIssues(transcript || note || "");
 
-    // Build user prompt
     const userBundle = `
-User transcription:
-"${transcript || "N/A"}"
+Transcription: "${transcript || "N/A"}"
+Note: "${note || "N/A"}"
+Matched issues: ${JSON.stringify(kb, null, 2)}
+Language: ${lang}
+    `;
 
-User note:
-"${note || "N/A"}"
-
-Matched issues:
-${JSON.stringify(issues, null, 2)}
-
-User language: ${lang}
-`;
-
-    // 🔥 THE MAGIC: SEND AUDIO AS input_file (SUPPORTED)
+    // ---- STEP 3: GPT DIAGNOSIS REQUEST ----
     const resp = await openai.responses.create({
       model: "gpt-4.1-mini",
       input: [
         {
           role: "system",
-          content: [{ type: "input_text", text: SYSTEM_PROMPT }]
+          content: [{ type: "input_text", text: SYSTEM_PROMPT }],
         },
         {
           role: "user",
           content: [
-            {
-              type: "input_file",
-              file_id: audioFile.id, // <-- THIS WORKS
-            },
-            {
-              type: "input_text",
-              text: userBundle
-            }
-          ]
-        }
-      ]
+            { type: "input_file", file_id: fileId }, // ✅ CORRECT
+            { type: "input_text", text: userBundle },
+          ],
+        },
+      ],
     });
 
     let reply = extractText(resp);
-
-    if (!reply)
-      reply =
-        lang === "ar"
-          ? "لم أستطع تحليل الصوت، الرجاء إعادة التسجيل في مكان هادئ."
-          : "I couldn’t analyze the sound, please record again in a quieter environment.";
+    if (!reply) reply = "Could not analyze audio.";
 
     return res.status(200).json({
       reply,
-      language: lang,
       transcript,
-      issues,
-      source: "fixlens-audio",
+      issues: kb,
+      language: lang,
     });
 
   } catch (err) {
-    console.error("Audio error:", err);
+    console.error("AUDIO ERROR:", err);
     return res.status(500).json({
       error: "Audio diagnosis failed",
-      details: err?.message || err,
+      details: err?.response?.data || err?.message || err,
     });
   }
 }
