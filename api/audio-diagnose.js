@@ -69,6 +69,7 @@ export default async function handler(req, res) {
       contentType: mimeType,
     });
 
+    // 1) Transcribe
     const transcription = await openai.audio.transcriptions.create({
       model: "gpt-4o-mini-transcribe",
       file: audioFile,
