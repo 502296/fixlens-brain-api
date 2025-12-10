@@ -1,166 +1,135 @@
 // api/diagnose.js
+// FixLens – TEXT DIAGNOSIS (Global, multi-language)
+
 import OpenAI from "openai";
 import { findRelevantIssues } from "../lib/autoKnowledge.js";
-import { logFixLensEvent } from "../lib/supabaseClient.js";
 
+// تأكد أن متغير البيئة موجود في Vercel باسم OPENAI_API_KEY
 const openai = new OpenAI({
 apiKey: process.env.OPENAI_API_KEY,
 });
 
-// دالة بسيطة لمحاولة تخمين اللغة من النص
-function guessLanguage(text) {
-if (!text || !text.trim()) return null;
-const t = text.trim();
-
-// Arabic
-if (/[\u0600-\u06FF]/.test(t)) return "ar";
-// Cyrillic → Russian تقريباً
-if (/[\u0400-\u04FF]/.test(t)) return "ru";
-// Greek
-if (/[\u0370-\u03FF]/.test(t)) return "el";
-// CJK (Chinese / Japanese / Korean)
-if (/[\u4E00-\u9FFF]/.test(t)) return "zh";
-
-const lower = t.toLowerCase();
-
-if (/[ñáéíóúü]|hola\b|gracias\b|buenos\s+d[ií]as/.test(lower)) return "es";
-if (/[àâçéèêëîïôùûüÿœ]|bonjour\b|merci\b/.test(lower)) return "fr";
-if (/[äöüß]|hallo\b|danke\b/.test(lower)) return "de";
-
-// ASCII فقط → غالباً إنجليزي
-if (/^[\x00-\x7F]+$/.test(t)) return "en";
-
-return null;
+// مساعد صغير: تنظيف النص
+function cleanText(value) {
+if (!value) return "";
+if (typeof value === "string") return value.trim();
+return String(value).trim();
 }
 
 export default async function handler(req, res) {
+// نسمح فقط بـ POST
 if (req.method !== "POST") {
-return res.status(405).json({ code: 405, message: "Method not allowed" });
+return res.status(405).json({ error: "Method not allowed. Use POST." });
 }
-
-const started = Date.now();
 
 try {
-const body =
-typeof req.body === "string" ? JSON.parse(req.body) : req.body || {};
+let body = req.body;
 
-const message =
-body.message || body.text || body.user_message || body.prompt || "";
+// أحياناً Vercel يرسل body كنص، فنحاول نفكّه
+if (typeof body === "string") {
+try {
+body = JSON.parse(body);
+} catch {
+// تجاهل، نخليها نص لو فشل
+}
+}
 
-const languageHint = body.language || "auto";
-const mode = body.mode || "text";
+const message = cleanText(body?.message || body?.text || body?.prompt);
+const languageHint = cleanText(body?.languageHint || body?.lang);
 
-if (!message || !message.trim()) {
+if (!message) {
 return res
 .status(400)
-.json({ code: 400, message: "Message required." });
+.json({ error: "message is required in request body." });
 }
 
-// معرفة المشاكل المحتملة من autoKnowledge
-const autoKnowledge = findRelevantIssues(message);
-
-// تحديد اللغة المستهدفة
-let targetLanguage = null;
-if (languageHint && languageHint !== "auto") {
-targetLanguage = languageHint;
-} else {
-targetLanguage = guessLanguage(message) || "en";
+// نجيب أقرب مشاكل من قاعدة المعرفة (auto_common_issues.json)
+let issuesSummary = "No matched issues from the knowledge base.";
+try {
+const issues = await findRelevantIssues(message);
+if (issues && issues.length > 0) {
+issuesSummary = JSON.stringify(issues, null, 2);
 }
-
-const languageInstruction =
-targetLanguage === "en"
-? "Reply in natural English, unless the text is clearly in another language."
-: `Reply strictly in this language: ${targetLanguage}.`;
+} catch (err) {
+// لو صار خطأ بملف المعرفة لا نكسر الـ API كله
+console.error("autoKnowledge error:", err);
+issuesSummary = "Knowledge base unavailable (internal error).";
+}
 
 const systemPrompt = `
-You are FixLens Brain – a world-class multilingual diagnostic assistant for cars, home appliances, and general mechanical issues.
+You are FixLens Auto, a global intelligent automotive assistant.
 
-Language rule:
-- ${languageInstruction}
-- NEVER switch to another language unless the user clearly switches.
-- If there's any Arabic, answer fully in Arabic. If Spanish, answer in Spanish, etc.
+- Detect the user's language automatically and ALWAYS reply in the same language
+(Arabic if the user writes in Arabic, Spanish for Spanish, etc.).
+- You specialize in car problems: noises, leaks, warning lights, vibrations, smells,
+starting issues, rough idle, shaking, braking issues, steering, and other common symptoms.
+- Use the "reference issues" below only as internal hints. Don't show raw JSON to the user.
+- Your answer must be friendly, clear, and not scary, but honest about safety.
 
-General rules:
-- Be friendly, clear, and step-by-step.
-- Start with a short **Quick Summary**.
-- Then list **Most Likely Causes** as bullet points.
-- Then **What You Can Check Now**.
-- Then **Safety / When to Stop Driving or Using the device**.
-- Then **Next Professional Step**.
-- Ask 2–3 smart follow-up questions if needed.
-- If the user describes a car problem, think like a professional mechanic.
-- If it's a different type of problem (home, appliance, etc.), think like the right pro.
-- Be honest about uncertainty and give safety warnings when needed.
+Your reply structure:
+1) Short friendly greeting in the user's language.
+2) Brief summary of what might be happening (1–3 sentences).
+3) 2–4 likely causes with simple explanations (bullet points).
+4) 3–5 practical next steps (what the driver should check, how urgent it is,
+and whether it's safe to drive or should tow the car).
+5) Always add a short safety note: this is not a replacement for an in-person mechanic.
 
-If extra internal knowledge is provided, use it but do NOT mention "database" or "autoKnowledge" in your answer.
-`;
+If the user message is just "hello" or something very short with no symptoms,
+gently introduce yourself, explain what FixLens can do, and ask them to describe the issue.
 
-const messages = [
-{ role: "system", content: systemPrompt },
-autoKnowledge
-? {
-role: "system",
-content: autoKnowledge,
-}
-: null,
-{ role: "user", content: message },
-].filter(Boolean);
+If the user is NOT talking about cars at all, give a short polite answer
+in their language, and then remind them that FixLens Auto is mainly for cars.
+`.trim();
 
-const completion = await openai.chat.completions.create({
-model: "gpt-4.1-mini",
-messages,
-temperature: 0.5,
+const combinedPrompt = `
+System instructions:
+${systemPrompt}
+
+User message:
+${message}
+
+Language hint (optional, may be empty):
+${languageHint || "none"}
+
+Reference issues from autoKnowledge (for your internal reasoning only):
+${issuesSummary}
+`.trim();
+
+const response = await openai.responses.create({
+model: "gpt-4.1-mini", // سريع ورخيص وقوي كفاية
+input: combinedPrompt,
+max_output_tokens: 900,
 });
 
-const reply = completion.choices[0]?.message?.content?.trim() || "";
+const replyText = cleanText(response.output_text);
 
-// Log إلى Supabase (بدون ما نكسر لو فشل)
-const latencyMs = Date.now() - started;
-
-logFixLensEvent({
-source: "mobile-app",
-mode,
-userMessage: message,
-aiReply: reply,
-meta: {
-endpoint: "/api/diagnose",
-languageHint,
-targetLanguage,
-model: "gpt-4.1-mini",
-latencyMs,
-success: true,
-},
-}).catch(() => {});
+// نحاول نخمن اللغة من الرد نفسه (بسيطة لكن تكفي)
+let detectedLanguage = languageHint || null;
+if (!detectedLanguage) {
+if (/[\u0600-\u06FF]/.test(replyText)) {
+detectedLanguage = "ar";
+} else if (/[áéíóúñ¿¡]/i.test(replyText)) {
+detectedLanguage = "es";
+} else if (/[а-яё]/i.test(replyText)) {
+detectedLanguage = "ru";
+} else {
+detectedLanguage = "en";
+}
+}
 
 return res.status(200).json({
-code: 200,
-message: "OK",
-reply,
-language: targetLanguage,
+reply: replyText || "FixLens Auto could not generate a reply.",
+language: detectedLanguage,
 });
 } catch (err) {
-console.error("FixLens Brain diagnose error:", err);
-
-// نحاول نسجل الخطأ في Supabase بدون ما نكسر الريسبونس
-const latencyMs = Date.now() - started;
-logFixLensEvent({
-source: "mobile-app",
-mode: "text",
-userMessage: null,
-aiReply: null,
-meta: {
-endpoint: "/api/diagnose",
-error: err?.message || String(err),
-latencyMs,
-success: false,
-},
-}).catch(() => {});
+console.error("FixLens diagnose.js error:", err);
 
 return res.status(500).json({
-code: 500,
-message: "A server error has occurred",
+error: "FixLens Brain internal error.",
 details:
-process.env.NODE_ENV === "development" ? err.message : undefined,
+process.env.NODE_ENV === "development"
+? String(err?.stack || err?.message || err)
+: undefined,
 });
 }
 }
