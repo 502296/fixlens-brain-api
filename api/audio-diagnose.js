@@ -1,7 +1,6 @@
 // api/audio-diagnose.js
 import OpenAI, { toFile } from "openai";
 import { findRelevantIssues } from "../lib/autoKnowledge.js";
-import { logFixLensEvent } from "../lib/supabaseClient.js";
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -27,6 +26,20 @@ function guessLanguage(text) {
   return null;
 }
 
+async function safeLogFixLensEvent(payload) {
+  try {
+    const mod = await import("../lib/supabaseClient.js");
+    const fn = mod.logFixLensEvent;
+    if (typeof fn === "function") {
+      await fn(payload);
+    } else {
+      console.error("logFixLensEvent is not a function (ignored).");
+    }
+  } catch (e) {
+    console.error("Supabase logging error (ignored):", e.message);
+  }
+}
+
 export default async function handler(req, res) {
   if (req.method !== "POST") {
     return res.status(405).json({ code: 405, message: "Method not allowed" });
@@ -49,7 +62,6 @@ export default async function handler(req, res) {
         .json({ code: 400, message: "audioBase64 is required." });
     }
 
-    // 1) Base64 → Buffer → File (toFile helper)
     const audioBuffer = Buffer.from(audioBase64, "base64");
     const ext = mimeType.split("/")[1] || "m4a";
 
@@ -130,8 +142,7 @@ Transcript:
 
     const latencyMs = Date.now() - started;
 
-    // Log success
-    logFixLensEvent({
+    safeLogFixLensEvent({
       source: "mobile-app",
       mode,
       userMessage: transcriptText,
@@ -145,7 +156,7 @@ Transcript:
         latencyMs,
         success: true,
       },
-    }).catch(() => {});
+    });
 
     return res.status(200).json({
       code: 200,
@@ -157,7 +168,8 @@ Transcript:
     console.error("FixLens Brain audio-diagnose error:", err);
 
     const latencyMs = Date.now() - started;
-    logFixLensEvent({
+
+    safeLogFixLensEvent({
       source: "mobile-app",
       mode,
       userMessage: null,
@@ -168,13 +180,15 @@ Transcript:
         latencyMs,
         success: false,
       },
-    }).catch(() => {});
+    });
 
     return res.status(500).json({
       code: 500,
       message: "A server error has occurred",
       details:
-        process.env.NODE_ENV === "development" ? String(err?.message || err) : undefined,
+        process.env.NODE_ENV === "development"
+          ? String(err?.message || err)
+          : undefined,
     });
   }
 }
