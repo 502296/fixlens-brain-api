@@ -1,4 +1,6 @@
 // api/image-diagnose.js
+// FixLens – IMAGE DIAGNOSIS (Vision, multi-language)
+
 import OpenAI from "openai";
 import { findRelevantIssues } from "../lib/autoKnowledge.js";
 
@@ -24,8 +26,8 @@ if (/[\u4E00-\u9FFF]/.test(t)) return "zh";
 if (/[\u3040-\u30FF]/.test(t)) return "ja";
 if (/[\uAC00-\uD7AF]/.test(t)) return "ko";
 
-// Simple Latin-based language hints
 const lower = t.toLowerCase();
+
 if (/[áéíóúñ¿¡]/.test(lower)) return "es"; // Spanish
 if (/[àâçéèêëîïôûùüÿœ]/.test(lower)) return "fr"; // French
 if (/[äöüß]/.test(lower)) return "de"; // German
@@ -85,8 +87,11 @@ return res
 .json({ code: 400, message: "Missing 'image' (base64 string)." });
 }
 
-// Detect / choose language
-const lang = clientLanguage || guessLanguage(text) || "en";
+// Detect / choose language (Flutter > guess from text > en)
+const lang =
+(clientLanguage && clientLanguage !== "auto" && clientLanguage) ||
+guessLanguage(text) ||
+"en";
 
 // Prepare base64 data URL for vision
 // Flutter can send either:
@@ -131,7 +136,6 @@ url: imageUrl,
 
 let replyText = "";
 
-// Vision responses with chat.completions return an array of content parts
 const msg = completion.choices?.[0]?.message;
 if (Array.isArray(msg?.content)) {
 replyText =
@@ -152,7 +156,7 @@ lang === "ar"
 
 return res.status(200).json({
 reply: replyText,
-language: lang,
+language: lang, // 👈 نفس لغة المستخدم
 issues: relevantIssues || [],
 source: "fixlens-image",
 });
