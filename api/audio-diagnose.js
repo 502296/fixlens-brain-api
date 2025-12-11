@@ -1,6 +1,7 @@
 // api/audio-diagnose.js
-// FixLens Sound Lab – Level 3 (Advanced car sound analysis)
-// Uses gpt-audio with Chat Completions API
+// FixLens Sound Lab – Robust audio pipeline
+// 1) Transcribe audio with gpt-4o-mini-transcribe
+// 2) Diagnose using GPT-5.1-mini with a sound-focused system prompt
 
 import OpenAI from "openai";
 import formidable from "formidable";
@@ -16,7 +17,7 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-// نفس دالة تخمين اللغة اللي نستخدمها في باقي ملفات FixLens
+// Helper: guess language from text
 function guessLanguage(text) {
   if (!text || !text.trim()) return null;
   const t = text.trim();
@@ -30,7 +31,13 @@ function guessLanguage(text) {
   return "en";
 }
 
-// محاولة معرفة نوع الملف الصوتي
+function cleanText(value) {
+  if (!value) return "";
+  if (typeof value === "string") return value.trim();
+  return String(value).trim();
+}
+
+// محاولة معرفة نوع الملف الصوتي (للمعلومات فقط)
 function detectAudioFormat(audioFile) {
   const mime = (audioFile.mimetype || "").toLowerCase();
   const name = (audioFile.originalFilename || audioFile.newFilename || "").toLowerCase();
@@ -65,148 +72,122 @@ export default async function handler(req, res) {
         return res.status(400).json({ error: "No audio file provided" });
       }
 
-      const preferredLanguage =
+      const preferredLanguageField =
         (Array.isArray(fields.preferredLanguage)
           ? fields.preferredLanguage[0]
           : fields.preferredLanguage) ||
+        (Array.isArray(fields.language) ? fields.language[0] : fields.language) ||
+        (Array.isArray(fields.lang) ? fields.lang[0] : fields.lang) ||
         req.query.preferredLanguage ||
         "auto";
 
       const filePath = audioFile.filepath || audioFile.path;
       const format = detectAudioFormat(audioFile);
 
-      let base64Audio;
+      // 1) Transcribe with gpt-4o-mini-transcribe
+      let transcriptText = "";
       try {
-        const buffer = fs.readFileSync(filePath);
-        base64Audio = buffer.toString("base64");
+        const transcription = await openai.audio.transcriptions.create({
+          file: fs.createReadStream(filePath),
+          model: "gpt-4o-mini-transcribe",
+          // نعطيه لغة تقريبية لو حاب (اختياري)
+          language:
+            preferredLanguageField && preferredLanguageField !== "auto"
+              ? preferredLanguageField
+              : undefined,
+          response_format: "json",
+        });
+
+        transcriptText = cleanText(transcription.text);
+
+        if (!transcriptText) {
+          // لا يوجد كلام واضح في التسجيل
+          return res.status(200).json({
+            reply:
+              "FixLens Sound Lab could not clearly detect speech or a consistent mechanical pattern in this recording. Please try again, hold the phone closer to the sound source, and record at least 10–15 seconds.",
+            language:
+              preferredLanguageField && preferredLanguageField !== "auto"
+                ? preferredLanguageField
+                : "en",
+          });
+        }
       } catch (readErr) {
-        console.error("Error reading audio file:", readErr);
+        console.error("Error transcribing audio file:", readErr);
         return res.status(500).json({
           error: "Audio diagnosis failed",
-          details: "Could not read audio file on server",
+          details: "Could not transcribe audio on server",
         });
       }
 
+      // 2) Diagnose using GPT-5.1-mini with a sound-focused prompt
       try {
-        // ⚡ هنا السحر الحقيقي – gpt-audio
-        // نستخدم Chat Completions + input_audio
-        const completion = await openai.chat.completions.create({
-          model: process.env.FIXLENS_AUDIO_MODEL || "gpt-audio",
-          // نسمح للنموذج يرجع نص فقط (نطنش الصوت الخارج)
-          modalities: ["text", "audio"], // نخلي audio مفعّل لو احتجناه مستقبلاً
-          audio: { voice: "alloy", format: "wav" }, // نقدر نتجاهل الـ output audio حالياً
-          messages: [
-            {
-              role: "system",
-              content: `
-You are **FixLens Auto – Sound Lab v3**, a world-class AI mechanic
-specialized in diagnosing car problems *purely from sound*.
+        const resolvedLanguage =
+          (preferredLanguageField && preferredLanguageField !== "auto" && preferredLanguageField) ||
+          guessLanguage(transcriptText) ||
+          "en";
 
-You receive a recording from somewhere in or around a vehicle:
-engine bay, exhaust, suspension, brakes, steering, or cabin.
+        const systemPrompt = `
+You are **FixLens Auto – Sound Lab**, a careful AI mechanic that analyzes car problems
+based on what the driver recorded and what was transcribed from the audio.
 
-Analyze the **waveform itself**, not just speech:
+The transcription below may include:
+- Driver's spoken description of the sound.
+- Descriptive words about the noise (knock, ping, squeal, grinding, etc.).
+- Any context about speed, RPM, braking, turning, etc.
 
-1. Decompose the sound:
-   - Identify main patterns: knocking, pinging, tapping, ticking,
-     squeaking, chirping, grinding, whining, humming, rattling, hissing,
-     whooshing, rumbling, belt slapping, metallic clunking, etc.
-   - Notice if the sound follows engine RPM, road speed, bumps, braking,
-     turning the steering wheel, or gear shifts.
-
-2. Perform a mental "mechanic-style" analysis:
-   - For each sound pattern, map it to mechanical sources:
-     * top-end engine (lifters, valve train),
-     * bottom-end engine (rods, bearings),
-     * ignition / misfire,
-     * timing chain / belt,
-     * accessory belt / tensioner / pulleys,
-     * exhaust leaks or rattling heat shields,
-     * wheel bearings, CV joints, suspension,
-     * brakes (pads, rotors, calipers),
-     * drivetrain and transmission mounts.
-
-3. Produce a list of **most likely causes** with approximate probabilities:
-   - Example:
-     - 0.72 – Failing rod bearing (deep knock following RPM)
-     - 0.31 – Loose heat shield (metallic rattle on bumps, not with RPM)
-   - The probabilities should roughly sum to 1.0, but they are estimates.
-
-4. For each cause, describe:
-   - Which component is likely affected.
-   - Why the sound's frequency, rhythm, and behavior match that issue.
-   - Whether the issue tends to be common or rare.
-
-5. Assess **overall risk level**:
-   - CRITICAL – Stop driving immediately (risk of catastrophic damage).
-   - HIGH – Avoid highway / hard acceleration, see mechanic ASAP.
-   - MEDIUM – Schedule a shop visit soon, avoid stressing the system.
-   - LOW – Monitor; likely minor or early stage, but still worth checking.
-
-6. Provide **clear next steps for the driver**:
-   - What to tell the mechanic about the sound and when it appears.
-   - Any simple safe checks the driver can do (checking oil level,
-     visually checking belts, looking for leaks, etc.).
-   - When it's absolutely unsafe to keep driving.
+Your job:
+1. Extract all details related to the sound pattern and when it happens.
+2. Map those patterns to mechanical causes:
+   - engine top-end (lifters/valvetrain)
+   - engine bottom-end (rods/bearings)
+   - ignition/misfire
+   - timing chain/belt
+   - accessory belt/tensioner/pulleys
+   - exhaust leaks / rattling shields
+   - wheel bearings, CV joints, suspension
+   - brakes (pads, rotors, calipers)
+   - drivetrain and mounts
+3. Provide a ranked list of likely causes with approximate probabilities.
+4. Assess risk:
+   - CRITICAL – Stop driving immediately.
+   - HIGH – Drive only gently and visit a mechanic ASAP.
+   - MEDIUM – Schedule a shop visit soon.
+   - LOW – Probably minor, but worth checking.
 
 LANGUAGE:
-- If "preferredLanguage" is given, answer in that language (short code like "ar", "en", "es").
-- If preferredLanguage = "auto", try to match the driver's spoken language if you detect speech.
-- Keep the tone calm, friendly, and confident – like a smart, experienced mechanic
-  explaining the situation to a normal driver.
+- The driver's language code is: "${resolvedLanguage}".
+- ALWAYS reply in this language only.
+- Use a calm, friendly tone like an experienced mechanic talking to a normal driver.
 
-If the audio is mostly silence, strong wind noise, or human conversation
-with no clear mechanical sound, say that you are **not confident** and
-explain what kind of recording would help (where to hold the phone,
-how long to record, etc.).
-            `.trim(),
-            },
-            {
-              role: "user",
-              content: [
-                {
-                  type: "text",
-                  text:
-                    preferredLanguage && preferredLanguage !== "auto"
-                      ? `This is a car sound recording. Analyze ONLY the mechanical sound and answer in language code: ${preferredLanguage}.`
-                      : `This is a car sound recording from a vehicle. Analyze ONLY the mechanical sound (not my words) and reply in the same language as the driver if possible.`,
-                },
-                {
-                  type: "input_audio",
-                  input_audio: {
-                    data: base64Audio,
-                    format,
-                  },
-                },
-              ],
-            },
-          ],
+If the transcription is mostly unrelated conversation and no clear car sound context,
+say that you are not confident and explain what kind of recording would help.
+        `.trim();
+
+        const combinedPrompt = `
+System instructions:
+${systemPrompt}
+
+Transcribed audio from the driver:
+${transcriptText}
+        `.trim();
+
+        const response = await openai.responses.create({
+          model: "gpt-5.1-mini",
+          input: combinedPrompt,
+          max_output_tokens: 900,
         });
 
-        const choice = completion.choices[0];
-        let replyText = "";
-
-        if (typeof choice.message.content === "string") {
-          replyText = choice.message.content;
-        } else if (Array.isArray(choice.message.content)) {
-          const textPart = choice.message.content.find((p) => p.type === "text");
-          replyText = textPart?.text || JSON.stringify(choice.message.content);
-        } else {
-          replyText = JSON.stringify(choice.message);
-        }
-
-        const detectedLang = guessLanguage(replyText);
-        const finalLang =
-          preferredLanguage && preferredLanguage !== "auto"
-            ? preferredLanguage
-            : detectedLang || "en";
+        const replyText = cleanText(response.output_text);
 
         return res.status(200).json({
-          reply: replyText,
-          language: finalLang,
+          reply:
+            replyText ||
+            "FixLens Sound Lab could not confidently diagnose from this recording. Please try again with a clearer sample focusing on the car sound.",
+          language: resolvedLanguage,
+          format,
         });
       } catch (apiError) {
-        console.error("FixLens Sound Lab (gpt-audio) error:", apiError);
+        console.error("FixLens Sound Lab analysis error:", apiError);
         return res.status(500).json({
           error: "Audio diagnosis failed",
           details:
