@@ -2,11 +2,7 @@
   "name": "fixlens-brain-api",
   "version": "1.0.0",
   "type": "module",
-  "scripts": {
-    "build": "echo \"no build step\""
-  },
   "dependencies": {
-    "openai": "^4.79.0",
-    "formidable": "^3.5.4"
+    "openai": "latest"
   }
 }
