@@ -11,33 +11,34 @@ const client = new OpenAI({
 
 export default async function handler(req, res) {
   try {
-    const { image, text, language = "auto" } = req.body ?? {};
+    const { image, text = "" } = req.body ?? {};
 
-    if (!image) return res.status(400).json({ error: "No base64 image provided" });
+    if (!image) {
+      return res.status(400).json({ error: "Missing base64 image" });
+    }
 
-    const visionInput = {
-      model: "gpt-4o-mini",
-      messages: [
+    const ai = await client.responses.create({
+      model: "gpt-5.1",
+      input: [
         {
           role: "user",
           content: [
-            { type: "input_text", text: text ?? "" },
+            { type: "input_text", text },
             {
-              type: "input_image",
-              image_url: `data:image/jpeg;base64,${image}`,
+              type: "input_file",
+              mime_type: "image/jpeg",
+              data: image,
             },
           ],
         },
       ],
-    };
-
-    const response = await client.chat.completions.create(visionInput);
+    });
 
     return res.status(200).json({
-      reply: response.choices[0].message.content,
-      language,
+      reply: ai.output_text,
     });
   } catch (err) {
+    console.error("IMAGE ERROR:", err);
     return res.status(500).json({
       error: "Image diagnosis failed",
       details: err.message,
