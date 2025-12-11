@@ -1,8 +1,12 @@
 {
   "name": "fixlens-brain-api",
   "version": "1.0.0",
+  "private": true,
   "type": "module",
+  "scripts": {
+    "start": "node api/diagnose.js"
+  },
   "dependencies": {
-    "openai": "latest"
+    "openai": "4.58.1"
   }
 }
