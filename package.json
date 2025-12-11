@@ -1,15 +1,12 @@
 {
-
-  "name": "fixlens-brain-api-x598",
-
+  "name": "fixlens-brain-api",
   "version": "1.0.0",
-
   "type": "module",
-
+  "scripts": {
+    "build": "echo \"no build step\""
+  },
   "dependencies": {
-
-    "openai": "^4.0.0"
-
+    "openai": "^4.79.0",
+    "formidable": "^3.5.4"
   }
-
 }
