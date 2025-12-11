@@ -1,140 +1,186 @@
-// api/audio-diagnose.js
-// FixLens Sound Lab – JSON base64 version (no multipart)
+// api/diagnose.js
+// FixLens – TEXT DIAGNOSIS (global, multi-language)
 
 import OpenAI from "openai";
+import { findRelevantIssues } from "../lib/autoKnowledge.js";
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-// نفس دالة تخمين اللغة
-function guessLanguage(text) {
-  if (!text || !text.trim()) return null;
-  const t = text.trim();
-
-  if (/[\u0600-\u06FF]/.test(t)) return "ar"; // Arabic
-  if (/[\u0400-\u04FF]/.test(t)) return "ru"; // Russian
-  if (/[áéíóúñüÁÉÍÓÚÑÜ]/.test(t)) return "es"; // Spanish-ish
-  if (/[äöüßÄÖÜ]/.test(t)) return "de"; // German-ish
-  if (/[àâçéèêëîïôûùüÿÀÂÇÉÈÊËÎÏÔÛÙÜŸ]/.test(t)) return "fr"; // French-ish
-
-  return "en";
+// Helper: clean text
+function cleanText(value) {
+  if (!value) return "";
+  if (typeof value === "string") return value.trim();
+  return String(value).trim();
 }
 
-function detectFormatFromMime(mimeType) {
-  const mt = (mimeType || "").toLowerCase();
-  if (mt.includes("wav")) return "wav";
-  if (mt.includes("mpeg") || mt.includes("mp3")) return "mp3";
-  if (mt.includes("m4a") || mt.includes("aac")) return "m4a";
-  if (mt.includes("webm")) return "webm";
-  // Flutter record غالباً m4a
-  return "m4a";
+// Helper: safe logging to Supabase (optional)
+async function safeLogFixLensEvent(payload) {
+  try {
+    const mod = await import("../lib/supabaseClient.js");
+    const fn = mod.logFixLensEvent;
+    if (typeof fn === "function") {
+      await fn(payload);
+    } else {
+      console.error("logFixLensEvent is not a function (ignored).");
+    }
+  } catch (e) {
+    console.error("Supabase logging error (ignored):", e.message);
+  }
 }
 
 export default async function handler(req, res) {
   if (req.method !== "POST") {
-    res.setHeader("Allow", "POST");
-    return res.status(405).json({ error: "Method not allowed" });
+    return res
+      .status(405)
+      .json({ code: 405, message: "Method not allowed. Use POST." });
   }
 
+  const started = Date.now();
+  const mode = "text";
+
   try {
-    // Vercel يمرّر body جاهز كـ JSON
     let body = req.body;
+
     if (typeof body === "string") {
       try {
         body = JSON.parse(body);
       } catch {
-        // نخليها كما هي لو ما قدر يفسّرها
+        // keep as string if JSON.parse fails
+        body = {};
       }
     }
 
-    const audioBase64 = body?.audioBase64;
-    const mimeType = body?.mimeType || "audio/m4a";
-    const preferredLanguage = body?.language || "auto";
+    const message = cleanText(body?.message || body?.text || body?.prompt);
+    const languageHint = cleanText(
+      body?.languageHint || body?.lang || body?.language
+    );
 
-    if (!audioBase64) {
-      return res.status(400).json({
-        error: "No audioBase64 provided in request body",
-      });
+    if (!message) {
+      return res
+        .status(400)
+        .json({ code: 400, message: "message is required in request body." });
     }
 
-    const format = detectFormatFromMime(mimeType);
-
+    // ---- Load knowledge base ----
+    let issuesSummary = "No matched issues from the knowledge base.";
     try {
-      const completion = await openai.chat.completions.create({
-        model: process.env.FIXLENS_AUDIO_MODEL || "gpt-audio",
-        modalities: ["text", "audio"],
-        audio: { voice: "alloy", format: "wav" }, // نقدر نطنش الصوت الراجع حالياً
-        messages: [
-          {
-            role: "system",
-            content: `
-You are **FixLens Auto – Sound Lab v3**, a world-class AI mechanic
-specialized in diagnosing car problems *purely from sound*.
-
-(نفس البرومبت الطويل اللي كتبناه سابقاً، يفسّر كيفية تحليل الصوت، 
-احفظه كما هو عندك أو اختصره لو تحب.)
-            `.trim(),
-          },
-          {
-            role: "user",
-            content: [
-              {
-                type: "text",
-                text:
-                  preferredLanguage && preferredLanguage !== "auto"
-                    ? `This is a car sound recording. Analyze ONLY the mechanical sound and answer in language code: ${preferredLanguage}.`
-                    : `This is a car sound recording from a vehicle. Analyze ONLY the mechanical sound (not my words) and reply in the same language as the driver if possible.`,
-              },
-              {
-                type: "input_audio",
-                input_audio: {
-                  data: audioBase64, // 👈 base64 مباشرة من Flutter
-                  format,            // wav / mp3 / m4a / webm
-                },
-              },
-            ],
-          },
-        ],
-      });
-
-      const choice = completion.choices[0];
-      let replyText = "";
-
-      if (typeof choice.message.content === "string") {
-        replyText = choice.message.content;
-      } else if (Array.isArray(choice.message.content)) {
-        const textPart = choice.message.content.find((p) => p.type === "text");
-        replyText = textPart?.text || JSON.stringify(choice.message.content);
-      } else {
-        replyText = JSON.stringify(choice.message);
+      const issues = await findRelevantIssues(message);
+      if (issues && issues.length > 0) {
+        issuesSummary = JSON.stringify(issues, null, 2);
       }
-
-      const detectedLang = guessLanguage(replyText);
-      const finalLang =
-        preferredLanguage && preferredLanguage !== "auto"
-          ? preferredLanguage
-          : detectedLang || "en";
-
-      return res.status(200).json({
-        reply: replyText,
-        language: finalLang,
-      });
-    } catch (apiError) {
-      console.error("FixLens Sound Lab (gpt-audio) error:", apiError);
-      return res.status(500).json({
-        error: "Audio diagnosis failed",
-        details:
-          apiError?.response?.data ||
-          apiError.message ||
-          String(apiError),
-      });
+    } catch (err) {
+      console.error("autoKnowledge error:", err);
+      issuesSummary = "Knowledge base unavailable (internal error).";
     }
-  } catch (e) {
-    console.error("Unexpected audio handler error:", e);
+
+    const systemPrompt = `
+You are FixLens Auto, a global intelligent automotive assistant.
+
+- Detect the user's language automatically and ALWAYS reply in the same language
+  (Arabic if the user writes in Arabic, Spanish for Spanish, etc.).
+- You specialize in car problems: noises, leaks, warning lights, vibrations, smells,
+  starting issues, rough idle, shaking, braking issues, steering, and other common symptoms.
+- Use the "reference issues" below only as internal hints. Don't show raw JSON to the user.
+- Your answer must be friendly, clear, and not scary, but honest about safety.
+
+Your reply structure:
+1) Short friendly greeting in the user's language.
+2) Brief summary of what might be happening (1–3 sentences).
+3) 2–4 likely causes with simple explanations (bullet points).
+4) 3–5 practical next steps (what the driver should check, how urgent it is,
+   and whether it's safe to drive or should tow the car).
+5) Always add a short safety note: this is not a replacement for an in-person mechanic.
+
+If the user message is just "hello" or something very short with no symptoms,
+gently introduce yourself, explain what FixLens can do, and ask them to describe the issue.
+
+If the user is NOT talking about cars at all, give a short polite answer
+in their language, and then remind them that FixLens Auto is mainly for cars.
+`.trim();
+
+    const combinedPrompt = `
+System instructions:
+${systemPrompt}
+
+User message:
+${message}
+
+Language hint (optional, may be empty):
+${languageHint || "none"}
+
+Reference issues from autoKnowledge (for your internal reasoning only):
+${issuesSummary}
+`.trim();
+
+    const response = await openai.responses.create({
+      model: process.env.FIXLENS_TEXT_MODEL || "gpt-4.1-mini",
+      input: combinedPrompt,
+      max_output_tokens: 900,
+    });
+
+    const replyText = cleanText(response.output_text);
+
+    // Detect language from reply (simple heuristic)
+    let detectedLanguage = languageHint || null;
+    if (!detectedLanguage) {
+      if (/[\u0600-\u06FF]/.test(replyText)) {
+        detectedLanguage = "ar";
+      } else if (/[áéíóúñ¿¡]/i.test(replyText)) {
+        detectedLanguage = "es";
+      } else if (/[а-яё]/i.test(replyText)) {
+        detectedLanguage = "ru";
+      } else {
+        detectedLanguage = "en";
+      }
+    }
+
+    const latencyMs = Date.now() - started;
+
+    // Log to Supabase (non-blocking)
+    safeLogFixLensEvent({
+      source: "mobile-app",
+      mode,
+      userMessage: message,
+      aiReply: replyText,
+      meta: {
+        endpoint: "/api/diagnose",
+        languageHint,
+        detectedLanguage,
+        model: process.env.FIXLENS_TEXT_MODEL || "gpt-4.1-mini",
+        latencyMs,
+        success: true,
+      },
+    });
+
+    return res.status(200).json({
+      code: 200,
+      message: "OK",
+      reply: replyText || "FixLens Auto could not generate a reply.",
+      language: detectedLanguage,
+    });
+  } catch (err) {
+    console.error("FixLens diagnose.js error:", err);
+
+    const latencyMs = Date.now() - started;
+
+    safeLogFixLensEvent({
+      source: "mobile-app",
+      mode,
+      userMessage: null,
+      aiReply: null,
+      meta: {
+        endpoint: "/api/diagnose",
+        error: String(err?.message || err),
+        latencyMs,
+        success: false,
+      },
+    });
+
     return res.status(500).json({
-      error: "Audio diagnosis failed",
-      details: e.message || String(e),
+      code: 500,
+      message: "A server error has occurred",
     });
   }
 }
