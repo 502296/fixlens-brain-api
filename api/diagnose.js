@@ -3,51 +3,55 @@ import OpenAI from "openai";
 import { findRelevantIssues } from "../lib/autoKnowledge.js";
 
 export const config = {
-  runtime: "nodejs20.x",
+runtime: "nodejs18.x"
 };
 
 const client = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
+apiKey: process.env.OPENAI_API_KEY,
 });
 
 export default async function handler(req, res) {
-  try {
-    if (req.method !== "POST")
-      return res.status(405).json({ error: "Method not allowed" });
+try {
+if (req.method !== "POST") {
+return res.status(405).json({ error: "Only POST allowed" });
+}
 
-    const { message, language = "auto" } = req.body ?? {};
-    if (!message) return res.status(400).json({ error: "No message provided" });
+const { message, preferredLanguage } = req.body;
 
-    const issues = findRelevantIssues(message);
+if (!message || !message.trim()) {
+return res.status(400).json({ error: "Message is required" });
+}
 
-    const promptText = `
-User message:
-${message}
+// AutoKnowledge
+const issues = findRelevantIssues(message);
 
-Relevant mechanical knowledge:
+const prompt = `
+You are FixLens Auto, the world’s smartest vehicle diagnostic AI.
+User language: ${preferredLanguage || "auto-detect"}.
+User message: ${message}
+
+Relevant automotive issues from internal database:
 ${JSON.stringify(issues, null, 2)}
 
-Language requested: ${language}
-
-Act as FixLens Auto — the most advanced automotive diagnostic AI.
-Explain clearly, detect symptoms, provide causes and next steps.
+Respond in user's language.
+Provide:
+1. Quick Summary
+2. Most likely causes
+3. Recommended next steps
+4. Safety warnings
 `;
 
-    const result = await client.chat.completions.create({
-      model: "gpt-5.1",
-      messages: [{ role: "user", content: promptText }],
-    });
+const ai = await client.chat.completions.create({
+model: "gpt-4.1",
+messages: [{ role: "user", content: prompt }]
+});
 
-    const reply = result.choices[0].message.content;
+return res.status(200).json({
+reply: ai.choices[0].message.content
+});
 
-    return res.status(200).json({
-      reply,
-      language,
-    });
-  } catch (err) {
-    return res.status(500).json({
-      error: "A server error has occurred",
-      details: err.message,
-    });
-  }
+} catch (err) {
+console.error("TEXT ERROR:", err);
+return res.status(500).json({ error: "FixLens text failed", details: err.message });
+}
 }
