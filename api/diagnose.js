@@ -1,57 +1,68 @@
-// api/diagnose.js
+// api/audio-diagnose.js
 import OpenAI from "openai";
-import { findRelevantIssues } from "../lib/autoKnowledge.js";
 
 export const config = {
-runtime: "nodejs18.x"
+  runtime: "nodejs18.x",
+  bodyParser: false,
 };
 
 const client = new OpenAI({
-apiKey: process.env.OPENAI_API_KEY,
+  apiKey: process.env.OPENAI_API_KEY,
 });
 
 export default async function handler(req, res) {
-try {
-if (req.method !== "POST") {
-return res.status(405).json({ error: "Only POST allowed" });
-}
+  try {
+    if (req.method !== "POST") {
+      return res.status(405).json({ error: "POST only" });
+    }
 
-const { message, preferredLanguage } = req.body;
+    // Read the raw audio buffer
+    const chunks = [];
+    for await (const chunk of req) chunks.push(chunk);
+    const buffer = Buffer.concat(chunks);
 
-if (!message || !message.trim()) {
-return res.status(400).json({ error: "Message is required" });
-}
+    // Detect the audio type (fallback mp3)
+    const mimeType =
+      req.headers["content-type"] ||
+      "audio/mpeg";
 
-// AutoKnowledge
-const issues = findRelevantIssues(message);
+    // Convert to base64
+    const base64Audio = buffer.toString("base64");
 
-const prompt = `
-You are FixLens Auto, the world’s smartest vehicle diagnostic AI.
-User language: ${preferredLanguage || "auto-detect"}.
-User message: ${message}
+    // Send to GPT-5.1 / GPT-4o
+    const ai = await client.responses.create({
+      model: "gpt-4o", // ⬅️ أو gpt-5.1 لو تريد
+      input: [
+        {
+          role: "user",
+          content: [
+            {
+              type: "input_text",
+              text: "Analyze this engine sound precisely. Identify the problem, the most likely causes, and the recommended steps."
+            },
+            {
+              type: "input_file",
+              mime_type: mimeType,
+              data: base64Audio
+            }
+          ]
+        }
+      ]
+    });
 
-Relevant automotive issues from internal database:
-${JSON.stringify(issues, null, 2)}
+    const reply =
+      ai.output_text ||
+      ai.response_text ||
+      ai.output?.[0]?.content ||
+      "No response generated.";
 
-Respond in user's language.
-Provide:
-1. Quick Summary
-2. Most likely causes
-3. Recommended next steps
-4. Safety warnings
-`;
+    return res.status(200).json({ reply });
 
-const ai = await client.chat.completions.create({
-model: "gpt-4.1",
-messages: [{ role: "user", content: prompt }]
-});
-
-return res.status(200).json({
-reply: ai.choices[0].message.content
-});
-
-} catch (err) {
-console.error("TEXT ERROR:", err);
-return res.status(500).json({ error: "FixLens text failed", details: err.message });
-}
+  } catch (err) {
+    console.error("AUDIO ERROR:", err);
+    return res.status(500).json({
+      error: "FixLens audio failed",
+      details: err.message,
+    });
+  }
 }
