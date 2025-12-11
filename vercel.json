@@ -1,13 +1,7 @@
 {
-  "version": 2,
   "functions": {
     "api/*.js": {
-      "runtime": "nodejs20.x",
-      "memory": 1024,
-      "maxDuration": 30
+      "runtime": "@vercel/node@3.0.0"
     }
-  },
-  "routes": [
-    { "src": "/api/(.*)", "dest": "/api/$1" }
-  ]
+  }
 }
