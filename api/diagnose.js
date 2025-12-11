@@ -1,9 +1,9 @@
-// api/audio-diagnose.js
+// api/diagnose.js
 import OpenAI from "openai";
+import { findRelevantIssues } from "../lib/autoKnowledge.js";
 
 export const config = {
-  runtime: "nodejs18.x",
-  bodyParser: false,
+  runtime: "nodejs20.x"
 };
 
 const client = new OpenAI({
@@ -13,56 +13,65 @@ const client = new OpenAI({
 export default async function handler(req, res) {
   try {
     if (req.method !== "POST") {
-      return res.status(405).json({ error: "POST only" });
+      return res.status(405).json({ error: "Only POST allowed" });
     }
 
-    // Read the raw audio buffer
-    const chunks = [];
-    for await (const chunk of req) chunks.push(chunk);
-    const buffer = Buffer.concat(chunks);
+    const { message, preferredLanguage = "auto" } = req.body;
 
-    // Detect the audio type (fallback mp3)
-    const mimeType =
-      req.headers["content-type"] ||
-      "audio/mpeg";
+    if (!message || !message.trim()) {
+      return res.status(400).json({ error: "Message is required" });
+    }
 
-    // Convert to base64
-    const base64Audio = buffer.toString("base64");
+    // Load relevant car issues
+    const issues = findRelevantIssues(message);
 
-    // Send to GPT-5.1 / GPT-4o
+    const systemPrompt = `
+You are FixLens Auto, the world’s smartest AI for vehicle diagnostics.
+Your job:
+- Detect the user’s language automatically.
+- Explain clearly what is happening.
+- Use the internal autoKnowledge JSON to improve accuracy.
+- Respond in the user’s own language.
+- Be structured, clear, and professional.
+
+Your response must include:
+1. Quick Summary
+2. Most Likely Causes
+3. Recommended Next Steps
+4. Safety Warnings
+`;
+
+    const userPrompt = `
+User message:
+"${message}"
+
+Relevant issues from internal database:
+${JSON.stringify(issues, null, 2)}
+`;
+
     const ai = await client.responses.create({
-      model: "gpt-4o", // ⬅️ أو gpt-5.1 لو تريد
+      model: "gpt-5.1",
       input: [
         {
+          role: "system",
+          content: [{ type: "input_text", text: systemPrompt }]
+        },
+        {
           role: "user",
-          content: [
-            {
-              type: "input_text",
-              text: "Analyze this engine sound precisely. Identify the problem, the most likely causes, and the recommended steps."
-            },
-            {
-              type: "input_file",
-              mime_type: mimeType,
-              data: base64Audio
-            }
-          ]
+          content: [{ type: "input_text", text: userPrompt }]
         }
       ]
     });
 
-    const reply =
-      ai.output_text ||
-      ai.response_text ||
-      ai.output?.[0]?.content ||
-      "No response generated.";
-
-    return res.status(200).json({ reply });
+    return res.status(200).json({
+      reply: ai.output_text
+    });
 
   } catch (err) {
-    console.error("AUDIO ERROR:", err);
+    console.error("TEXT ERROR:", err);
     return res.status(500).json({
-      error: "FixLens audio failed",
-      details: err.message,
+      error: "FixLens text failed",
+      details: err.message
     });
   }
 }
