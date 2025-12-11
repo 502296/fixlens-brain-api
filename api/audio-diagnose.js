@@ -1,5 +1,6 @@
 // api/audio-diagnose.js
-// FixLens Sound Lab – JSON base64 audio (no multipart)
+// FixLens Sound Lab – Level 3 (Advanced car sound analysis)
+// JSON body from Flutter (base64 audio)
 
 import OpenAI from "openai";
 
@@ -7,7 +8,7 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-// تخمين لغة مبسّط من النص
+// نفس دالة تخمين اللغة اللي استخدمناها سابقاً
 function guessLanguage(text) {
   if (!text || !text.trim()) return null;
   const t = text.trim();
@@ -21,15 +22,17 @@ function guessLanguage(text) {
   return "en";
 }
 
-// نحدد صيغة الصوت من mimeType القادم من Flutter
-function detectFormatFromMime(mimeType) {
-  const m = (mimeType || "").toLowerCase();
-  if (m.includes("wav")) return "wav";
-  if (m.includes("mpeg") || m.includes("mp3")) return "mp3";
-  if (m.includes("webm")) return "webm";
-  if (m.includes("ogg")) return "ogg";
-  if (m.includes("m4a")) return "m4a"; // Flutter record غالبًا
-  return "m4a";
+// نحول المايم تايب إلى format مقبول من gpt-audio
+function mapMimeToFormat(mimeType) {
+  const mt = (mimeType || "").toLowerCase();
+
+  if (mt.includes("wav")) return "wav";
+  if (mt.includes("mp3") || mt.includes("mpeg")) return "mp3";
+
+  // ✅ IMPORTANT:
+  // gpt-audio يقبل فقط: "wav" أو "mp3"
+  // أي شيء آخر (m4a, webm, ...) نحوله إلى "mp3"
+  return "mp3";
 }
 
 export default async function handler(req, res) {
@@ -39,42 +42,34 @@ export default async function handler(req, res) {
   }
 
   try {
+    // Flutter أحياناً يرسل body كسلسلة نصية
     let body = req.body;
-
-    // احتياط لو جاء كنص
     if (typeof body === "string") {
       try {
         body = JSON.parse(body);
       } catch {
+        // خليها فاضية لو فشل الـ JSON
         body = {};
       }
     }
 
-    const {
-      audioBase64,
-      mimeType,
-      language: preferredLanguage = "auto",
-    } = body || {};
+    const audioBase64 = body?.audioBase64;
+    const mimeType = body?.mimeType || "audio/m4a";
+    const preferredLanguage = body?.language || "auto";
 
-    if (!audioBase64 || typeof audioBase64 !== "string") {
+    if (!audioBase64) {
       return res.status(400).json({
-        error: "audioBase64 is required in request body",
+        error: "No audioBase64 provided in request body",
       });
     }
 
-    const format = detectFormatFromMime(mimeType);
-    const userLang =
-      preferredLanguage && preferredLanguage !== "auto"
-        ? preferredLanguage
-        : null;
+    const format = mapMimeToFormat(mimeType);
 
+    // 🧠 هنا السحر الحقيقي – gpt-audio
     const completion = await openai.chat.completions.create({
       model: process.env.FIXLENS_AUDIO_MODEL || "gpt-audio",
       modalities: ["text", "audio"],
-      audio: {
-        voice: "alloy",
-        format: "wav", // نطنش الـ output audio حالياً
-      },
+      audio: { voice: "alloy", format: "wav" }, // نطنّش الصوت الخارج حالياً
       messages: [
         {
           role: "system",
@@ -85,20 +80,36 @@ specialized in diagnosing car problems *purely from sound*.
 You receive a recording from somewhere in or around a vehicle:
 engine bay, exhaust, suspension, brakes, steering, or cabin.
 
-Analyze the waveform itself (knocking, pinging, tapping, squeaking,
-grinding, whining, humming, rattling, hissing, rumbling, etc.)
-and map it to likely mechanical causes.
+Analyze the **waveform itself**, not just speech:
 
-For each likely cause:
-- Explain why the sound pattern matches.
-- Give an approximate probability (sum ~ 1.0).
-- Give a risk level: CRITICAL / HIGH / MEDIUM / LOW.
-- Give clear next steps for the driver.
+1. Decompose the sound:
+   - Identify main patterns: knocking, pinging, tapping, ticking,
+     squeaking, chirping, grinding, whining, humming, rattling, hissing,
+     whooshing, rumbling, belt slapping, metallic clunking, etc.
+   - Notice if the sound follows engine RPM, road speed, bumps, braking,
+     turning the steering wheel, or gear shifts.
+
+2. Perform a mechanic-style analysis:
+   - Map patterns to: top-end / bottom-end engine, ignition/misfire,
+     timing chain/belt, accessory belt/tensioner, exhaust leaks,
+     wheel bearings, CV joints, suspension, brakes, drivetrain, mounts.
+
+3. Return a list of most likely causes with approximate probabilities
+   that roughly sum to 1.0.
+
+4. Assess overall risk level (CRITICAL / HIGH / MEDIUM / LOW).
+
+5. Give clear next steps for the driver.
 
 LANGUAGE:
-- If "preferredLanguage" is given, answer in that language code (ar, en, es, ...).
-- If preferredLanguage = "auto", try to match the driver's spoken language if any.
-- Be calm, friendly, and honest about uncertainty.
+- If "preferredLanguage" is given (like "ar", "en", "es"), answer in it.
+- If preferredLanguage = "auto", try to match the driver's spoken language.
+- Tone: calm, friendly, confident – like an experienced mechanic
+  explaining to a normal driver.
+
+If the audio is mostly silence, strong wind noise, or human conversation
+with no clear mechanical sound, say that you are **not confident** and
+explain what kind of recording would help.
           `.trim(),
         },
         {
@@ -107,15 +118,15 @@ LANGUAGE:
             {
               type: "text",
               text:
-                userLang != null
-                  ? `This is a car sound recording. Analyze ONLY the mechanical sound and answer in language code: ${userLang}.`
+                preferredLanguage && preferredLanguage !== "auto"
+                  ? `This is a car sound recording. Analyze ONLY the mechanical sound and answer in language code: ${preferredLanguage}.`
                   : `This is a car sound recording from a vehicle. Analyze ONLY the mechanical sound (not my words) and reply in the same language as the driver if possible.`,
             },
             {
               type: "input_audio",
               input_audio: {
-                data: audioBase64,
-                format,
+                data: audioBase64, // 👈 base64 من Flutter
+                format,           // 👈 mp3 أو wav فقط
               },
             },
           ],
@@ -137,17 +148,24 @@ LANGUAGE:
 
     const detectedLang = guessLanguage(replyText);
     const finalLang =
-      userLang != null && userLang !== "auto" ? userLang : detectedLang || "en";
+      preferredLanguage && preferredLanguage !== "auto"
+        ? preferredLanguage
+        : detectedLang || "en";
 
     return res.status(200).json({
       reply: replyText,
       language: finalLang,
+      source: "fixlens-audio",
     });
-  } catch (e) {
-    console.error("FixLens Sound Lab error:", e);
+  } catch (apiError) {
+    console.error("FixLens Sound Lab (gpt-audio) error:", apiError);
+
     return res.status(500).json({
       error: "Audio diagnosis failed",
-      details: e.message || String(e),
+      details:
+        apiError?.response?.data ||
+        apiError.message ||
+        String(apiError),
     });
   }
 }
