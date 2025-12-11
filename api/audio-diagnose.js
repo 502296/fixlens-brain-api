@@ -1,6 +1,5 @@
 // api/audio-diagnose.js
-// FixLens Sound Lab – Stable JSON audio pipeline
-// Flutter -> JSON (audioBase64) -> Transcribe -> Diagnose
+// FixLens Sound Lab – JSON base64 audio (no multipart)
 
 import OpenAI from "openai";
 
@@ -8,13 +7,7 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-// ------- Helpers --------
-function cleanText(value) {
-  if (!value) return "";
-  if (typeof value === "string") return value.trim();
-  return String(value).trim();
-}
-
+// تخمين لغة مبسّط من النص
 function guessLanguage(text) {
   if (!text || !text.trim()) return null;
   const t = text.trim();
@@ -28,25 +21,27 @@ function guessLanguage(text) {
   return "en";
 }
 
-function guessExtFromMime(mimeType) {
+// نحدد صيغة الصوت من mimeType القادم من Flutter
+function detectFormatFromMime(mimeType) {
   const m = (mimeType || "").toLowerCase();
   if (m.includes("wav")) return "wav";
   if (m.includes("mpeg") || m.includes("mp3")) return "mp3";
   if (m.includes("webm")) return "webm";
-  return "m4a"; // flutter_record غالباً
+  if (m.includes("ogg")) return "ogg";
+  if (m.includes("m4a")) return "m4a"; // Flutter record غالبًا
+  return "m4a";
 }
 
-// ------- Main handler --------
 export default async function handler(req, res) {
   if (req.method !== "POST") {
     res.setHeader("Allow", "POST");
-    return res.status(405).json({ error: "Method not allowed. Use POST." });
+    return res.status(405).json({ error: "Method not allowed" });
   }
 
   try {
     let body = req.body;
 
-    // في بعض بيئات Vercel يكون body = string
+    // احتياط لو جاء كنص
     if (typeof body === "string") {
       try {
         body = JSON.parse(body);
@@ -55,158 +50,101 @@ export default async function handler(req, res) {
       }
     }
 
-    const audioBase64 =
-      body?.audioBase64 || body?.audio || body?.file || "";
-    const mimeType = body?.mimeType || "audio/m4a";
-    const preferredLanguage = body?.language || body?.preferredLanguage || "auto";
+    const {
+      audioBase64,
+      mimeType,
+      language: preferredLanguage = "auto",
+    } = body || {};
 
     if (!audioBase64 || typeof audioBase64 !== "string") {
-      return res
-        .status(400)
-        .json({ error: "Missing 'audioBase64' in request body." });
-    }
-
-    // ---- 1) Decode base64 -> Buffer ----
-    let audioBuffer;
-    try {
-      audioBuffer = Buffer.from(audioBase64, "base64");
-      if (!audioBuffer.length) {
-        throw new Error("Empty audio buffer");
-      }
-    } catch (e) {
-      console.error("Base64 decode error:", e);
       return res.status(400).json({
-        error: "Invalid audioBase64 data",
-        details: e.message || String(e),
+        error: "audioBase64 is required in request body",
       });
     }
 
-    // ---- 2) Transcribe with gpt-4o-mini-transcribe ----
-    let transcriptText = "";
-    const ext = guessExtFromMime(mimeType);
+    const format = detectFormatFromMime(mimeType);
+    const userLang =
+      preferredLanguage && preferredLanguage !== "auto"
+        ? preferredLanguage
+        : null;
 
-    try {
-      const transcription = await openai.audio.transcriptions.create({
-        file: {
-          data: audioBuffer,
-          name: `fixlens-audio.${ext}`,
-        },
-        model: "gpt-4o-mini-transcribe",
-        // نمرّر اللغة لو المستخدم محددها، غير ضروري لكن يساعد أحياناً
-        language:
-          preferredLanguage && preferredLanguage !== "auto"
-            ? preferredLanguage
-            : undefined,
-        response_format: "json",
-      });
+    const completion = await openai.chat.completions.create({
+      model: process.env.FIXLENS_AUDIO_MODEL || "gpt-audio",
+      modalities: ["text", "audio"],
+      audio: {
+        voice: "alloy",
+        format: "wav", // نطنش الـ output audio حالياً
+      },
+      messages: [
+        {
+          role: "system",
+          content: `
+You are **FixLens Auto – Sound Lab v3**, a world-class AI mechanic
+specialized in diagnosing car problems *purely from sound*.
 
-      transcriptText = cleanText(transcription.text);
-      console.log("FixLens transcript:", transcriptText);
-    } catch (e) {
-      console.error("Transcription error:", e);
-      return res.status(500).json({
-        error: "Audio diagnosis failed",
-        details:
-          e?.response?.data ||
-          e?.message ||
-          "Failed to transcribe the audio.",
-      });
-    }
+You receive a recording from somewhere in or around a vehicle:
+engine bay, exhaust, suspension, brakes, steering, or cabin.
 
-    if (!transcriptText) {
-      const langForEmpty =
-        preferredLanguage && preferredLanguage !== "auto"
-          ? preferredLanguage
-          : "en";
+Analyze the waveform itself (knocking, pinging, tapping, squeaking,
+grinding, whining, humming, rattling, hissing, rumbling, etc.)
+and map it to likely mechanical causes.
 
-      return res.status(200).json({
-        reply:
-          langForEmpty === "ar"
-            ? "لم أتمكّن من التقاط صوت ميكانيكي واضح من هذا التسجيل. جرّب تسجيل ١٠–١٥ ثانية قريبة من مصدر الصوت، مع تقليل ضوضاء الهواء أو الكلام قدر الإمكان."
-            : "I couldn’t detect a clear mechanical sound from this recording. Please record 10–15 seconds close to the source of the noise, avoiding wind or speech as much as possible.",
-        language: langForEmpty,
-      });
-    }
-
-    // ---- 3) Analyze using GPT-5.1-mini ----
-    try {
-      const resolvedLanguage =
-        (preferredLanguage && preferredLanguage !== "auto" && preferredLanguage) ||
-        guessLanguage(transcriptText) ||
-        "en";
-
-      const systemPrompt = `
-You are **FixLens Auto – Sound Lab**, a careful AI mechanic that analyzes car problems
-based on what the driver recorded and what was transcribed from the audio.
-
-The transcription includes the driver's spoken description of the sound and any context
-about when it happens (RPM, speed, braking, turning, bumps, etc.).
-
-Your job:
-1. Extract all details related to the sound pattern and when it happens.
-2. Map those patterns to mechanical causes:
-   - engine top-end (lifters/valvetrain)
-   - engine bottom-end (rods/bearings)
-   - ignition/misfire
-   - timing chain/belt
-   - accessory belt/tensioner/pulleys
-   - exhaust leaks / rattling heat shields
-   - wheel bearings, CV joints, suspension
-   - brakes (pads, rotors, calipers)
-   - drivetrain and mounts
-3. Provide a ranked list of likely causes with approximate probabilities (that roughly sum to 1.0).
-4. Assess risk level for driving:
-   - CRITICAL – Stop driving immediately.
-   - HIGH – Drive only gently and visit a mechanic ASAP.
-   - MEDIUM – Schedule a shop visit soon.
-   - LOW – Probably minor, but worth checking.
-5. Give simple, practical next steps for the driver.
+For each likely cause:
+- Explain why the sound pattern matches.
+- Give an approximate probability (sum ~ 1.0).
+- Give a risk level: CRITICAL / HIGH / MEDIUM / LOW.
+- Give clear next steps for the driver.
 
 LANGUAGE:
-- The driver's language code is: "${resolvedLanguage}".
-- ALWAYS respond ONLY in this language.
-- Tone: calm, friendly, like an experienced mechanic explaining to a normal driver.
+- If "preferredLanguage" is given, answer in that language code (ar, en, es, ...).
+- If preferredLanguage = "auto", try to match the driver's spoken language if any.
+- Be calm, friendly, and honest about uncertainty.
+          `.trim(),
+        },
+        {
+          role: "user",
+          content: [
+            {
+              type: "text",
+              text:
+                userLang != null
+                  ? `This is a car sound recording. Analyze ONLY the mechanical sound and answer in language code: ${userLang}.`
+                  : `This is a car sound recording from a vehicle. Analyze ONLY the mechanical sound (not my words) and reply in the same language as the driver if possible.`,
+            },
+            {
+              type: "input_audio",
+              input_audio: {
+                data: audioBase64,
+                format,
+              },
+            },
+          ],
+        },
+      ],
+    });
 
-If the transcription is mostly unrelated conversation and you cannot infer a clear car sound context,
-say you are not confident and explain how to record a better sample.
-      `.trim();
+    const choice = completion.choices[0];
+    let replyText = "";
 
-      const combinedPrompt = `
-System instructions:
-${systemPrompt}
-
-Transcribed audio from the driver:
-${transcriptText}
-      `.trim();
-
-      const response = await openai.responses.create({
-        model: "gpt-5.1-mini",
-        input: combinedPrompt,
-        max_output_tokens: 900,
-      });
-
-      const replyText = cleanText(response.output_text);
-
-      return res.status(200).json({
-        reply:
-          replyText ||
-          (resolvedLanguage === "ar"
-            ? "لم أتمكّن من تشخيص المشكلة بدقة من هذا التسجيل. حاول تسجيل صوت أوضح قريب من مصدر الصوت، مع ذكر متى يظهر (السرعة، الضغط على الفرامل، لفّ المقود، إلخ)."
-            : "I couldn’t confidently diagnose from this recording. Please try again with a clearer sample near the source of the noise and mention when it happens (speed, braking, turning, etc.)."),
-        language: resolvedLanguage,
-      });
-    } catch (e) {
-      console.error("FixLens Sound Lab analysis error:", e);
-      return res.status(500).json({
-        error: "Audio diagnosis failed",
-        details:
-          e?.response?.data ||
-          e?.message ||
-          "Failed to analyze the transcribed audio.",
-      });
+    if (typeof choice.message.content === "string") {
+      replyText = choice.message.content;
+    } else if (Array.isArray(choice.message.content)) {
+      const textPart = choice.message.content.find((p) => p.type === "text");
+      replyText = textPart?.text || JSON.stringify(choice.message.content);
+    } else {
+      replyText = JSON.stringify(choice.message);
     }
+
+    const detectedLang = guessLanguage(replyText);
+    const finalLang =
+      userLang != null && userLang !== "auto" ? userLang : detectedLang || "en";
+
+    return res.status(200).json({
+      reply: replyText,
+      language: finalLang,
+    });
   } catch (e) {
-    console.error("Unexpected audio handler error:", e);
+    console.error("FixLens Sound Lab error:", e);
     return res.status(500).json({
       error: "Audio diagnosis failed",
       details: e.message || String(e),
