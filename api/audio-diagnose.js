@@ -4,29 +4,23 @@ import formidable from "formidable";
 import fs from "fs";
 import { findRelevantIssues } from "../lib/autoKnowledge.js";
 
-const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+export const config = {
+  runtime: "nodejs18.x",
+  api: { bodyParser: false },
+};
+
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 const SYSTEM_PROMPT = `
-You are FixLens Auto — a master automotive technician and auto electrician with years of real workshop experience.
-Your users are mechanics and technicians, not car owners.
-Never say “consult a mechanic”.
-Be practical, direct, and workshop-real.
-Use the format:
+You are FixLens Auto — a master automotive technician and auto electrician.
+Users are mechanics. Be direct and practical.
+Format:
 🔧 Quick Diagnosis
 ⚡ Most Likely Causes (ranked)
 🧪 Quick Tests
 ❌ What NOT to do
 🧠 Pro Tip
 `.trim();
-
-function guessLanguage(text) {
-  if (!text || !text.trim()) return null;
-  const t = text.trim();
-  if (/[\u0600-\u06FF]/.test(t)) return "ar";
-  if (/[\u0400-\u04FF]/.test(t)) return "ru";
-  if (/[áéíóúñ¿¡]/i.test(t)) return "es";
-  return "en";
-}
 
 function parseForm(req) {
   const form = formidable({ multiples: false });
@@ -45,20 +39,18 @@ export default async function handler(req, res) {
     }
 
     const { fields, files } = await parseForm(req);
-    const preferredLanguage = fields?.preferredLanguage?.toString();
+    const preferredLanguage = fields?.preferredLanguage?.toString() || "";
     const audioFile = files?.audio;
 
     if (!audioFile) {
-      return res
-        .status(400)
-        .json({ error: "Audio file is required (field name: audio)" });
+      return res.status(400).json({ error: "Audio file is required (field name: audio)" });
     }
 
     const filePath = audioFile.filepath || audioFile.path;
     const stream = fs.createReadStream(filePath);
 
     // 1) Transcribe
-    const tr = await client.audio.transcriptions.create({
+    const tr = await openai.audio.transcriptions.create({
       model: "gpt-4o-transcribe",
       file: stream,
     });
@@ -68,23 +60,21 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: "Empty transcript" });
     }
 
-    // 2) Diagnose transcript
+    // 2) Diagnose transcript (مثل text)
     const issues = findRelevantIssues(transcript);
-    const detected = guessLanguage(transcript);
-    const lang = preferredLanguage || detected || "en";
 
     const userPrompt = `
-User provided AUDIO. Transcript:
+User AUDIO transcript:
 ${transcript}
 
-Relevant automotive issues from internal database:
+Relevant issues from internal database:
 ${JSON.stringify(issues, null, 2)}
 
-Respond naturally in ${lang}.
-Follow the exact response structure.
+Respond in user's language naturally (${preferredLanguage || "auto"}).
+Follow the format exactly.
 `.trim();
 
-    const completion = await client.chat.completions.create({
+    const completion = await openai.chat.completions.create({
       model: "gpt-4o",
       temperature: 0.35,
       messages: [
@@ -98,10 +88,10 @@ Follow the exact response structure.
     return res.status(200).json({
       reply,
       transcript,
-      language: lang,
+      language: preferredLanguage || "auto",
     });
   } catch (err) {
-    console.error("audio diagnose error:", err);
+    console.error("AUDIO ERROR:", err);
     return res.status(500).json({
       error: "Audio diagnosis failed",
       details: err?.message || String(err),
