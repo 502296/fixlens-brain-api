@@ -7,6 +7,7 @@
     "start": "node api/diagnose.js"
   },
   "dependencies": {
-    "openai": "4.58.1"
+    "openai": "4.58.1",
+    "formidable": "^3.5.1"
   }
 }
