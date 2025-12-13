@@ -1,6 +1,6 @@
 {
   "name": "fixlens-brain-api",
-  "version": "1.0.0",
+  "version": "2",
   "private": true,
   "type": "module",
   "scripts": {
