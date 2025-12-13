@@ -2,10 +2,6 @@
 import OpenAI from "openai";
 import { findRelevantIssues } from "../lib/autoKnowledge.js";
 
-export const config = {
-  runtime: "nodejs18.x",
-};
-
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
@@ -33,22 +29,11 @@ COMMUNICATION STYLE:
 - Match the user’s language naturally without mentioning it.
 
 RESPONSE STRUCTURE (always follow this format):
-
 🔧 Quick Diagnosis
 ⚡ Most Likely Causes (ranked)
 🧪 Quick Tests
 ❌ What NOT to do
 🧠 Pro Tip
-
-BEHAVIOR RULES:
-- Ask at most ONE clarifying question only if it significantly improves diagnosis.
-- If enough information is provided, do NOT ask questions.
-- Use the conversation context to avoid repeating steps or causes.
-- If the issue is electrical, think like an auto electrician first.
-- If symptoms change with RPM, load, or temperature, use that logically.
-
-FINAL GOAL:
-Help the mechanic identify the fault faster, reduce guesswork, and make confident repair decisions — like having a second expert brain in the workshop.
 `.trim();
 
 function guessLanguage(text) {
@@ -68,16 +53,12 @@ export default async function handler(req, res) {
       return res.status(405).json({ error: "Only POST allowed" });
     }
 
-    // مهم: Flutter لازم يرسل JSON
     const { message, preferredLanguage } = req.body || {};
-
     if (!message || !message.trim()) {
       return res.status(400).json({ error: "Message is required" });
     }
 
     const userLang = preferredLanguage || guessLanguage(message) || "en";
-
-    // AutoKnowledge (اختياري لكنه قوي)
     const issues = findRelevantIssues(message);
 
     const userPrompt = `
@@ -87,9 +68,8 @@ ${message}
 Relevant automotive issues from internal database:
 ${JSON.stringify(issues, null, 2)}
 
-Respond in the user's language naturally (${userLang}).
+Respond naturally in ${userLang}.
 Follow the response structure exactly.
-Do not give generic advice.
 Assume user is a mechanic.
 `.trim();
 
@@ -103,11 +83,7 @@ Assume user is a mechanic.
     });
 
     const reply = completion.choices?.[0]?.message?.content?.trim() || "";
-
-    return res.status(200).json({
-      reply,
-      language: userLang,
-    });
+    return res.status(200).json({ reply, language: userLang });
   } catch (err) {
     console.error("diagnose error:", err);
     return res.status(500).json({
