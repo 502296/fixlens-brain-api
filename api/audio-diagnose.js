@@ -2,32 +2,23 @@
 import OpenAI from "openai";
 import formidable from "formidable";
 import fs from "fs";
-import { findRelevantIssues } from "../lib/autoKnowledge.js";
+
+export const config = {
+  runtime: "nodejs",
+  api: { bodyParser: false },
+};
 
 const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-const SYSTEM_PROMPT = `
-You are FixLens Auto — a master automotive technician and auto electrician.
-Users are mechanics/technicians.
-Be direct and practical.
+function pickFile(files) {
+  // formidable أحياناً يرجع Array
+  const f =
+    files?.audio ||
+    files?.file ||
+    files?.audioFile;
 
-Use this structure:
-🔧 Quick Diagnosis
-⚡ Most Likely Causes (ranked)
-🧪 Quick Tests
-❌ What NOT to do
-🧠 Pro Tip
-`.trim();
-
-function guessLanguage(text) {
-  if (!text || !text.trim()) return null;
-  const t = text.trim();
-  if (/[\u0600-\u06FF]/.test(t)) return "ar";
-  if (/[\u0400-\u04FF]/.test(t)) return "ru";
-  if (/[\u4E00-\u9FFF]/.test(t)) return "zh";
-  if (/[\u3040-\u30FF]/.test(t)) return "ja";
-  if (/[\uAC00-\uD7AF]/.test(t)) return "ko";
-  return "en";
+  if (!f) return null;
+  return Array.isArray(f) ? f[0] : f;
 }
 
 function parseForm(req) {
@@ -42,17 +33,17 @@ function parseForm(req) {
 
 export default async function handler(req, res) {
   try {
-    if (req.method !== "POST") {
-      return res.status(405).json({ error: "Only POST allowed" });
-    }
+    if (req.method !== "POST") return res.status(405).json({ error: "Only POST allowed" });
 
     const { fields, files } = await parseForm(req);
-    const preferredLanguage = fields?.preferredLanguage?.toString();
-    const audioFile = files?.audio; // لازم Flutter يرسل field اسمه audio
+
+    const preferredLanguage = (fields?.preferredLanguage || fields?.lang || "").toString();
+    const audioFile = pickFile(files);
 
     if (!audioFile) {
       return res.status(400).json({
         error: "Audio file is required (field name: audio)",
+        hint: "Send multipart with field name 'audio' (or file/audioFile).",
       });
     }
 
@@ -66,48 +57,32 @@ export default async function handler(req, res) {
     });
 
     const transcript = (tr.text || "").trim();
-    if (!transcript) {
-      return res.status(400).json({ error: "Empty transcript" });
-    }
+    if (!transcript) return res.status(400).json({ error: "Empty transcript" });
 
-    // 2) Diagnose transcript
-    const issues = findRelevantIssues(transcript);
-    const detected = guessLanguage(transcript);
-    const lang = preferredLanguage || detected || "en";
-
-    const userPrompt = `
-User sent AUDIO. Transcript:
-${transcript}
-
-Relevant automotive issues from internal database:
-${JSON.stringify(issues, null, 2)}
-
-Respond in (${lang}) naturally.
-Follow the structure exactly.
-Assume user is a mechanic.
-`.trim();
+    // 2) Diagnose transcript (بنفس ستايل الورشة)
+    const lang = preferredLanguage || "auto";
 
     const completion = await client.chat.completions.create({
       model: "gpt-4o",
       temperature: 0.35,
       messages: [
-        { role: "system", content: SYSTEM_PROMPT },
-        { role: "user", content: userPrompt },
+        {
+          role: "system",
+          content:
+            "You are FixLens Auto — speak like a real workshop technician. Be concise. Reply in the user's language.",
+        },
+        {
+          role: "user",
+          content: `User language: ${lang}\nTranscript:\n${transcript}\n\nFormat:\n🔧 Quick Diagnosis\n⚡ Most Likely Causes (ranked)\n🧪 Quick Tests\n❌ What NOT to do\n🧠 Pro Tip\n`,
+        },
       ],
     });
 
     const reply = completion.choices?.[0]?.message?.content?.trim() || "";
 
-    return res.status(200).json({
-      reply,
-      transcript,
-      language: lang,
-    });
+    return res.status(200).json({ reply, transcript, language: lang });
   } catch (err) {
-    console.error("audio diagnose error:", err);
-    return res.status(500).json({
-      error: "Audio diagnosis failed",
-      details: String(err?.message || err),
-    });
+    console.error("AUDIO ERROR:", err);
+    return res.status(500).json({ error: "Audio diagnosis failed", details: err?.message || String(err) });
   }
 }
