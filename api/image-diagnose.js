@@ -6,28 +6,6 @@ const client = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-const SYSTEM_PROMPT = `
-You are FixLens Auto — a master automotive technician and auto electrician with years of real workshop experience.
-
-Your users are mechanics and technicians, not car owners.
-Assume the user already understands basic automotive concepts.
-Never speak like customer support or a generic chatbot.
-
-CORE RULES:
-- Never say “consult a mechanic”, “visit a professional”, or “for safety reasons”.
-- Never give vague or generic advice.
-- Never repeat the same cause in different wording.
-- Never over-explain theory unless asked.
-- Be direct, practical, and confident.
-
-RESPONSE STRUCTURE (always follow this format):
-🔧 Quick Diagnosis
-⚡ Most Likely Causes (ranked)
-🧪 Quick Tests
-❌ What NOT to do
-🧠 Pro Tip
-`.trim();
-
 function guessLanguage(text) {
   if (!text || !text.trim()) return null;
   const t = text.trim();
@@ -45,53 +23,58 @@ export default async function handler(req, res) {
       return res.status(405).json({ error: "Only POST allowed" });
     }
 
-    // expecting JSON: { image: "<base64>", text?: "optional notes", preferredLanguage?: "ar|en|..." }
-    const { image, text = "", preferredLanguage } = req.body ?? {};
+    const { image, text = "", preferredLanguage } = req.body || {};
 
-    if (!image || !String(image).trim()) {
+    if (!image) {
       return res.status(400).json({ error: "Missing base64 image" });
     }
 
     const lang = preferredLanguage || guessLanguage(text) || "en";
     const issues = text ? findRelevantIssues(text) : [];
 
-    const userText = `
-User note (may be empty):
-${text || "(none)"}
+    const promptText = `
+User note:
+${text || "(no text)"}
 
-Relevant automotive issues from internal database (if any):
+Respond in (${lang}) naturally.
+Use this structure:
+🔧 Quick Diagnosis
+⚡ Most Likely Causes (ranked)
+🧪 Quick Tests
+❌ What NOT to do
+🧠 Pro Tip
+
+If user note is empty, infer from image only.
+Relevant issues (optional):
 ${JSON.stringify(issues, null, 2)}
-
-Respond naturally in ${lang}.
-Follow the response structure exactly.
-Assume the user is a mechanic.
 `.trim();
 
-    const ai = await client.chat.completions.create({
+    const ai = await client.responses.create({
       model: "gpt-4o",
-      temperature: 0.35,
-      messages: [
-        { role: "system", content: SYSTEM_PROMPT },
+      input: [
         {
           role: "user",
           content: [
-            { type: "text", text: userText },
+            { type: "input_text", text: promptText },
             {
-              type: "image_url",
-              image_url: { url: `data:image/jpeg;base64,${image}` },
+              type: "input_file",
+              mime_type: "image/jpeg",
+              data: image,
             },
           ],
         },
       ],
     });
 
-    const reply = ai.choices?.[0]?.message?.content?.trim() || "";
-    return res.status(200).json({ reply, language: lang });
+    return res.status(200).json({
+      reply: ai.output_text || "",
+      language: lang,
+    });
   } catch (err) {
     console.error("IMAGE ERROR:", err);
     return res.status(500).json({
       error: "Image diagnosis failed",
-      details: err?.message || String(err),
+      details: String(err?.message || err),
     });
   }
 }
