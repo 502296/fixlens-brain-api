@@ -2,6 +2,10 @@
 import OpenAI from "openai";
 import { findRelevantIssues } from "../lib/autoKnowledge.js";
 
+export const config = {
+  runtime: "nodejs",
+};
+
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
@@ -48,7 +52,7 @@ Help the mechanic identify the fault faster, reduce guesswork, and make confiden
 `.trim();
 
 function guessLanguage(text) {
-  if (!text || !text.trim()) return null;
+  if (!text || !text.trim()) return "en";
   const t = text.trim();
   if (/[\u0600-\u06FF]/.test(t)) return "ar";
   if (/[\u0400-\u04FF]/.test(t)) return "ru";
@@ -58,12 +62,31 @@ function guessLanguage(text) {
   return "en";
 }
 
+function isGreetingOnly(msg) {
+  if (!msg) return false;
+  const m = msg.trim().toLowerCase();
+
+  // قصير جدًا + تحيات معروفة
+  if (m.length > 16) return false;
+
+  return /^(hi|hello|hey|hola|salut|ciao|hallo|مرحبا|هلا|هلو|السلام عليكم|السلام|سلام|اهلا|أهلا)$/.test(m);
+}
+
+function greetingReply(lang) {
+  if (lang === "ar") {
+    return "هلا 👋 شنو المشكلة بالسيارة اليوم؟ (صوت/لمبة/رجة/تقطيع/تهريب/ريحة؟)";
+  }
+  // default English
+  return "Hi 👋 What’s the car doing today? (noise/light/vibration/misfire/leak/smell?)";
+}
+
 export default async function handler(req, res) {
   try {
     if (req.method !== "POST") {
       return res.status(405).json({ error: "Only POST allowed" });
     }
 
+    // Flutter لازم يرسل JSON
     const { message, preferredLanguage } = req.body || {};
 
     if (!message || !message.trim()) {
@@ -71,6 +94,16 @@ export default async function handler(req, res) {
     }
 
     const userLang = preferredLanguage || guessLanguage(message) || "en";
+
+    // ✅ رد مختصر للتحية فقط
+    if (isGreetingOnly(message)) {
+      return res.status(200).json({
+        reply: greetingReply(userLang),
+        language: userLang,
+      });
+    }
+
+    // AutoKnowledge
     const issues = findRelevantIssues(message);
 
     const userPrompt = `
@@ -82,8 +115,8 @@ ${JSON.stringify(issues, null, 2)}
 
 Respond in the user's language naturally (${userLang}).
 Follow the response structure exactly.
-Do not give generic advice.
-Assume user is a mechanic.
+Be concise (no filler).
+Ask at most ONE clarifying question only if needed.
 `.trim();
 
     const completion = await openai.chat.completions.create({
