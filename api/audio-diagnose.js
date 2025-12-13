@@ -4,25 +4,22 @@ import formidable from "formidable";
 import fs from "fs";
 
 export const config = {
-  runtime: "nodejs",
+  runtime: "nodejs18.x",
   api: { bodyParser: false },
 };
 
 const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-function pickFile(files) {
-  // formidable أحياناً يرجع Array
-  const f =
-    files?.audio ||
-    files?.file ||
-    files?.audioFile;
-
-  if (!f) return null;
-  return Array.isArray(f) ? f[0] : f;
+function detectLanguage(text = "") {
+  if (/[\u0600-\u06FF]/.test(text)) return "ar";
+  if (/[а-яА-Я]/.test(text)) return "ru";
+  if (/[一-龯]/.test(text)) return "zh";
+  if (/[ぁ-んァ-ン]/.test(text)) return "ja";
+  return "en";
 }
 
 function parseForm(req) {
-  const form = formidable({ multiples: false });
+  const form = formidable({ multiples: false, keepExtensions: true });
   return new Promise((resolve, reject) => {
     form.parse(req, (err, fields, files) => {
       if (err) return reject(err);
@@ -37,8 +34,14 @@ export default async function handler(req, res) {
 
     const { fields, files } = await parseForm(req);
 
-    const preferredLanguage = (fields?.preferredLanguage || fields?.lang || "").toString();
-    const audioFile = pickFile(files);
+    const preferredLanguage = (fields?.preferredLanguage || "").toString().trim();
+
+    // يقبل أكثر من اسم للحقل
+    const audioFile =
+      files?.audio ||
+      files?.file ||
+      files?.audioFile ||
+      files?.voice;
 
     if (!audioFile) {
       return res.status(400).json({
@@ -57,32 +60,46 @@ export default async function handler(req, res) {
     });
 
     const transcript = (tr.text || "").trim();
-    if (!transcript) return res.status(400).json({ error: "Empty transcript" });
+    if (!transcript) {
+      return res.status(400).json({ error: "Could not transcribe audio (empty transcript)" });
+    }
 
-    // 2) Diagnose transcript (بنفس ستايل الورشة)
-    const lang = preferredLanguage || "auto";
+    const lang = preferredLanguage || detectLanguage(transcript);
+
+    // 2) Diagnose transcript
+    const system = `
+You are FixLens Auto — expert automotive technician.
+Reply in: ${lang}.
+Be concise and practical.
+Format:
+🔧 Quick Diagnosis
+⚡ Most Likely Causes (ranked)
+🧪 Quick Tests
+❌ What NOT to do
+🧠 Pro Tip
+`.trim();
 
     const completion = await client.chat.completions.create({
       model: "gpt-4o",
-      temperature: 0.35,
+      temperature: 0.25,
       messages: [
-        {
-          role: "system",
-          content:
-            "You are FixLens Auto — speak like a real workshop technician. Be concise. Reply in the user's language.",
-        },
-        {
-          role: "user",
-          content: `User language: ${lang}\nTranscript:\n${transcript}\n\nFormat:\n🔧 Quick Diagnosis\n⚡ Most Likely Causes (ranked)\n🧪 Quick Tests\n❌ What NOT to do\n🧠 Pro Tip\n`,
-        },
+        { role: "system", content: system },
+        { role: "user", content: `Audio transcript:\n${transcript}` },
       ],
     });
 
     const reply = completion.choices?.[0]?.message?.content?.trim() || "";
 
-    return res.status(200).json({ reply, transcript, language: lang });
+    return res.status(200).json({
+      reply,
+      transcript,
+      language: lang,
+    });
   } catch (err) {
     console.error("AUDIO ERROR:", err);
-    return res.status(500).json({ error: "Audio diagnosis failed", details: err?.message || String(err) });
+    return res.status(500).json({
+      error: "Audio diagnosis failed",
+      details: err?.message || String(err),
+    });
   }
 }
