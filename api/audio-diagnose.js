@@ -1,7 +1,8 @@
-// api/audio-diagnose.js
 import OpenAI from "openai";
 import formidable from "formidable";
 import fs from "fs";
+
+import { findRelevantIssues } from "../lib/autoKnowledge.js";
 
 export const config = {
   runtime: "nodejs18.x",
@@ -10,20 +11,12 @@ export const config = {
 
 const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-function detectLanguage(text = "") {
-  if (/[\u0600-\u06FF]/.test(text)) return "ar";
-  if (/[а-яА-Я]/.test(text)) return "ru";
-  if (/[一-龯]/.test(text)) return "zh";
-  if (/[ぁ-んァ-ン]/.test(text)) return "ja";
-  return "en";
-}
-
 function parseForm(req) {
-  const form = formidable({ multiples: false, keepExtensions: true });
+  const form = formidable({ multiples: false });
   return new Promise((resolve, reject) => {
     form.parse(req, (err, fields, files) => {
-      if (err) return reject(err);
-      resolve({ fields, files });
+      if (err) reject(err);
+      else resolve({ fields, files });
     });
   });
 }
@@ -34,72 +27,55 @@ export default async function handler(req, res) {
 
     const { fields, files } = await parseForm(req);
 
-    const preferredLanguage = (fields?.preferredLanguage || "").toString().trim();
-
-    // يقبل أكثر من اسم للحقل
-    const audioFile =
-      files?.audio ||
-      files?.file ||
-      files?.audioFile ||
-      files?.voice;
+    const preferredLanguage = (fields.preferredLanguage || "auto").toString();
+    const extraText = (fields.message || "").toString(); // optional
+    const audioFile = files.audio; // Flutter لازم يرسل key اسمه "audio"
 
     if (!audioFile) {
-      return res.status(400).json({
-        error: "Audio file is required (field name: audio)",
-        hint: "Send multipart with field name 'audio' (or file/audioFile).",
-      });
+      return res.status(400).json({ error: "Missing audio file. Send multipart field: audio" });
     }
 
-    const filePath = audioFile.filepath || audioFile.path;
-    const stream = fs.createReadStream(filePath);
-
-    // 1) Transcribe
-    const tr = await client.audio.transcriptions.create({
-      model: "gpt-4o-transcribe",
-      file: stream,
+    // 1) Transcribe (Whisper)
+    const transcript = await client.audio.transcriptions.create({
+      file: fs.createReadStream(audioFile.filepath),
+      model: "gpt-4o-mini-transcribe",
     });
 
-    const transcript = (tr.text || "").trim();
-    if (!transcript) {
-      return res.status(400).json({ error: "Could not transcribe audio (empty transcript)" });
-    }
+    const transcriptText = (transcript.text || "").trim();
 
-    const lang = preferredLanguage || detectLanguage(transcript);
+    // 2) Match issues from JSON
+    const combined = `${extraText}\n\nAUDIO TRANSCRIPT:\n${transcriptText}`.trim();
+    const matchedIssues = findRelevantIssues(combined);
 
-    // 2) Diagnose transcript
-    const system = `
-You are FixLens Auto — expert automotive technician.
-Reply in: ${lang}.
-Be concise and practical.
-Format:
-🔧 Quick Diagnosis
-⚡ Most Likely Causes (ranked)
-🧪 Quick Tests
-❌ What NOT to do
-🧠 Pro Tip
-`.trim();
-
-    const completion = await client.chat.completions.create({
-      model: "gpt-4o",
-      temperature: 0.25,
-      messages: [
-        { role: "system", content: system },
-        { role: "user", content: `Audio transcript:\n${transcript}` },
+    // 3) Diagnose
+    const final = await client.responses.create({
+      model: "gpt-4.1",
+      input: [
+        {
+          role: "system",
+          content: `You are FixLens Auto, expert in diagnosing car noises & symptoms.
+Respond in user's language: ${preferredLanguage}.
+Use the matched issues as hints. Provide: Quick Summary, Likely Causes, Tests user can do, Safety warnings.`,
+        },
+        {
+          role: "user",
+          content: [
+            { type: "input_text", text: `User notes:\n${extraText || "(none)"}\n\nAudio transcript:\n${transcriptText || "(no transcript)"}\n\nMatched issues:\n${JSON.stringify(matchedIssues, null, 2)}` },
+          ],
+        },
       ],
     });
 
-    const reply = completion.choices?.[0]?.message?.content?.trim() || "";
-
     return res.status(200).json({
-      reply,
-      transcript,
-      language: lang,
+      reply: final.output_text?.trim() || "No reply.",
+      transcript: transcriptText,
+      matched_issues: matchedIssues,
+      language: preferredLanguage,
     });
-  } catch (err) {
-    console.error("AUDIO ERROR:", err);
+  } catch (e) {
     return res.status(500).json({
       error: "Audio diagnosis failed",
-      details: err?.message || String(err),
+      details: e?.message || String(e),
     });
   }
 }
