@@ -5,11 +5,26 @@ import fs from "fs";
 import { findRelevantIssues } from "../lib/autoKnowledge.js";
 
 export const config = {
-  runtime: "nodejs",
-  api: { bodyParser: false },
+  runtime: "nodejs",            // ✅
+  api: { bodyParser: false },   // ✅ حتى ندعم multipart + نقرأ JSON يدويًا
 };
 
-const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+
+function readJsonBody(req) {
+  return new Promise((resolve, reject) => {
+    let data = "";
+    req.on("data", (chunk) => (data += chunk));
+    req.on("end", () => {
+      try {
+        resolve(data ? JSON.parse(data) : {});
+      } catch (e) {
+        reject(e);
+      }
+    });
+    req.on("error", reject);
+  });
+}
 
 function parseForm(req) {
   const form = formidable({ multiples: false });
@@ -21,95 +36,106 @@ function parseForm(req) {
   });
 }
 
-function pickFile(files, key) {
-  const f = files?.[key];
-  if (!f) return null;
-  return Array.isArray(f) ? f[0] : f;
+function detectLanguage(text = "") {
+  const t = String(text || "");
+  if (/[\u0600-\u06FF]/.test(t)) return "ar";
+  if (/[\u0400-\u04FF]/.test(t)) return "ru";
+  if (/[\u4E00-\u9FFF]/.test(t)) return "zh";
+  if (/[\u3040-\u30FF]/.test(t)) return "ja";
+  return "en";
 }
 
 export default async function handler(req, res) {
   try {
     if (req.method !== "POST") return res.status(405).json({ error: "Only POST allowed" });
 
-    const { fields, files } = await parseForm(req);
+    const contentType = String(req.headers["content-type"] || "").toLowerCase();
 
-    const preferredLanguage = (fields.preferredLanguage || "auto").toString();
-    const userMessage = (fields.message || "").toString().trim();
+    let preferredLanguage = "auto";
+    let userMessage = "";
+    let base64Image = null;
 
-    const imageFile = pickFile(files, "image"); // ✅ لازم Flutter يرسل باسم image
-    if (!imageFile?.filepath) {
-      return res.status(400).json({ error: "Missing image file. Send multipart field: image" });
+    // ✅ 1) JSON (مثل Flutter عندك)
+    if (contentType.includes("application/json")) {
+      const body = await readJsonBody(req);
+      preferredLanguage = String(body.language || body.preferredLanguage || "auto");
+      userMessage = String(body.text || body.note || body.message || "");
+      base64Image = body.image || body.imageBase64 || null;
+
+      if (!base64Image) {
+        return res.status(400).json({ error: "Missing image base64. Send field: image" });
+      }
+    }
+    // ✅ 2) multipart (لو احتجته لاحقاً)
+    else if (contentType.includes("multipart/form-data")) {
+      const { fields, files } = await parseForm(req);
+      preferredLanguage = String(fields.preferredLanguage || fields.language || "auto");
+      userMessage = String(fields.message || fields.text || fields.note || "");
+
+      const imageFile = files.image;
+      if (!imageFile) {
+        return res.status(400).json({ error: "Missing image file. Send multipart field: image" });
+      }
+      base64Image = fs.readFileSync(imageFile.filepath).toString("base64");
+    } else {
+      return res.status(415).json({ error: "Unsupported content-type. Use application/json or multipart/form-data." });
     }
 
-    const imgBase64 = fs.readFileSync(imageFile.filepath).toString("base64");
-    const dataUrl = `data:image/jpeg;base64,${imgBase64}`;
+    const lang = preferredLanguage === "auto"
+      ? detectLanguage(userMessage)
+      : String(preferredLanguage);
 
-    // 1) Vision observation
-    const vision = await client.responses.create({
-      model: "gpt-4o-mini",
-      temperature: 0.2,
-      input: [{
-        role: "user",
-        content: [
-          { type: "input_text", text: "Describe what you see in this vehicle-related image. Focus on visible symptoms (leaks, smoke, corrosion, damaged parts, warning lights). If it’s not useful, say so." },
-          { type: "input_image", image_url: dataUrl },
-        ],
-      }],
-    });
+    // 🔎 Matching من الـ JSON بناءً على كلام المستخدم (اختياري)
+    const matchedIssues = findRelevantIssues(userMessage);
 
-    const visionText = (vision.output_text || "").trim();
+    const system = `
+You are FixLens Auto — an expert mechanic-level diagnostic AI.
+Respond in: ${lang}
+Use matched issues as hints only.
+Output format:
+🔧 Quick Summary
+⚡ Most Likely Causes (ranked)
+🧪 Quick Tests
+✅ Next Steps
+⚠️ Safety Notes
+`.trim();
 
-    // 2) Match against JSON using user text + vision observation
-    const combined = `${userMessage}\n\nIMAGE_OBSERVATION:\n${visionText}`.trim();
-    const matched = findRelevantIssues(combined);
+    const promptText = `
+User message:
+${userMessage || "(no text provided)"}
 
-    // 3) Final diagnosis
-    const lang = (preferredLanguage !== "auto") ? preferredLanguage : (userMessage ? undefined : "en");
+Matched issues (hints):
+${JSON.stringify(matchedIssues, null, 2)}
 
-    const final = await client.responses.create({
+Look at the image and infer visible symptoms (leaks, corrosion, broken parts, warning lights, smoke, loose hoses, etc.).
+If the image is generic or not helpful, say it clearly and rely more on the user message.
+`.trim();
+
+    // ✅ Vision عبر chat.completions (ثابت على Vercel)
+    const completion = await openai.chat.completions.create({
       model: "gpt-4o",
       temperature: 0.25,
-      input: [
-        {
-          role: "system",
-          content: `You are FixLens Auto — expert vehicle diagnostics.
-Respond in user's language (${preferredLanguage}).
-Use matched issues as hints, never claim certainty.
-Format:
-1) Quick Summary
-2) Most Likely Causes (ranked)
-3) Quick Tests
-4) Recommended Next Steps
-5) Safety Warnings`,
-        },
+      messages: [
+        { role: "system", content: system },
         {
           role: "user",
           content: [
+            { type: "text", text: promptText },
             {
-              type: "input_text",
-              text:
-`User message:
-${userMessage || "(no text)"}
-
-Image observation:
-${visionText || "(none)"}
-
-Matched issues (internal JSON):
-${JSON.stringify(matched, null, 2)}`
-            }
+              type: "image_url",
+              image_url: { url: `data:image/jpeg;base64,${base64Image}` },
+            },
           ],
         },
       ],
     });
 
-    const reply = (final.output_text || "").trim() || "No reply.";
+    const reply = completion.choices?.[0]?.message?.content?.trim() || "No reply.";
     return res.status(200).json({
       reply,
-      image_observation: visionText,
-      matched_issues: matched,
-      language: preferredLanguage,
+      language: lang,
+      matched_issues: matchedIssues,
     });
-
   } catch (e) {
     console.error("Image diagnose error:", e);
     return res.status(500).json({
