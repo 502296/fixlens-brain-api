@@ -12,10 +12,19 @@ export const config = {
 const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 function parseForm(req) {
-  const form = formidable({ multiples: false, maxFileSize: 25 * 1024 * 1024 });
+  const form = formidable({ multiples: false });
   return new Promise((resolve, reject) => {
-    form.parse(req, (err, fields, files) => (err ? reject(err) : resolve({ fields, files })));
+    form.parse(req, (err, fields, files) => {
+      if (err) reject(err);
+      else resolve({ fields, files });
+    });
   });
+}
+
+function pickFile(files, key) {
+  const f = files?.[key];
+  if (!f) return null;
+  return Array.isArray(f) ? f[0] : f;
 }
 
 export default async function handler(req, res) {
@@ -25,66 +34,87 @@ export default async function handler(req, res) {
     const { fields, files } = await parseForm(req);
 
     const preferredLanguage = (fields.preferredLanguage || "auto").toString();
-    const userMessage = (fields.message || "").toString();
-    const imageFile = files.image;
+    const userMessage = (fields.message || "").toString().trim();
 
-    if (!imageFile) {
+    const imageFile = pickFile(files, "image"); // ✅ لازم Flutter يرسل باسم image
+    if (!imageFile?.filepath) {
       return res.status(400).json({ error: "Missing image file. Send multipart field: image" });
     }
 
     const imgBase64 = fs.readFileSync(imageFile.filepath).toString("base64");
+    const dataUrl = `data:image/jpeg;base64,${imgBase64}`;
 
     // 1) Vision observation
     const vision = await client.responses.create({
-      model: "gpt-4.1-mini",
+      model: "gpt-4o-mini",
       temperature: 0.2,
       input: [{
         role: "user",
         content: [
-          { type: "input_text", text: "Describe what you see in this vehicle-related image. Focus on visible symptoms (leaks, smoke, corrosion, broken hoses, warning lights, damaged parts). If it's not diagnostic, say: NOT DIAGNOSTIC." },
-          { type: "input_image", image_url: `data:image/jpeg;base64,${imgBase64}` },
+          { type: "input_text", text: "Describe what you see in this vehicle-related image. Focus on visible symptoms (leaks, smoke, corrosion, damaged parts, warning lights). If it’s not useful, say so." },
+          { type: "input_image", image_url: dataUrl },
         ],
       }],
     });
 
     const visionText = (vision.output_text || "").trim();
 
-    // 2) Match internal JSON using message + vision
-    const combinedText = `${userMessage}\n\nIMAGE OBSERVATION:\n${visionText}`.trim();
-    const matchedIssues = findRelevantIssues(combinedText);
+    // 2) Match against JSON using user text + vision observation
+    const combined = `${userMessage}\n\nIMAGE_OBSERVATION:\n${visionText}`.trim();
+    const matched = findRelevantIssues(combined);
 
     // 3) Final diagnosis
+    const lang = (preferredLanguage !== "auto") ? preferredLanguage : (userMessage ? undefined : "en");
+
     const final = await client.responses.create({
-      model: "gpt-4.1",
+      model: "gpt-4o",
       temperature: 0.25,
       input: [
         {
           role: "system",
-          content: `You are FixLens Auto — expert vehicle diagnostic AI.
-- Reply in the SAME language as the user (or ${preferredLanguage} if user forced a language).
-- Use matched issues as hints (not certainty).
+          content: `You are FixLens Auto — expert vehicle diagnostics.
+Respond in user's language (${preferredLanguage}).
+Use matched issues as hints, never claim certainty.
 Format:
-🔧 Quick Diagnosis
-⚡ Most Likely Causes (ranked)
-🧪 Quick Tests
-🛠 Recommended Fix
-⚠️ Safety Warnings (only if needed)
-If the image is NOT DIAGNOSTIC, say so clearly and rely on the user's text.`,
+1) Quick Summary
+2) Most Likely Causes (ranked)
+3) Quick Tests
+4) Recommended Next Steps
+5) Safety Warnings`,
         },
         {
           role: "user",
-          content: `User message:\n${userMessage || "(no text provided)"}\n\nImage observation:\n${visionText || "(none)"}\n\nMatched issues:\n${JSON.stringify(matchedIssues, null, 2)}`,
+          content: [
+            {
+              type: "input_text",
+              text:
+`User message:
+${userMessage || "(no text)"}
+
+Image observation:
+${visionText || "(none)"}
+
+Matched issues (internal JSON):
+${JSON.stringify(matched, null, 2)}`
+            }
+          ],
         },
       ],
     });
 
+    const reply = (final.output_text || "").trim() || "No reply.";
     return res.status(200).json({
-      reply: (final.output_text || "").trim() || "No reply.",
-      language: preferredLanguage,
+      reply,
       image_observation: visionText,
-      matched_issues: matchedIssues,
+      matched_issues: matched,
+      language: preferredLanguage,
     });
+
   } catch (e) {
-    return res.status(500).json({ error: "Image diagnosis failed", details: e?.message || String(e) });
+    console.error("Image diagnose error:", e);
+    return res.status(500).json({
+      error: "Image diagnosis failed",
+      details: e?.message || String(e),
+    });
   }
 }
