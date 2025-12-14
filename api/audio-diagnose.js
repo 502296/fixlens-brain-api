@@ -12,10 +12,19 @@ export const config = {
 const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 function parseForm(req) {
-  const form = formidable({ multiples: false, maxFileSize: 30 * 1024 * 1024 });
+  const form = formidable({ multiples: false });
   return new Promise((resolve, reject) => {
-    form.parse(req, (err, fields, files) => (err ? reject(err) : resolve({ fields, files })));
+    form.parse(req, (err, fields, files) => {
+      if (err) reject(err);
+      else resolve({ fields, files });
+    });
   });
+}
+
+function pickFile(files, key) {
+  const f = files?.[key];
+  if (!f) return null;
+  return Array.isArray(f) ? f[0] : f;
 }
 
 export default async function handler(req, res) {
@@ -25,14 +34,14 @@ export default async function handler(req, res) {
     const { fields, files } = await parseForm(req);
 
     const preferredLanguage = (fields.preferredLanguage || "auto").toString();
-    const extraText = (fields.message || "").toString();
-    const audioFile = files.audio;
+    const userNotes = (fields.message || "").toString().trim();
 
-    if (!audioFile) {
+    const audioFile = pickFile(files, "audio"); // ✅ لازم Flutter يرسل باسم audio
+    if (!audioFile?.filepath) {
       return res.status(400).json({ error: "Missing audio file. Send multipart field: audio" });
     }
 
-    // 1) Transcribe audio -> text
+    // 1) Transcribe
     const transcript = await client.audio.transcriptions.create({
       file: fs.createReadStream(audioFile.filepath),
       model: "gpt-4o-mini-transcribe",
@@ -40,41 +49,60 @@ export default async function handler(req, res) {
 
     const transcriptText = (transcript.text || "").trim();
 
-    // 2) Match internal JSON using message + transcript
-    const combined = `${extraText}\n\nAUDIO TRANSCRIPT:\n${transcriptText}`.trim();
-    const matchedIssues = findRelevantIssues(combined);
+    // 2) Match JSON using notes + transcript
+    const combined = `${userNotes}\n\nAUDIO_TRANSCRIPT:\n${transcriptText}`.trim();
+    const matched = findRelevantIssues(combined);
 
-    // 3) Diagnose based on transcript + matches
+    // 3) Final diagnosis
     const final = await client.responses.create({
-      model: "gpt-4.1",
+      model: "gpt-4o",
       temperature: 0.25,
       input: [
         {
           role: "system",
-          content: `You are FixLens Auto — expert at diagnosing vehicle noises and symptoms.
-- Reply in the SAME language as the user (or ${preferredLanguage} if forced).
+          content: `You are FixLens Auto — expert at diagnosing noises & symptoms.
+Respond in user's language (${preferredLanguage}).
+Use matched issues as hints, never claim certainty.
 Format:
-🔧 Quick Diagnosis
-⚡ Most Likely Causes (ranked)
-🧪 Quick Tests
-🛠 Recommended Fix
-⚠️ Safety Warnings (only if needed)
-If transcript is weak, ask up to 3 targeted questions.`,
+1) Quick Summary
+2) Most Likely Causes (ranked)
+3) Quick Tests
+4) Recommended Next Steps
+5) Safety Warnings`,
         },
         {
           role: "user",
-          content: `User notes:\n${extraText || "(none)"}\n\nAudio transcript:\n${transcriptText || "(no transcript)"}\n\nMatched issues:\n${JSON.stringify(matchedIssues, null, 2)}`,
+          content: [
+            {
+              type: "input_text",
+              text:
+`User notes:
+${userNotes || "(none)"}
+
+Audio transcript:
+${transcriptText || "(empty)"}
+
+Matched issues (internal JSON):
+${JSON.stringify(matched, null, 2)}`
+            }
+          ],
         },
       ],
     });
 
+    const reply = (final.output_text || "").trim() || "No reply.";
     return res.status(200).json({
-      reply: (final.output_text || "").trim() || "No reply.",
+      reply,
       transcript: transcriptText,
-      matched_issues: matchedIssues,
+      matched_issues: matched,
       language: preferredLanguage,
     });
+
   } catch (e) {
-    return res.status(500).json({ error: "Audio diagnosis failed", details: e?.message || String(e) });
+    console.error("Audio diagnose error:", e);
+    return res.status(500).json({
+      error: "Audio diagnosis failed",
+      details: e?.message || String(e),
+    });
   }
 }
