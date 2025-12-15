@@ -1,0 +1,514 @@
+[
+  {
+    "id": "engine_rough_idle_shake",
+    "title": "Engine Rough Idle or Shaking When Stopped",
+    "system": "engine",
+    "category": "ENGINE — GENERAL",
+    "vehicle_class": "both",
+    "fuel_type": "any",
+    "symptom_short": "Rough idle or shaking when stopped",
+    "symptom_patterns": ["rough idle", "shaking at stop", "car vibrates in park", "engine feels like it will stall", "idle vibration", "rough at idle"],
+    "likely_causes": [
+      {"cause": "Dirty or failing spark plugs", "probability": "high", "severity": "medium", "urgency": "soon", "notes": "Common if maintenance is overdue."},
+      {"cause": "Ignition coil weakness/misfire", "probability": "medium", "severity": "medium", "urgency": "soon", "notes": "Often worse under load or when wet."},
+      {"cause": "Vacuum leak (cracked hose, intake gasket, PCV leak)", "probability": "medium", "severity": "high", "urgency": "soon", "notes": "Can raise fuel trims and trigger CEL."},
+      {"cause": "Dirty throttle body / idle control issue", "probability": "medium", "severity": "medium", "urgency": "soon", "notes": "Idle can hunt or dip at stops."}
+    ],
+    "recommended_checks": [
+      "Check maintenance history for last spark-plug change.",
+      "Scan OBD-II for misfire or fuel-trim codes (P030x, P0171/P0174).",
+      "Listen for hissing around intake/PCV hoses; inspect for cracks.",
+      "Observe idle RPM stability with AC on/off."
+    ],
+    "safety_warning": "Avoid hard acceleration until misfire cause is identified. Severe misfires can damage the catalytic converter."
+  },
+  {
+    "id": "engine_check_light_flashing",
+    "title": "Flashing Check-Engine Light Under Load",
+    "system": "engine",
+    "category": "ENGINE — MISFIRE / IGNITION",
+    "vehicle_class": "both",
+    "fuel_type": "any",
+    "symptom_short": "Flashing check-engine light under load",
+    "symptom_patterns": ["check engine light flashing", "engine light blinks", "cel flashing", "flashing engine light when accelerating"],
+    "likely_causes": [
+      {"cause": "Severe engine misfire", "probability": "high", "severity": "high", "urgency": "immediate", "notes": "Unburned fuel can overheat and destroy the catalytic converter."},
+      {"cause": "Ignition coil failure / plug failure", "probability": "medium", "severity": "high", "urgency": "immediate", "notes": "Often happens under heavy load or uphill."},
+      {"cause": "Fuel delivery issue causing lean misfire", "probability": "low", "severity": "high", "urgency": "immediate", "notes": "Weak pump, clogged filter, injector issue."}
+    ],
+    "recommended_checks": [
+      "Reduce speed and avoid hard acceleration immediately.",
+      "If flashing continues, pull over safely and shut engine off.",
+      "Scan for misfire codes (P0300–P0308) and fuel trim clues.",
+      "Check coil connections and plug condition if accessible."
+    ],
+    "safety_warning": "A flashing check-engine light often means STOP DRIVING soon. Continuing to drive can cause very expensive damage."
+  },
+  {
+    "id": "engine_hard_start_cold",
+    "title": "Hard Starting When Engine Is Cold",
+    "system": "engine",
+    "category": "ENGINE — STARTING",
+    "vehicle_class": "both",
+    "fuel_type": "any",
+    "symptom_short": "Hard starting or long crank when cold",
+    "symptom_patterns": ["hard to start in morning", "takes long crank when cold", "cold start problem", "cranks longer when cold"],
+    "likely_causes": [
+      {"cause": "Weak battery or poor battery connections", "probability": "medium", "severity": "medium", "urgency": "soon", "notes": "Cold weather reduces battery output."},
+      {"cause": "Fuel system issue (weak pump, leaking injector, low pressure)", "probability": "medium", "severity": "high", "urgency": "soon", "notes": "Can cause extended crank."},
+      {"cause": "Coolant temperature sensor reporting wrong temp", "probability": "medium", "severity": "medium", "urgency": "soon", "notes": "Can over/under-fuel on cold start."}
+    ],
+    "recommended_checks": [
+      "Check battery age and look for corrosion on terminals.",
+      "Listen for fuel-pump prime sound when key is turned to ON.",
+      "Scan for codes related to temp sensors or fuel trims.",
+      "Note if issue happens only in cold weather or always."
+    ],
+    "safety_warning": "Avoid repeated long cranking; it can overheat the starter and cables."
+  },
+  {
+    "id": "engine_cranks_no_start",
+    "title": "Engine Cranks but Does Not Start",
+    "system": "engine",
+    "category": "ENGINE — NO START",
+    "vehicle_class": "both",
+    "fuel_type": "any",
+    "symptom_short": "Engine turns over but won’t start",
+    "symptom_patterns": ["cranks no start", "turns over but won't start", "engine cranks but not firing", "starter works but no start"],
+    "likely_causes": [
+      {"cause": "No fuel delivery (failed pump/relay, clogged filter)", "probability": "medium", "severity": "high", "urgency": "soon", "notes": "Often no fuel pressure at rail."},
+      {"cause": "No spark (crank sensor, ignition module, coil power)", "probability": "medium", "severity": "high", "urgency": "soon", "notes": "May log P0335/P0340."},
+      {"cause": "Immobilizer/security issue", "probability": "medium", "severity": "medium", "urgency": "normal", "notes": "Security light flashing or message present."}
+    ],
+    "recommended_checks": [
+      "Check if security light is flashing on dash.",
+      "Listen for fuel pump prime; check fuel level.",
+      "Scan for codes even if CEL is off.",
+      "Avoid flooding: don’t crank for long periods."
+    ],
+    "safety_warning": "Avoid extended cranking; it can flood the engine or overheat the starter."
+  },
+  {
+    "id": "engine_stall_at_stop",
+    "title": "Engine Stalls When Coming to a Stop",
+    "system": "engine",
+    "category": "ENGINE — STALL AT IDLE",
+    "vehicle_class": "both",
+    "fuel_type": "any",
+    "symptom_short": "Engine dies when slowing or stopping",
+    "symptom_patterns": ["stalls at stop", "dies at traffic light", "stalls when braking", "engine shuts off when stopping"],
+    "likely_causes": [
+      {"cause": "Dirty throttle body / idle control fault", "probability": "medium", "severity": "medium", "urgency": "soon", "notes": "Idle dips then stalls."},
+      {"cause": "Vacuum leak or EVAP purge valve stuck open", "probability": "medium", "severity": "medium", "urgency": "soon", "notes": "Can cause lean at idle."},
+      {"cause": "Torque converter clutch staying locked (automatic)", "probability": "low", "severity": "high", "urgency": "soon", "notes": "Feels like manual car stopping without clutch."}
+    ],
+    "recommended_checks": [
+      "Observe if stall happens only after highway driving.",
+      "Check for codes (P0507, P0171, EVAP purge codes).",
+      "Clean throttle body using proper procedure if safe.",
+      "If automatic: scan transmission codes and TCC data."
+    ],
+    "safety_warning": "Frequent stalling in traffic is dangerous. If it happens repeatedly, avoid busy roads until fixed."
+  },
+  {
+    "id": "engine_overheat_stop_go",
+    "title": "Engine Overheating in Traffic but OK at Highway Speed",
+    "system": "engine",
+    "category": "ENGINE — OVERHEAT PATTERN",
+    "vehicle_class": "both",
+    "fuel_type": "any",
+    "symptom_short": "Overheats in stop-and-go, cools at speed",
+    "symptom_patterns": ["overheats in traffic", "temp rises at stop", "hot in city driving", "overheats at idle"],
+    "likely_causes": [
+      {"cause": "Cooling fan not working (electric fan or clutch fan)", "probability": "high", "severity": "high", "urgency": "immediate", "notes": "Most common pattern."},
+      {"cause": "Restricted radiator/condenser fins (bugs, debris)", "probability": "medium", "severity": "medium", "urgency": "soon", "notes": "Airflow blocked at low speed."},
+      {"cause": "Low coolant level / small leak", "probability": "medium", "severity": "high", "urgency": "immediate", "notes": "Can worsen quickly."}
+    ],
+    "recommended_checks": [
+      "With AC on and engine warm, verify cooling fans turn on.",
+      "Visually inspect radiator/condenser for blockage (engine cool).",
+      "Check coolant level only when engine is cold.",
+      "If gauge enters red, shut off engine safely."
+    ],
+    "safety_warning": "Do not continue driving an overheating engine. Severe overheating can cause head-gasket failure within minutes."
+  },
+  {
+    "id": "engine_oil_light_flicker_idle",
+    "title": "Oil Pressure Warning Light Flickers at Idle",
+    "system": "engine",
+    "category": "ENGINE — OIL PRESSURE",
+    "vehicle_class": "both",
+    "fuel_type": "any",
+    "symptom_short": "Oil light flickers at idle, may go off with revs",
+    "symptom_patterns": ["oil light flickers", "oil pressure low at idle", "oil light on when hot"],
+    "likely_causes": [
+      {"cause": "Low engine oil level or wrong/old oil viscosity", "probability": "high", "severity": "high", "urgency": "immediate", "notes": "Check level first."},
+      {"cause": "Worn engine bearings reducing oil pressure", "probability": "medium", "severity": "high", "urgency": "immediate", "notes": "Often with knocking noises."},
+      {"cause": "Faulty oil pressure sensor (after verifying oil level)", "probability": "medium", "severity": "medium", "urgency": "soon", "notes": "Do not assume sensor until verified."}
+    ],
+    "recommended_checks": [
+      "Check oil level immediately on level ground.",
+      "Listen for ticking/knocking when hot.",
+      "If light stays on solid: shut engine off.",
+      "Have mechanical oil pressure tested if uncertain."
+    ],
+    "safety_warning": "Driving with low oil pressure can destroy an engine quickly. If light is solid ON, shut engine off immediately."
+  },
+  {
+    "id": "engine_smoke_blue",
+    "title": "Blue Smoke from Exhaust",
+    "system": "engine",
+    "category": "ENGINE — SMOKE",
+    "vehicle_class": "both",
+    "fuel_type": "any",
+    "symptom_short": "Blue smoke indicates oil burning",
+    "symptom_patterns": ["blue smoke", "burning oil smell", "oil smoke acceleration", "smoke after idling"],
+    "likely_causes": [
+      {"cause": "Worn valve seals (smoke after idle then accel)", "probability": "medium", "severity": "high", "urgency": "soon", "notes": "Common on higher mileage."},
+      {"cause": "Worn piston rings / blow-by", "probability": "medium", "severity": "high", "urgency": "soon", "notes": "Often with high oil consumption."},
+      {"cause": "Turbocharger oil seal leak (if turbo)", "probability": "low", "severity": "high", "urgency": "soon", "notes": "May smoke under boost."}
+    ],
+    "recommended_checks": [
+      "Note when smoke happens: cold start, idle, acceleration, decel.",
+      "Check oil level frequently and monitor consumption.",
+      "Look for oily residue in intake piping (turbo engines)."
+    ],
+    "safety_warning": "Severe oil burning can damage catalytic converter and reduce engine life. Avoid long trips if smoke becomes heavy."
+  },
+  {
+    "id": "engine_smoke_white_sweet",
+    "title": "Continuous White Sweet-Smelling Smoke",
+    "system": "engine",
+    "category": "ENGINE — COOLANT IN COMBUSTION",
+    "vehicle_class": "both",
+    "fuel_type": "any",
+    "symptom_short": "White smoke that persists may indicate coolant burning",
+    "symptom_patterns": ["white smoke continuous", "sweet smell exhaust", "coolant loss", "overheating with white smoke"],
+    "likely_causes": [
+      {"cause": "Head gasket leak", "probability": "medium", "severity": "critical", "urgency": "immediate", "notes": "May cause overheating and engine damage."},
+      {"cause": "Cracked cylinder head / block (less common)", "probability": "low", "severity": "critical", "urgency": "immediate", "notes": "Usually after severe overheat."}
+    ],
+    "recommended_checks": [
+      "Check coolant level (engine cold) and look for unexplained loss.",
+      "Look for milky oil or bubbles in coolant reservoir (not always present).",
+      "Do a cooling system pressure test and combustion gas test."
+    ],
+    "safety_warning": "Stop driving if temperature rises or coolant drops quickly. Continuing can destroy the engine."
+  },
+  {
+    "id": "engine_smoke_black",
+    "title": "Black Smoke from Exhaust",
+    "system": "engine",
+    "category": "ENGINE — RICH CONDITION",
+    "vehicle_class": "both",
+    "fuel_type": "gas",
+    "symptom_short": "Black smoke indicates rich fuel mixture",
+    "symptom_patterns": ["black smoke", "rich smell", "sooty tailpipe", "poor mpg", "runs rich"],
+    "likely_causes": [
+      {"cause": "Faulty MAF sensor or contaminated MAF", "probability": "medium", "severity": "medium", "urgency": "soon", "notes": "Incorrect airflow reading."},
+      {"cause": "Leaking fuel injector or high fuel pressure", "probability": "medium", "severity": "high", "urgency": "soon", "notes": "Can wash cylinders."},
+      {"cause": "O2 sensor or fuel trim control fault", "probability": "medium", "severity": "medium", "urgency": "soon", "notes": "May set P0172/P0175."}
+    ],
+    "recommended_checks": [
+      "Scan codes and check short/long fuel trims.",
+      "Inspect air filter and intake for restrictions.",
+      "Check fuel pressure if equipment is available."
+    ],
+    "safety_warning": "Running rich can overheat/damage catalytic converter and dilute engine oil."
+  },
+  {
+    "id": "engine_knock_under_load",
+    "title": "Pinging or Knocking Noise on Acceleration",
+    "system": "engine",
+    "category": "ENGINE — KNOCK",
+    "vehicle_class": "both",
+    "fuel_type": "any",
+    "symptom_short": "Rattling/pinging under load or uphill",
+    "symptom_patterns": ["pinging uphill", "spark knock", "rattle on acceleration", "knocking when accelerating"],
+    "likely_causes": [
+      {"cause": "Low octane fuel for engine requirement", "probability": "medium", "severity": "medium", "urgency": "soon", "notes": "Try correct octane if required."},
+      {"cause": "Carbon buildup increasing compression", "probability": "medium", "severity": "medium", "urgency": "soon", "notes": "More common in GDI engines."},
+      {"cause": "Faulty knock sensor / timing control issue", "probability": "medium", "severity": "high", "urgency": "soon", "notes": "May set knock-related codes."}
+    ],
+    "recommended_checks": [
+      "Avoid hard acceleration; note when knock occurs.",
+      "Try one tank of correct/higher octane if specified by manual.",
+      "Scan for timing/knock sensor codes and monitor knock retard data."
+    ],
+    "safety_warning": "Persistent heavy knocking can damage pistons and bearings. Reduce load until diagnosed."
+  },
+  {
+    "id": "engine_misfire_random",
+    "title": "Random Misfire or Hesitation",
+    "system": "engine",
+    "category": "ENGINE — MISFIRE",
+    "vehicle_class": "both",
+    "fuel_type": "any",
+    "symptom_short": "Hesitation, stumble, misfire at idle or load",
+    "symptom_patterns": ["misfire", "stumble", "hesitation", "P0300", "engine shakes under load"],
+    "likely_causes": [
+      {"cause": "Spark plugs worn or incorrect gap", "probability": "high", "severity": "medium", "urgency": "soon", "notes": "Top cause."},
+      {"cause": "Coil pack weak/failing", "probability": "medium", "severity": "medium", "urgency": "soon", "notes": "Often worsens when wet."},
+      {"cause": "Vacuum leak / unmetered air", "probability": "medium", "severity": "medium", "urgency": "soon", "notes": "Lean misfire pattern."},
+      {"cause": "Injector flow issue / clog", "probability": "low", "severity": "medium", "urgency": "soon", "notes": "Cylinder-specific sometimes."}
+    ],
+    "recommended_checks": [
+      "Scan for P0300–P030x and note which cylinders.",
+      "Check freeze-frame data (RPM, load, temp).",
+      "Inspect intake hoses/PCV; look for cracked boots.",
+      "If cylinder-specific: swap coil to see if misfire follows."
+    ],
+    "safety_warning": "Driving with ongoing misfire can damage catalytic converter. Fix soon."
+  },
+  {
+    "id": "engine_lean_codes",
+    "title": "Lean Condition Codes (P0171/P0174) — Rough Idle, Poor Power",
+    "system": "engine",
+    "category": "ENGINE — FUEL TRIM",
+    "vehicle_class": "both",
+    "fuel_type": "gas",
+    "symptom_short": "Lean codes, rough idle, sometimes surging",
+    "symptom_patterns": ["p0171", "p0174", "system too lean", "lean condition", "fuel trims high"],
+    "likely_causes": [
+      {"cause": "Vacuum leak (PCV, intake gasket, brake booster hose)", "probability": "high", "severity": "medium", "urgency": "soon", "notes": "Most common."},
+      {"cause": "Dirty/failed MAF sensor", "probability": "medium", "severity": "medium", "urgency": "soon", "notes": "Incorrect airflow reading."},
+      {"cause": "Low fuel pressure (pump/filter/regulator)", "probability": "medium", "severity": "high", "urgency": "soon", "notes": "Worse under load."}
+    ],
+    "recommended_checks": [
+      "Check STFT/LTFT at idle vs 2500 RPM (vacuum leak shows worse at idle).",
+      "Inspect PCV hoses and intake boots for cracks.",
+      "Clean MAF with proper MAF cleaner (if appropriate).",
+      "Test fuel pressure if possible."
+    ],
+    "safety_warning": "Severe lean operation can cause misfire and overheating of catalytic converter. Avoid hard driving until resolved."
+  },
+  {
+    "id": "engine_rich_codes",
+    "title": "Rich Condition Codes (P0172/P0175) — Poor MPG, Smell",
+    "system": "engine",
+    "category": "ENGINE — FUEL TRIM",
+    "vehicle_class": "both",
+    "fuel_type": "gas",
+    "symptom_short": "Rich codes, fuel smell, poor MPG",
+    "symptom_patterns": ["p0172", "p0175", "system too rich", "rich smell", "sooty exhaust"],
+    "likely_causes": [
+      {"cause": "Leaking injector / fuel pressure too high", "probability": "medium", "severity": "high", "urgency": "soon", "notes": "Can dilute oil."},
+      {"cause": "MAF sensor over-reporting air / intake issues", "probability": "medium", "severity": "medium", "urgency": "soon", "notes": ""},
+      {"cause": "O2 sensor bias / fuel control fault", "probability": "low", "severity": "medium", "urgency": "soon", "notes": ""}
+    ],
+    "recommended_checks": [
+      "Check fuel trims and O2 sensor behavior.",
+      "Inspect for fuel smell in oil; check oil level rising.",
+      "Check for leaking injectors if equipment available."
+    ],
+    "safety_warning": "Running rich can damage catalytic converter and dilute oil. Fix soon."
+  },
+  {
+    "id": "engine_vvt_rattle_startup",
+    "title": "Rattle at Startup (Possible VVT / Timing Chain Wear)",
+    "system": "engine",
+    "category": "ENGINE — TIMING / VVT",
+    "vehicle_class": "both",
+    "fuel_type": "any",
+    "symptom_short": "Brief rattle on cold start, sometimes with timing codes",
+    "symptom_patterns": ["rattle at startup", "timing chain rattle", "vvt rattle", "p0016", "p0011", "p0014"],
+    "likely_causes": [
+      {"cause": "Timing chain stretch / worn tensioner", "probability": "medium", "severity": "high", "urgency": "urgent", "notes": "More likely with extended oil intervals."},
+      {"cause": "VVT solenoid sticking / dirty oil", "probability": "medium", "severity": "medium", "urgency": "soon", "notes": "Can cause cam timing codes."}
+    ],
+    "recommended_checks": [
+      "Check oil level and oil change history.",
+      "Scan for cam/crank correlation or VVT codes.",
+      "Inspect/clean VVT solenoid screens if serviceable."
+    ],
+    "safety_warning": "If correlation codes appear, continued driving can risk timing jump and severe engine damage on interference engines."
+  },
+  {
+    "id": "engine_low_power_no_codes",
+    "title": "Low Power / Sluggish Acceleration (No Obvious Codes)",
+    "system": "engine",
+    "category": "ENGINE — PERFORMANCE",
+    "vehicle_class": "both",
+    "fuel_type": "any",
+    "symptom_short": "Car feels weak, slow acceleration",
+    "symptom_patterns": ["low power", "sluggish", "no acceleration", "feels heavy", "lost power"],
+    "likely_causes": [
+      {"cause": "Restricted air filter / intake restriction", "probability": "medium", "severity": "low", "urgency": "normal", "notes": ""},
+      {"cause": "Exhaust restriction (clogged catalytic converter)", "probability": "low", "severity": "high", "urgency": "soon", "notes": "Often after misfire/rich condition."},
+      {"cause": "Fuel delivery weak under load", "probability": "medium", "severity": "high", "urgency": "soon", "notes": ""},
+      {"cause": "Throttle body / electronic throttle issue", "probability": "low", "severity": "high", "urgency": "soon", "notes": ""}
+    ],
+    "recommended_checks": [
+      "Check for pending codes and live data (load, MAF/MAP, fuel trims).",
+      "Inspect air filter and intake ducting.",
+      "Watch for signs of exhaust restriction (poor high-RPM power, overheating cat)."
+    ],
+    "safety_warning": "If power loss is sudden and severe, avoid highway merging until diagnosed."
+  },
+  {
+    "id": "engine_oil_consumption_high",
+    "title": "High Oil Consumption (No External Leak)",
+    "system": "engine",
+    "category": "ENGINE — OIL CONSUMPTION",
+    "vehicle_class": "both",
+    "fuel_type": "any",
+    "symptom_short": "Oil level drops quickly between changes",
+    "symptom_patterns": ["burning oil", "adds oil often", "oil consumption", "oil level low frequently"],
+    "likely_causes": [
+      {"cause": "PCV system pulling oil into intake", "probability": "medium", "severity": "medium", "urgency": "soon", "notes": "Can cause oil in intake."},
+      {"cause": "Worn rings/valve seals", "probability": "medium", "severity": "high", "urgency": "soon", "notes": ""},
+      {"cause": "External seepage not noticed (valve cover, oil pan)", "probability": "medium", "severity": "medium", "urgency": "soon", "notes": "May drip slowly."}
+    ],
+    "recommended_checks": [
+      "Inspect for external leaks after parking overnight.",
+      "Check PCV valve/hoses and intake for oil pooling.",
+      "Monitor oil usage per 1000 miles/km to quantify."
+    ],
+    "safety_warning": "Low oil can cause catastrophic engine damage. Check level frequently until resolved."
+  },
+  {
+    "id": "engine_cel_p0420",
+    "title": "Catalyst Efficiency Code (P0420/P0430)",
+    "system": "engine",
+    "category": "ENGINE — EMISSIONS",
+    "vehicle_class": "both",
+    "fuel_type": "gas",
+    "symptom_short": "Catalyst efficiency below threshold",
+    "symptom_patterns": ["p0420", "p0430", "catalyst efficiency", "cat code"],
+    "likely_causes": [
+      {"cause": "Aging/failing catalytic converter", "probability": "medium", "severity": "medium", "urgency": "soon", "notes": "Often after many miles."},
+      {"cause": "Upstream issues (misfire, rich/lean, oil burning) damaging cat", "probability": "medium", "severity": "high", "urgency": "soon", "notes": "Fix root cause first."},
+      {"cause": "Exhaust leak before/downstream O2 sensor", "probability": "medium", "severity": "medium", "urgency": "soon", "notes": "Can fool O2 readings."}
+    ],
+    "recommended_checks": [
+      "Check for other codes first (misfire, trims).",
+      "Inspect exhaust for leaks near manifold/flex pipe.",
+      "Compare upstream vs downstream O2 sensor activity."
+    ],
+    "safety_warning": "Not always immediately dangerous, but prolonged misfire/rich running can overheat the exhaust and cause damage."
+  },
+  {
+    "id": "engine_evap_hard_start_after_refuel",
+    "title": "Hard Start After Refueling (EVAP Purge Valve Suspected)",
+    "system": "engine",
+    "category": "ENGINE — EVAP DRIVEABILITY",
+    "vehicle_class": "both",
+    "fuel_type": "gas",
+    "symptom_short": "Rough start right after filling gas",
+    "symptom_patterns": ["hard start after refuel", "stumbles after gas", "rough start after filling", "purge valve stuck"],
+    "likely_causes": [
+      {"cause": "EVAP purge valve stuck open", "probability": "high", "severity": "medium", "urgency": "soon", "notes": "Floods intake with vapor."},
+      {"cause": "Saturated charcoal canister", "probability": "medium", "severity": "medium", "urgency": "soon", "notes": "Often after overfilling tank."}
+    ],
+    "recommended_checks": [
+      "Note if issue happens only after refueling.",
+      "Scan for EVAP codes (P0441, P0455, etc.).",
+      "Avoid topping off the tank after pump clicks."
+    ],
+    "safety_warning": "Usually not immediately dangerous, but stalling in traffic after refuel can be risky."
+  },
+  {
+    "id": "engine_surging_cruise",
+    "title": "Surging or Bucking at Steady Speed",
+    "system": "engine",
+    "category": "ENGINE — DRIVEABILITY",
+    "vehicle_class": "both",
+    "fuel_type": "any",
+    "symptom_short": "Feels like on/off power while cruising",
+    "symptom_patterns": ["surging", "bucking", "on off power", "jerking at steady speed", "hesitates at constant throttle"],
+    "likely_causes": [
+      {"cause": "Ignition breakdown under light load (coil/plug)", "probability": "medium", "severity": "medium", "urgency": "soon", "notes": ""},
+      {"cause": "Fuel delivery irregularities (pressure regulator/pump)", "probability": "medium", "severity": "medium", "urgency": "soon", "notes": ""},
+      {"cause": "EGR or throttle body issues", "probability": "low", "severity": "medium", "urgency": "soon", "notes": ""}
+    ],
+    "recommended_checks": [
+      "Note speed range and whether cruise control is on.",
+      "Check for pending misfire/fuel codes and live trims.",
+      "Observe if AC load changes behavior."
+    ],
+    "safety_warning": "Severe surging can affect control on slippery roads. Reduce speed and avoid aggressive maneuvers."
+  },
+  {
+    "id": "engine_fuel_smell_under_hood",
+    "title": "Fuel Smell Under Hood or Near Car",
+    "system": "engine",
+    "category": "ENGINE — FUEL ODOR",
+    "vehicle_class": "both",
+    "fuel_type": "any",
+    "symptom_short": "Gasoline smell, possible leak",
+    "symptom_patterns": ["fuel smell", "gas smell", "smell gasoline", "fuel odor"],
+    "likely_causes": [
+      {"cause": "Fuel leak at line, injector, rail, or tank area", "probability": "medium", "severity": "high", "urgency": "immediate", "notes": "Fire hazard."},
+      {"cause": "Loose gas cap / EVAP leak", "probability": "medium", "severity": "medium", "urgency": "soon", "notes": "Usually milder odor."}
+    ],
+    "recommended_checks": [
+      "Do not smoke or use open flame near vehicle.",
+      "Check for wet spots/drips under car when parked.",
+      "If odor is strong, do not drive—inspect/tow to shop."
+    ],
+    "safety_warning": "Fuel leaks can cause fire or explosion. If smell is strong, avoid driving and have the car inspected immediately."
+  },
+  {
+    "id": "engine_backfire_intake",
+    "title": "Backfire / Pop Through Intake (Gas Engines)",
+    "system": "engine",
+    "category": "ENGINE — AIR/FUEL/IGNITION",
+    "vehicle_class": "both",
+    "fuel_type": "gas",
+    "symptom_short": "Popping/backfire through intake, sometimes hard start",
+    "symptom_patterns": ["backfire intake", "pop intake", "intake backfire", "popping under hood"],
+    "likely_causes": [
+      {"cause": "Severe lean condition (vacuum leak, low fuel pressure)", "probability": "medium", "severity": "high", "urgency": "immediate", "notes": "Lean backfire risk."},
+      {"cause": "Ignition timing/control issue (sensor faults)", "probability": "low", "severity": "high", "urgency": "soon", "notes": ""},
+      {"cause": "Crossed plug wires/incorrect firing order (older engines)", "probability": "low", "severity": "medium", "urgency": "soon", "notes": ""}
+    ],
+    "recommended_checks": [
+      "Scan for lean/misfire codes and check fuel trims.",
+      "Inspect intake hoses and clamps.",
+      "Avoid heavy throttle until fixed."
+    ],
+    "safety_warning": "Backfires can damage intake components. Treat as urgent if frequent."
+  },
+  {
+    "id": "engine_vacuum_leak_whistle",
+    "title": "Whistling/Hissing Sound + Rough Running (Vacuum Leak)",
+    "system": "engine",
+    "category": "ENGINE — AIR LEAK",
+    "vehicle_class": "both",
+    "fuel_type": "gas",
+    "symptom_short": "Hissing/whistling with rough idle or lean codes",
+    "symptom_patterns": ["hissing engine", "whistling under hood", "vacuum leak sound", "sucking sound"],
+    "likely_causes": [
+      {"cause": "Cracked PCV hose or brake booster hose", "probability": "high", "severity": "medium", "urgency": "soon", "notes": ""},
+      {"cause": "Intake manifold gasket leak", "probability": "medium", "severity": "medium", "urgency": "soon", "notes": ""},
+      {"cause": "Split intake boot after MAF", "probability": "medium", "severity": "medium", "urgency": "soon", "notes": ""}
+    ],
+    "recommended_checks": [
+      "Inspect hoses visually for cracks and loose clamps.",
+      "Spray-test (safe methods) or smoke-test at shop for confirmation.",
+      "Check fuel trims: high positive trims suggest air leak."
+    ],
+    "safety_warning": "Driving with major air leaks can cause stalling and catalyst damage from lean misfire."
+  },
+  {
+    "id": "engine_ecu_limp_mode",
+    "title": "Limp Mode / Reduced Power Warning",
+    "system": "engine",
+    "category": "ENGINE — FAILSAFE",
+    "vehicle_class": "both",
+    "fuel_type": "any",
+    "symptom_short": "Reduced power, limp mode, limited RPM",
+    "symptom_patterns": ["limp mode", "reduced power", "engine power reduced", "failsafe", "limited rpm"],
+    "likely_causes": [
+      {"cause": "Electronic throttle control fault", "probability": "medium", "severity": "high", "urgency": "immediate", "notes": "Throttle body, pedal sensor, wiring."},
+      {"cause": "Boost/turbo control fault (turbo engines)", "probability": "medium", "severity": "high", "urgency": "soon", "notes": "Wastegate, boost leak, sensor."},
+      {"cause": "Severe misfire / catalyst protection strategy", "probability": "low", "severity": "high", "urgency": "immediate", "notes": ""}
+    ],
+    "recommended_checks": [
+      "Scan codes immediately and note any throttle/boost related codes.",
+      "Check connectors on throttle body and accelerator pedal sensor.",
+      "Inspect intercooler/charge pipes for disconnections on turbo engines."
+    ],
+    "safety_warning": "Avoid highway merging if power is limited. Limp mode is a protective strategy—don’t ignore it."
+  }
+]
