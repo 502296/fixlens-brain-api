@@ -1,85 +1,60 @@
 // api/image-diagnose.js
 import OpenAI from "openai";
-import formidable from "formidable";
-import fs from "fs";
-import { buildFixLensPrompt } from "../lib/promptBuilder.js";
+import { findRelevantIssues } from "../lib/autoKnowledge.js";
+import { buildSystemPrompt } from "../lib/prompt.js";
+import { parseMultipart, config as multipartConfig } from "./_multipart.js";
 
-export const config = {
-  api: { bodyParser: false }, // ✅ مهم لـ multipart
-};
+export const config = { ...multipartConfig, runtime: "nodejs18.x" };
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
-
-function parseForm(req) {
-  const form = formidable({
-    multiples: false,
-    maxFileSize: 10 * 1024 * 1024, // 10MB
-  });
-
-  return new Promise((resolve, reject) => {
-    form.parse(req, (err, fields, files) => {
-      if (err) return reject(err);
-      resolve({ fields, files });
-    });
-  });
-}
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 export default async function handler(req, res) {
   try {
-    if (req.method !== "POST") {
-      return res.status(405).json({ error: "Only POST allowed" });
-    }
+    if (req.method !== "POST") return res.status(405).json({ error: "Only POST allowed" });
 
-    const { fields, files } = await parseForm(req);
+    const { fields, files, readFileBuffer } = await parseMultipart(req);
 
-    const message = (fields.message || "").toString().trim();
-    const preferredLanguage =
-      (fields.preferredLanguage || "").toString().trim() || null;
+    const preferredLanguage = fields?.preferredLanguage || "auto";
+    const message = (fields?.message || "").toString();
 
-    const imageFile = files.image;
-    if (!imageFile) {
-      return res.status(400).json({
-        error: "Image file is required",
-        hint: "Send multipart/form-data with field name: image",
-      });
-    }
+    const imageFile = files?.image;
+    if (!imageFile) return res.status(400).json({ error: "Image file is required (field name: image)" });
 
-    const buffer = fs.readFileSync(imageFile.filepath);
-    const base64 = buffer.toString("base64");
+    const buf = readFileBuffer(imageFile);
     const mime = imageFile.mimetype || "image/jpeg";
-    const imageDataUrl = `data:${mime};base64,${base64}`;
+    const base64 = buf.toString("base64");
+    const dataUrl = `data:${mime};base64,${base64}`;
 
-    const prompt = buildFixLensPrompt({
-      userText: message || "Diagnose the vehicle problem based on the image.",
-      preferredLanguage,
-      extraContext:
-        "The user provided a vehicle/engine image. Use visual clues and be precise.",
-    });
+    // نستخدم الـ message كـ سياق + نطلع autoKnowledge منه
+    const issues = findRelevantIssues(message || "");
 
-    const response = await openai.responses.create({
-      model: process.env.FIXLENS_IMAGE_MODEL || "gpt-4.1-mini",
+    const system = buildSystemPrompt(preferredLanguage);
+
+    const out = await openai.responses.create({
+      model: "gpt-4o-mini",
       input: [
+        {
+          role: "system",
+          content: system,
+        },
         {
           role: "user",
           content: [
-            { type: "input_text", text: prompt },
-            { type: "input_image", image_url: imageDataUrl },
+            { type: "input_text", text: message?.trim() ? `Context from user: ${message}` : "Analyze this vehicle image." },
+            { type: "input_text", text: `Relevant issues DB (if any): ${JSON.stringify(issues, null, 2)}` },
+            { type: "input_image", image_url: dataUrl },
           ],
         },
       ],
-      temperature: 0.3,
+      temperature: 0.35,
     });
 
-    return res.status(200).json({
-      reply: response.output_text || "",
-      language: preferredLanguage,
-    });
-  } catch (err) {
+    const reply = (out.output_text || "").trim();
+    return res.status(200).json({ reply: reply || "No reply." });
+  } catch (e) {
     return res.status(500).json({
       error: "Image diagnosis failed",
-      details: String(err?.message || err),
+      details: e?.message || String(e),
     });
   }
 }
