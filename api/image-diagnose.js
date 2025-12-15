@@ -1,89 +1,78 @@
 // api/image-diagnose.js
 import OpenAI from "openai";
+import { readJsonBody } from "./_utils.js";
 import { findRelevantIssues } from "../lib/autoKnowledge.js";
 
 export const config = { runtime: "nodejs18.x" };
 
-const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-
-function detectLanguage(text = "") {
-  if (/[\u0600-\u06FF]/.test(text)) return "ar";
-  if (/[а-яА-Я]/.test(text)) return "ru";
-  if (/[一-龯]/.test(text)) return "zh";
-  if (/[ぁ-んァ-ン]/.test(text)) return "ja";
-  return "en";
-}
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 export default async function handler(req, res) {
   try {
-    if (req.method !== "POST") return res.status(405).json({ error: "Only POST allowed" });
-
-    const { image, text, language } = req.body || {};
-    if (!image || typeof image !== "string" || image.trim().length < 50) {
-      return res.status(400).json({ error: "Missing image. Send JSON field: image (base64)" });
+    if (req.method !== "POST") {
+      return res.status(405).json({ error: "Only POST allowed" });
     }
 
-    const detected = detectLanguage(text || "");
-    const lang = (language && language !== "auto") ? language : detected;
+    const body = await readJsonBody(req);
+    if (!body) {
+      return res.status(400).json({ error: "Missing JSON body" });
+    }
 
-    const dataUrl = `data:image/jpeg;base64,${image}`;
+    const { image, text, language } = body; // image = base64 (بدون dataURL header)
+    if (!image || typeof image !== "string") {
+      return res.status(400).json({
+        error: "Missing image",
+        details: "Send JSON field: image (base64)",
+      });
+    }
 
-    // 1) Vision observation
-    const vision = await client.responses.create({
+    // خليها Data URL لأن هذا مدعوم رسميًا
+    const imageDataUrl = image.startsWith("data:")
+      ? image
+      : `data:image/jpeg;base64,${image}`;
+
+    const userNote = (text || "").toString();
+    const issues = findRelevantIssues(userNote);
+
+    const prompt = `
+You are FixLens Auto, a professional vehicle diagnostic assistant.
+User language: ${language || "auto"}.
+If user language is "auto", detect from user's note.
+
+User note (optional):
+${userNote}
+
+Relevant automotive issues from internal database:
+${JSON.stringify(issues, null, 2)}
+
+Return:
+1) Quick Summary
+2) Most likely causes (ranked)
+3) Recommended next steps (DIY + shop)
+4) Safety warnings (if any)
+`;
+
+    const response = await openai.responses.create({
       model: "gpt-4.1-mini",
       input: [
         {
           role: "user",
           content: [
-            { type: "input_text", text: "Describe what you see in this vehicle-related image. Focus on visible issues, warning lights, leaks, smoke, broken parts. If not useful, say so." },
-            { type: "input_image", image_url: dataUrl }
-          ]
-        }
-      ]
-    });
-
-    const visionText = (vision.output_text || "").trim();
-
-    // 2) Match internal issues using (user text + vision observation)
-    const combined = `${text || ""}\n\nIMAGE OBSERVATION:\n${visionText}`.trim();
-    const matchedIssues = findRelevantIssues(combined);
-
-    // 3) Final diagnosis
-    const final = await client.responses.create({
-      model: "gpt-4.1",
-      input: [
-        {
-          role: "system",
-          content: `You are FixLens Auto, expert vehicle diagnostic AI.
-Respond in: ${lang}.
-Use matched issues as hints (not certainty).
-Format:
-🔧 Quick Summary
-⚡ Likely Causes (ranked)
-🧪 Quick Tests
-⚠️ Safety Warnings
-❌ What NOT to do
-🧠 Pro Tip`
+            { type: "input_text", text: prompt },
+            { type: "input_image", image_url: imageDataUrl },
+          ],
         },
-        {
-          role: "user",
-          content: [
-            { type: "input_text", text: `User note:\n${text || "(no text)"}\n\nImage observation:\n${visionText}\n\nMatched issues:\n${JSON.stringify(matchedIssues, null, 2)}` }
-          ]
-        }
       ],
-      temperature: 0.3
     });
 
-    const reply = (final.output_text || "").trim() || "No reply.";
     return res.status(200).json({
-      reply,
-      language: lang,
-      image_observation: visionText,
-      matched_issues: matchedIssues
+      reply: response.output_text,
+      language: language || "auto",
     });
   } catch (err) {
-    console.error("Image diagnose error:", err);
-    return res.status(500).json({ error: "Image diagnosis failed", details: err?.message || String(err) });
+    return res.status(500).json({
+      error: "Image diagnosis failed",
+      details: err?.message || String(err),
+    });
   }
 }
