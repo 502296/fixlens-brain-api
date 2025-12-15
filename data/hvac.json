@@ -1,0 +1,350 @@
+[
+  {
+    "id": "ac_not_cold_low_refrigerant",
+    "title": "A/C Not Cold (Low Refrigerant / Leak)",
+    "system": "hvac",
+    "category": "A/C — NO COOL",
+    "symptom_short": "A/C blows warm or slightly cool; worsens at idle",
+    "symptom_patterns": [
+      "ac not cold",
+      "air conditioner blows warm",
+      "ac cool then warm",
+      "ac not cold at idle",
+      "needs recharge often"
+    ],
+    "likely_causes": [
+      {
+        "cause": "Low refrigerant due to leak (O-rings, condenser, hose, evaporator)",
+        "probability": "high",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": "If it needed recharge before, there is likely a leak."
+      },
+      {
+        "cause": "Condenser airflow issue (fan not working / debris)",
+        "probability": "medium",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": "Especially noticeable at idle or in traffic."
+      },
+      {
+        "cause": "A/C compressor not engaging (electrical/control issue)",
+        "probability": "medium",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": ""
+      }
+    ],
+    "recommended_checks": [
+      "Confirm compressor clutch engages (if equipped) when A/C is ON.",
+      "Inspect condenser for blockage and ensure cooling fans run with A/C.",
+      "Look for oily residue on A/C lines and condenser (leak clue).",
+      "Use UV dye and UV light to find small leaks (best practice)."
+    ],
+    "safety_warning": "Avoid DIY venting refrigerant. It’s unsafe and illegal in many places. Use proper service equipment."
+  },
+  {
+    "id": "ac_compressor_not_engaging",
+    "title": "A/C Compressor Not Engaging",
+    "system": "hvac",
+    "category": "A/C — COMPRESSOR",
+    "symptom_short": "A/C button on but compressor does not kick on",
+    "symptom_patterns": [
+      "ac compressor not engaging",
+      "ac clutch not kicking in",
+      "ac light on but no cold air",
+      "compressor not turning on"
+    ],
+    "likely_causes": [
+      {
+        "cause": "Low refrigerant (pressure switch prevents engagement)",
+        "probability": "high",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": "Most common: system protects itself when low."
+      },
+      {
+        "cause": "Blown fuse / bad relay / wiring fault",
+        "probability": "medium",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": ""
+      },
+      {
+        "cause": "Bad A/C clutch / compressor failure",
+        "probability": "medium",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": ""
+      },
+      {
+        "cause": "Bad pressure sensor / A/C request signal issue (PCM/BCM)",
+        "probability": "low",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": ""
+      }
+    ],
+    "recommended_checks": [
+      "Check A/C fuse/relay and swap relay with identical one as test.",
+      "Scan for HVAC/PCM codes and view A/C pressure sensor reading.",
+      "Verify radiator fans run when A/C is requested.",
+      "If pressure is low, leak-test and recharge properly."
+    ],
+    "safety_warning": "Jumping pressure switches is risky and can damage the compressor."
+  },
+  {
+    "id": "ac_cools_while_driving_warm_idle",
+    "title": "A/C Cold While Driving, Warm at Idle",
+    "system": "hvac",
+    "category": "A/C — IDLE",
+    "symptom_short": "Cold air at speed; warm air in traffic/idle",
+    "symptom_patterns": [
+      "ac cold driving warm idle",
+      "ac warm in traffic",
+      "ac not cold at stop light",
+      "ac gets warmer when stopped"
+    ],
+    "likely_causes": [
+      {
+        "cause": "Condenser cooling fan weak/not running",
+        "probability": "high",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": "Airflow at speed masks the problem."
+      },
+      {
+        "cause": "Low refrigerant charge",
+        "probability": "medium",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": "Low charge reduces cooling especially at idle."
+      },
+      {
+        "cause": "Condenser fins blocked or dirty",
+        "probability": "medium",
+        "severity": "low",
+        "urgency": "normal",
+        "notes": ""
+      }
+    ],
+    "recommended_checks": [
+      "Confirm condenser fan operation with A/C ON.",
+      "Inspect condenser for debris and bent fins.",
+      "Check for low refrigerant and leaks with UV dye."
+    ],
+    "safety_warning": "Overheating risk may increase if fans are not working properly."
+  },
+  {
+    "id": "heater_no_heat",
+    "title": "Heater Blows Cold / No Cabin Heat",
+    "system": "hvac",
+    "category": "HEAT — NO HEAT",
+    "symptom_short": "Heater stays cold even when engine warms up",
+    "symptom_patterns": [
+      "heater blows cold",
+      "no heat in cabin",
+      "heat not working",
+      "car heater not hot"
+    ],
+    "likely_causes": [
+      {
+        "cause": "Low coolant level (heater core not getting hot coolant)",
+        "probability": "high",
+        "severity": "high",
+        "urgency": "soon",
+        "notes": "Often accompanied by overheating or gurgling noise."
+      },
+      {
+        "cause": "Air trapped in cooling system / improper bleeding",
+        "probability": "medium",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": "Common after coolant service."
+      },
+      {
+        "cause": "Heater core clogged",
+        "probability": "medium",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": "One heater hose hot, the other cooler."
+      },
+      {
+        "cause": "Blend door actuator fault",
+        "probability": "medium",
+        "severity": "low",
+        "urgency": "normal",
+        "notes": "HVAC door not routing air through heater core."
+      }
+    ],
+    "recommended_checks": [
+      "Verify coolant level when cold; check for leaks.",
+      "Feel heater hoses: both should be hot when heat is on.",
+      "Listen for blend door actuator clicking behind dash.",
+      "Check engine temperature reaches normal operating range."
+    ],
+    "safety_warning": "Low coolant can lead to engine overheating and severe damage."
+  },
+  {
+    "id": "heater_smells_sweet_fog_windows",
+    "title": "Sweet Smell Inside + Foggy Windows (Heater Core Leak)",
+    "system": "hvac",
+    "category": "HEAT — HEATER CORE",
+    "symptom_short": "Sweet coolant odor, foggy windshield, damp carpet",
+    "symptom_patterns": [
+      "sweet smell in cabin",
+      "foggy windows when heat on",
+      "wet passenger floor",
+      "heater core leak"
+    ],
+    "likely_causes": [
+      {
+        "cause": "Heater core leaking",
+        "probability": "high",
+        "severity": "high",
+        "urgency": "soon",
+        "notes": "Coolant vapors can fog glass and irritate breathing."
+      },
+      {
+        "cause": "Heater hose connection leak at firewall",
+        "probability": "medium",
+        "severity": "high",
+        "urgency": "soon",
+        "notes": ""
+      }
+    ],
+    "recommended_checks": [
+      "Inspect passenger footwell for dampness and sticky residue.",
+      "Check coolant level dropping over time.",
+      "Inspect heater hose connections at firewall for leaks.",
+      "Pressure test cooling system to confirm."
+    ],
+    "safety_warning": "Breathing coolant vapor is unhealthy. Fix promptly and avoid running heat on high if leaking."
+  },
+  {
+    "id": "blower_not_working",
+    "title": "Cabin Blower Fan Not Working (No Airflow)",
+    "system": "hvac",
+    "category": "BLOWER — NO AIRFLOW",
+    "symptom_short": "No air from vents on any speed (or only some speeds)",
+    "symptom_patterns": [
+      "blower not working",
+      "no air from vents",
+      "fan works only on high",
+      "ac blower stopped"
+    ],
+    "likely_causes": [
+      {
+        "cause": "Blower motor resistor/module failed",
+        "probability": "high",
+        "severity": "low",
+        "urgency": "normal",
+        "notes": "Common: fan works only on high or certain speeds."
+      },
+      {
+        "cause": "Blower motor failed",
+        "probability": "medium",
+        "severity": "low",
+        "urgency": "normal",
+        "notes": ""
+      },
+      {
+        "cause": "Fuse/relay/wiring fault",
+        "probability": "medium",
+        "severity": "low",
+        "urgency": "normal",
+        "notes": ""
+      }
+    ],
+    "recommended_checks": [
+      "Check HVAC blower fuse and relay.",
+      "If only high speed works, suspect resistor/module.",
+      "Listen for blower motor noise; check for power at motor connector."
+    ],
+    "safety_warning": "No defrost airflow can reduce visibility in winter—address before long trips."
+  },
+  {
+    "id": "ac_smell_mold",
+    "title": "Musty/Mold Smell from Vents (A/C Odor)",
+    "system": "hvac",
+    "category": "AIR QUALITY — ODOR",
+    "symptom_short": "Musty smell when A/C starts; improves after a while",
+    "symptom_patterns": [
+      "musty smell from ac",
+      "mold smell vents",
+      "dirty sock smell",
+      "ac smells bad"
+    ],
+    "likely_causes": [
+      {
+        "cause": "Mold/bacteria on evaporator core",
+        "probability": "high",
+        "severity": "low",
+        "urgency": "normal",
+        "notes": "Moisture buildup supports growth."
+      },
+      {
+        "cause": "Cabin air filter clogged/dirty",
+        "probability": "high",
+        "severity": "low",
+        "urgency": "normal",
+        "notes": ""
+      },
+      {
+        "cause": "A/C drain clogged (water stays in HVAC box)",
+        "probability": "medium",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": "Can cause damp carpets and odor."
+      }
+    ],
+    "recommended_checks": [
+      "Replace cabin air filter.",
+      "Check A/C drain tube for proper dripping under car.",
+      "Use approved evaporator cleaner if needed."
+    ],
+    "safety_warning": "Strong mold odor can irritate allergies/asthma. Fix the source (filter/drain/evaporator)."
+  },
+  {
+    "id": "defrost_weak_airflow",
+    "title": "Weak Defrost / Poor Airflow to Windshield",
+    "system": "hvac",
+    "category": "DEFROST — WEAK",
+    "symptom_short": "Defrost mode selected but airflow weak or misdirected",
+    "symptom_patterns": [
+      "defrost not working",
+      "weak airflow windshield",
+      "air not coming from defrost vents",
+      "vent direction not changing"
+    ],
+    "likely_causes": [
+      {
+        "cause": "Mode door actuator failure (stuck door)",
+        "probability": "high",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": "Often causes clicking behind dash."
+      },
+      {
+        "cause": "Vacuum leak (older vacuum-controlled HVAC)",
+        "probability": "medium",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": "Defaults may change under acceleration."
+      },
+      {
+        "cause": "Cabin filter clogged / blower weak",
+        "probability": "medium",
+        "severity": "low",
+        "urgency": "normal",
+        "notes": ""
+      }
+    ],
+    "recommended_checks": [
+      "Listen for actuator clicking; scan HVAC codes if supported.",
+      "Check vacuum lines (older vehicles) for cracks/disconnects.",
+      "Replace cabin air filter and verify blower performance."
+    ],
+    "safety_warning": "Poor defrost reduces visibility—address immediately in freezing or rainy conditions."
+  }
+]
