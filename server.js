@@ -1,149 +1,122 @@
 import express from "express";
-import OpenAI from "openai";
-import fs from "fs";
-import os from "os";
-import path from "path";
+import cors from "cors";
+import multer from "multer";
+
+import { diagnoseText, diagnoseImage, diagnoseAudio } from "./lib/service.js";
 
 const app = express();
-app.use(express.json({ limit: "20mb" }));
 
-// =====================
-// OpenAI
-// =====================
-const apiKey = process.env.OPENAI_API_KEY;
-if (!apiKey) throw new Error("Missing OPENAI_API_KEY");
+// ---------- Middleware ----------
+app.use(cors());
+app.use(express.json({ limit: "2mb" })); // للنص فقط
 
-const openai = new OpenAI({ apiKey });
-
-const MODEL_TEXT = "gpt-4o-mini";
-const MODEL_VISION = "gpt-4o-mini";
-const MODEL_TRANSCRIBE = "whisper-1";
-
-// =====================
-// Helpers
-// =====================
-function normalizeBase64(data) {
-  const m = String(data).match(/^data:.*;base64,(.*)$/);
-  return m ? m[1] : data;
-}
-
-function detectImageMime(base64) {
-  if (base64.startsWith("/9j/")) return "image/jpeg";
-  if (base64.startsWith("iVBOR")) return "image/png";
-  if (base64.startsWith("UklGR")) return "image/webp";
-  return "image/jpeg";
-}
-
-function buildImageDataUrl(base64) {
-  const raw = normalizeBase64(base64);
-  const mime = detectImageMime(raw);
-  return `data:${mime};base64,${raw}`;
-}
-
-// =====================
-// Health
-// =====================
-app.get("/", (_, res) => {
+// ---------- Health ----------
+app.get("/", (req, res) => {
   res.send("FixLens Brain API is running ✅");
 });
 
-app.get("/health", (_, res) => {
+app.get("/health", (req, res) => {
   res.json({ ok: true });
 });
 
-// =====================
+// ---------- Multer (memory) ----------
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 20 * 1024 * 1024, // 20MB
+  },
+});
+
+// ---------- Routes ----------
+
 // TEXT
-// =====================
 app.post("/api/diagnose", async (req, res) => {
   try {
-    const { message } = req.body;
-
-    const ai = await openai.responses.create({
-      model: MODEL_TEXT,
-      input: message,
-    });
-
-    res.json({ reply: ai.output_text });
-  } catch (e) {
-    console.error(e);
-    res.status(500).json({ error: "Text diagnosis failed" });
+    const { message, preferredLanguage, vehicleInfo } = req.body || {};
+    const out = await diagnoseText({ message, preferredLanguage, vehicleInfo });
+    res.json(out);
+  } catch (err) {
+    console.error("TEXT ERROR:", err);
+    res.status(500).json({ error: "Text diagnosis failed", details: err?.message || String(err) });
   }
 });
 
-// =====================
-// IMAGE
-// =====================
-app.post("/api/image-diagnose", async (req, res) => {
+// IMAGE (Flutter sends field name: image)
+app.post("/api/image-diagnose", upload.single("image"), async (req, res) => {
   try {
-    const { message, imageBase64 } = req.body;
-    if (!imageBase64) throw new Error("No image");
+    if (!req.file) {
+      return res.status(400).json({ error: "Image diagnosis failed", details: "No image" });
+    }
 
-    const imageUrl = buildImageDataUrl(imageBase64);
+    const message = (req.body?.message || "").toString();
+    const preferredLanguage = req.body?.preferredLanguage?.toString();
+    const vehicleInfo = req.body?.vehicleInfo?.toString();
 
-    const ai = await openai.responses.create({
-      model: MODEL_VISION,
-      input: [
-        {
-          role: "user",
-          content: [
-            { type: "input_text", text: message || "Analyze this image" },
-            { type: "input_image", image_url: imageUrl },
-          ],
-        },
-      ],
+    // ✅ Fix MIME (avoid application/octet-stream)
+    const mime = req.file.mimetype && req.file.mimetype !== "application/octet-stream"
+      ? req.file.mimetype
+      : "image/jpeg";
+
+    const imageBase64 = req.file.buffer.toString("base64");
+
+    const out = await diagnoseImage({
+      message,
+      preferredLanguage,
+      vehicleInfo,
+      imageBase64,
+      imageMime: mime,
+      imageUrl: null,
     });
 
-    res.json({ reply: ai.output_text });
-  } catch (e) {
-    console.error(e);
-    res.status(500).json({
-      error: "Image diagnosis failed",
-      details: e.message,
-    });
+    res.json(out);
+  } catch (err) {
+    console.error("IMAGE ERROR:", err);
+    res.status(500).json({ error: "Image diagnosis failed", details: err?.message || String(err) });
   }
 });
 
-// =====================
-// AUDIO
-// =====================
-app.post("/api/audio-diagnose", async (req, res) => {
+// AUDIO (Flutter sends field name: audio)
+app.post("/api/audio-diagnose", upload.single("audio"), async (req, res) => {
   try {
-    const { audioBase64 } = req.body;
-    if (!audioBase64) throw new Error("No audio");
+    if (!req.file) {
+      return res.status(400).json({ error: "Audio diagnosis failed", details: "No audio" });
+    }
 
-    const raw = normalizeBase64(audioBase64);
-    const tmpPath = path.join(os.tmpdir(), `audio_${Date.now()}.webm`);
-    fs.writeFileSync(tmpPath, Buffer.from(raw, "base64"));
+    const message = (req.body?.message || "").toString();
+    const preferredLanguage = req.body?.preferredLanguage?.toString();
+    const vehicleInfo = req.body?.vehicleInfo?.toString();
 
-    const transcript = await openai.audio.transcriptions.create({
-      model: MODEL_TRANSCRIBE,
-      file: fs.createReadStream(tmpPath),
+    // ✅ Force safe audio mime
+    let mime = (req.file.mimetype || "").toLowerCase();
+    if (!mime || mime === "application/octet-stream") {
+      mime = "audio/webm";
+    }
+
+    const audioBase64 = req.file.buffer.toString("base64");
+
+    const out = await diagnoseAudio({
+      message,
+      preferredLanguage,
+      vehicleInfo,
+      audioBase64,
+      audioMime: mime,
     });
 
-    fs.unlinkSync(tmpPath);
-
-    const ai = await openai.responses.create({
-      model: MODEL_TEXT,
-      input: transcript.text,
-    });
-
-    res.json({
-      transcript: transcript.text,
-      reply: ai.output_text,
-    });
-  } catch (e) {
-    console.error(e);
-    res.status(500).json({
-      error: "Audio diagnosis failed",
-      details: e.message,
-    });
+    res.json(out);
+  } catch (err) {
+    console.error("AUDIO ERROR:", err);
+    res.status(500).json({ error: "Audio diagnosis failed", details: err?.message || String(err) });
   }
 });
 
-// =====================
-// Listen (Railway)
-// =====================
-const PORT = process.env.PORT || 8080;
+// ---------- Global error handler ----------
+app.use((err, req, res, next) => {
+  console.error("GLOBAL ERROR:", err);
+  res.status(500).json({ error: "Server error", details: err?.message || String(err) });
+});
+
+// ---------- Listen (Railway) ----------
+const PORT = Number(process.env.PORT || 8080);
 app.listen(PORT, "0.0.0.0", () => {
   console.log("FixLens Brain running on port", PORT);
 });
