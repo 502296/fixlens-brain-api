@@ -1,60 +1,73 @@
 // api/image-diagnose.js
 import OpenAI from "openai";
-import { findRelevantIssues } from "../lib/autoKnowledge.js";
-import { buildSystemPrompt } from "../lib/prompt.js";
-import { parseMultipart, config as multipartConfig } from "./_multipart.js";
+import formidable from "formidable";
+import fs from "fs";
 
-export const config = { ...multipartConfig, runtime: "nodejs18.x" };
+export const config = {
+  api: {
+    bodyParser: false,
+  },
+  runtime: "nodejs18.x",
+};
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+});
 
 export default async function handler(req, res) {
+  if (req.method !== "POST") {
+    return res.status(405).json({ error: "POST only" });
+  }
+
   try {
-    if (req.method !== "POST") return res.status(405).json({ error: "Only POST allowed" });
+    const form = formidable();
+    const { files, fields } = await new Promise((resolve, reject) => {
+      form.parse(req, (err, fields, files) => {
+        if (err) reject(err);
+        else resolve({ fields, files });
+      });
+    });
 
-    const { fields, files, readFileBuffer } = await parseMultipart(req);
+    const imageFile = files.image?.[0];
+    if (!imageFile) {
+      return res.status(400).json({ error: "No image uploaded" });
+    }
 
-    const preferredLanguage = fields?.preferredLanguage || "auto";
-    const message = (fields?.message || "").toString();
+    const imageBuffer = fs.readFileSync(imageFile.filepath);
+    const base64Image = imageBuffer.toString("base64");
 
-    const imageFile = files?.image;
-    if (!imageFile) return res.status(400).json({ error: "Image file is required (field name: image)" });
+    const prompt = `
+You are FixLens, a world-class automotive diagnostic AI.
+Analyze the image of the vehicle or engine bay.
+Respond naturally like ChatGPT.
+No summaries, no bullet titles.
+Language: ${fields.preferredLanguage || "auto"}
+    `;
 
-    const buf = readFileBuffer(imageFile);
-    const mime = imageFile.mimetype || "image/jpeg";
-    const base64 = buf.toString("base64");
-    const dataUrl = `data:${mime};base64,${base64}`;
-
-    // نستخدم الـ message كـ سياق + نطلع autoKnowledge منه
-    const issues = findRelevantIssues(message || "");
-
-    const system = buildSystemPrompt(preferredLanguage);
-
-    const out = await openai.responses.create({
-      model: "gpt-4o-mini",
+    const response = await openai.responses.create({
+      model: "gpt-4.1-mini",
       input: [
-        {
-          role: "system",
-          content: system,
-        },
         {
           role: "user",
           content: [
-            { type: "input_text", text: message?.trim() ? `Context from user: ${message}` : "Analyze this vehicle image." },
-            { type: "input_text", text: `Relevant issues DB (if any): ${JSON.stringify(issues, null, 2)}` },
-            { type: "input_image", image_url: dataUrl },
+            { type: "input_text", text: prompt },
+            {
+              type: "input_image",
+              image_base64: base64Image,
+            },
           ],
         },
       ],
-      temperature: 0.35,
     });
 
-    const reply = (out.output_text || "").trim();
-    return res.status(200).json({ reply: reply || "No reply." });
-  } catch (e) {
-    return res.status(500).json({
-      error: "Image diagnosis failed",
-      details: e?.message || String(e),
-    });
+    const reply =
+      response.output_text ||
+      response.output?.[0]?.content?.[0]?.text ||
+      "I could not analyze the image clearly.";
+
+    res.status(200).json({ reply });
+  } catch (err) {
+    console.error("IMAGE ERROR:", err);
+    res.status(500).json({ error: "Image diagnosis failed" });
   }
 }
