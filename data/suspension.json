@@ -1,0 +1,173 @@
+[
+  {
+    "id": "suspension_clunk_over_bumps",
+    "title": "Clunking or Knocking Noise Over Bumps",
+    "system": "suspension",
+    "category": "SUSPENSION — NOISE",
+    "symptom_short": "Clunking or knocking noise when driving over bumps",
+    "symptom_patterns": [
+      "clunk over bumps",
+      "knocking noise suspension",
+      "rattle over potholes",
+      "front end clunk"
+    ],
+    "likely_causes": [
+      {
+        "cause": "Worn stabilizer (sway) bar links or bushings",
+        "probability": "high",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": ""
+      },
+      {
+        "cause": "Loose or worn strut mounts",
+        "probability": "medium",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": ""
+      },
+      {
+        "cause": "Worn control arm bushings or ball joints",
+        "probability": "medium",
+        "severity": "high",
+        "urgency": "soon",
+        "notes": ""
+      }
+    ],
+    "recommended_checks": [
+      "Note whether noise comes from front or rear.",
+      "Inspect sway bar links and bushings.",
+      "Have suspension inspected on a lift."
+    ],
+    "safety_warning": "Severely worn suspension components can affect vehicle stability and steering control."
+  },
+  {
+    "id": "suspension_squeak_low_speed",
+    "title": "Squeaking Suspension at Low Speed",
+    "system": "suspension",
+    "category": "SUSPENSION — NOISE",
+    "symptom_short": "Squeaking or creaking noise at low speed or when turning",
+    "symptom_patterns": [
+      "squeak over bumps",
+      "creaking suspension",
+      "noise when turning driveway"
+    ],
+    "likely_causes": [
+      {
+        "cause": "Dry or worn rubber bushings",
+        "probability": "high",
+        "severity": "low",
+        "urgency": "normal",
+        "notes": ""
+      },
+      {
+        "cause": "Worn ball joints",
+        "probability": "medium",
+        "severity": "high",
+        "urgency": "soon",
+        "notes": ""
+      }
+    ],
+    "recommended_checks": [
+      "Note if noise changes with temperature or rain.",
+      "Inspect bushings for cracking or dryness.",
+      "Schedule inspection if noise persists."
+    ],
+    "safety_warning": "Squeaks may indicate early wear that can later affect steering safety."
+  },
+  {
+    "id": "suspension_vehicle_bounces",
+    "title": "Vehicle Bounces Excessively After Bumps",
+    "system": "suspension",
+    "category": "SUSPENSION — DAMPING",
+    "symptom_short": "Car continues to bounce after hitting bumps",
+    "symptom_patterns": [
+      "car bounces after bumps",
+      "floaty ride",
+      "poor shock absorption"
+    ],
+    "likely_causes": [
+      {
+        "cause": "Worn or leaking shock absorbers or struts",
+        "probability": "high",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": ""
+      }
+    ],
+    "recommended_checks": [
+      "Perform bounce test at each corner.",
+      "Inspect shocks/struts for oil leakage.",
+      "Replace shocks or struts in pairs."
+    ],
+    "safety_warning": "Worn shocks reduce tire contact with the road, increasing stopping distance."
+  },
+  {
+    "id": "suspension_vehicle_pulls",
+    "title": "Vehicle Pulls or Wanders While Driving",
+    "system": "suspension",
+    "category": "SUSPENSION — ALIGNMENT",
+    "symptom_short": "Vehicle pulls to one side or wanders",
+    "symptom_patterns": [
+      "car pulls to one side",
+      "wandering steering",
+      "unstable highway driving"
+    ],
+    "likely_causes": [
+      {
+        "cause": "Incorrect wheel alignment",
+        "probability": "high",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": ""
+      },
+      {
+        "cause": "Worn suspension bushings or ball joints",
+        "probability": "medium",
+        "severity": "high",
+        "urgency": "soon",
+        "notes": ""
+      }
+    ],
+    "recommended_checks": [
+      "Check tire pressure first.",
+      "Schedule alignment inspection.",
+      "Inspect suspension components for play."
+    ],
+    "safety_warning": "Poor alignment and worn parts can cause loss of control at speed."
+  },
+  {
+    "id": "suspension_uneven_ride_height",
+    "title": "Uneven Ride Height or Sagging",
+    "system": "suspension",
+    "category": "SUSPENSION — SPRINGS",
+    "symptom_short": "One corner or side of vehicle sits lower",
+    "symptom_patterns": [
+      "car sagging on one side",
+      "uneven ride height",
+      "rear end sagging"
+    ],
+    "likely_causes": [
+      {
+        "cause": "Broken or weak coil spring",
+        "probability": "high",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": ""
+      },
+      {
+        "cause": "Overloaded vehicle or damaged suspension mount",
+        "probability": "medium",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": ""
+      }
+    ],
+    "recommended_checks": [
+      "Visually compare ride height side to side.",
+      "Inspect springs for cracks or breakage.",
+      "Avoid heavy loads until repaired."
+    ],
+    "safety_warning": "Sagging suspension can affect braking, handling, and headlight aim."
+  }
+]
