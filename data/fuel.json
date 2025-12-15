@@ -1,0 +1,175 @@
+[
+  {
+    "id": "fuel_hard_start_long_crank",
+    "title": "Hard Starting or Long Crank",
+    "system": "fuel",
+    "category": "FUEL — DELIVERY",
+    "symptom_short": "Engine cranks for a long time before starting",
+    "symptom_patterns": [
+      "long crank",
+      "hard start",
+      "takes long to start",
+      "starts after several seconds"
+    ],
+    "likely_causes": [
+      {
+        "cause": "Weak fuel pump or fuel pressure bleeding down",
+        "probability": "high",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": ""
+      },
+      {
+        "cause": "Leaking fuel injector",
+        "probability": "medium",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": ""
+      }
+    ],
+    "recommended_checks": [
+      "Listen for fuel pump prime sound when key is turned ON.",
+      "Monitor fuel pressure during cranking.",
+      "Check for fuel smell after extended cranking."
+    ],
+    "safety_warning": "Repeated long cranking can drain the battery and overheat the starter."
+  },
+  {
+    "id": "fuel_loss_power_under_load",
+    "title": "Loss of Power Under Acceleration or Load",
+    "system": "fuel",
+    "category": "FUEL — PRESSURE / FLOW",
+    "symptom_short": "Vehicle lacks power when accelerating or climbing hills",
+    "symptom_patterns": [
+      "loss of power",
+      "hesitation on acceleration",
+      "no power uphill",
+      "fuel starvation"
+    ],
+    "likely_causes": [
+      {
+        "cause": "Restricted fuel filter",
+        "probability": "high",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": ""
+      },
+      {
+        "cause": "Weak fuel pump",
+        "probability": "medium",
+        "severity": "high",
+        "urgency": "soon",
+        "notes": ""
+      }
+    ],
+    "recommended_checks": [
+      "Check maintenance history for fuel filter replacement.",
+      "Monitor fuel pressure under load.",
+      "Scan for lean-condition fault codes."
+    ],
+    "safety_warning": "Sudden loss of power during passing can be dangerous."
+  },
+  {
+    "id": "fuel_poor_mileage",
+    "title": "Poor Fuel Economy",
+    "system": "fuel",
+    "category": "FUEL — CONSUMPTION",
+    "symptom_short": "Fuel mileage significantly worse than normal",
+    "symptom_patterns": [
+      "poor gas mileage",
+      "fuel consumption high",
+      "low mpg"
+    ],
+    "likely_causes": [
+      {
+        "cause": "Dirty or leaking fuel injectors",
+        "probability": "medium",
+        "severity": "low",
+        "urgency": "normal",
+        "notes": ""
+      },
+      {
+        "cause": "Fuel pressure regulator malfunction",
+        "probability": "medium",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": ""
+      }
+    ],
+    "recommended_checks": [
+      "Check fuel trims with scan tool.",
+      "Inspect injectors for leakage.",
+      "Verify correct fuel pressure."
+    ],
+    "safety_warning": "Poor fuel economy itself is not dangerous but may indicate underlying issues."
+  },
+  {
+    "id": "fuel_smell_outside_inside",
+    "title": "Fuel Smell Around or Inside Vehicle",
+    "system": "fuel",
+    "category": "FUEL — LEAK / ODOR",
+    "symptom_short": "Strong fuel smell inside or around the car",
+    "symptom_patterns": [
+      "fuel smell",
+      "gasoline odor",
+      "smell of gas in cabin"
+    ],
+    "likely_causes": [
+      {
+        "cause": "Fuel leak at lines, injectors, or tank",
+        "probability": "medium",
+        "severity": "high",
+        "urgency": "immediate",
+        "notes": ""
+      },
+      {
+        "cause": "Loose or damaged gas cap",
+        "probability": "high",
+        "severity": "low",
+        "urgency": "normal",
+        "notes": ""
+      }
+    ],
+    "recommended_checks": [
+      "Do not smoke or use open flames near the vehicle.",
+      "Inspect under vehicle for fuel drips.",
+      "Ensure gas cap is tight and seal is intact."
+    ],
+    "safety_warning": "Fuel leaks are a serious fire hazard. Avoid driving until resolved."
+  },
+  {
+    "id": "fuel_evap_leak",
+    "title": "EVAP System Leak or Check Engine Light",
+    "system": "fuel",
+    "category": "FUEL — EVAP",
+    "symptom_short": "Check engine light related to EVAP system",
+    "symptom_patterns": [
+      "evap leak",
+      "check engine gas cap",
+      "p0440",
+      "p0455"
+    ],
+    "likely_causes": [
+      {
+        "cause": "Loose or worn gas cap",
+        "probability": "high",
+        "severity": "low",
+        "urgency": "normal",
+        "notes": ""
+      },
+      {
+        "cause": "Cracked EVAP hose or faulty purge valve",
+        "probability": "medium",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": ""
+      }
+    ],
+    "recommended_checks": [
+      "Tighten or replace gas cap.",
+      "Inspect EVAP hoses for cracks.",
+      "Clear codes and monitor if they return."
+    ],
+    "safety_warning": "EVAP leaks rarely affect drivability but increase emissions."
+  }
+]
