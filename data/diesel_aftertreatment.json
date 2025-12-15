@@ -1,0 +1,117 @@
+[
+  {
+    "id": "dpf_warning_light_on",
+    "title": "DPF Warning Light On",
+    "system": "diesel_aftertreatment",
+    "category": "DPF — WARNING",
+    "symptom_short": "DPF warning light illuminated",
+    "symptom_patterns": [
+      "dpf light on",
+      "diesel particulate filter warning",
+      "soot filter light"
+    ],
+    "likely_causes": [
+      { "cause": "Soot accumulation due to frequent short trips", "probability": "high", "severity": "medium", "urgency": "soon", "notes": "" },
+      { "cause": "Failed or incomplete regeneration cycles", "probability": "high", "severity": "medium", "urgency": "soon", "notes": "" },
+      { "cause": "Faulty exhaust temperature or pressure sensor", "probability": "medium", "severity": "medium", "urgency": "soon", "notes": "" }
+    ],
+    "recommended_checks": [
+      "Check soot load and regen status with scan tool.",
+      "Perform highway drive to allow passive or active regen if safe.",
+      "Scan for DPF-related fault codes."
+    ],
+    "safety_warning": "Ignoring DPF warnings can lead to limp mode and expensive filter replacement."
+  },
+  {
+    "id": "dpf_regen_failed",
+    "title": "DPF Regeneration Failed",
+    "system": "diesel_aftertreatment",
+    "category": "DPF — REGEN",
+    "symptom_short": "Regeneration attempts fail repeatedly",
+    "symptom_patterns": [
+      "regen failed",
+      "cannot complete dpf regen",
+      "dpf regeneration unsuccessful"
+    ],
+    "likely_causes": [
+      { "cause": "Excessive soot or ash load beyond regen threshold", "probability": "high", "severity": "high", "urgency": "soon", "notes": "" },
+      { "cause": "Faulty exhaust gas temperature sensors", "probability": "medium", "severity": "high", "urgency": "soon", "notes": "" },
+      { "cause": "Engine faults preventing regen (misfire, EGR, boost)", "probability": "medium", "severity": "high", "urgency": "soon", "notes": "" }
+    ],
+    "recommended_checks": [
+      "Check soot vs ash load values.",
+      "Verify exhaust temps reach regen thresholds.",
+      "Repair engine-side faults before forced regen."
+    ],
+    "safety_warning": "Forcing regen with high soot levels can overheat and crack the DPF."
+  },
+  {
+    "id": "scr_def_warning",
+    "title": "DEF / SCR Warning Message",
+    "system": "diesel_aftertreatment",
+    "category": "SCR — DEF",
+    "symptom_short": "DEF warning or countdown message displayed",
+    "symptom_patterns": [
+      "def warning",
+      "service def system",
+      "no start countdown diesel"
+    ],
+    "likely_causes": [
+      { "cause": "Low or contaminated DEF fluid", "probability": "high", "severity": "high", "urgency": "immediate", "notes": "" },
+      { "cause": "DEF injector crystallization or blockage", "probability": "medium", "severity": "high", "urgency": "soon", "notes": "" },
+      { "cause": "SCR NOx sensor fault", "probability": "medium", "severity": "high", "urgency": "soon", "notes": "" }
+    ],
+    "recommended_checks": [
+      "Verify DEF level and quality (ISO 22241).",
+      "Inspect DEF injector for crystallization.",
+      "Scan for SCR and NOx sensor fault codes."
+    ],
+    "safety_warning": "Ignoring SCR warnings can result in speed limitation or no-start condition."
+  },
+  {
+    "id": "nox_sensor_failure",
+    "title": "NOx Sensor Failure",
+    "system": "diesel_aftertreatment",
+    "category": "SCR — NOx SENSOR",
+    "symptom_short": "NOx sensor fault or implausible readings",
+    "symptom_patterns": [
+      "nox sensor fault",
+      "nox sensor implausible",
+      "emissions warning diesel"
+    ],
+    "likely_causes": [
+      { "cause": "NOx sensor internal failure", "probability": "high", "severity": "high", "urgency": "soon", "notes": "" },
+      { "cause": "Wiring or connector heat damage", "probability": "medium", "severity": "high", "urgency": "soon", "notes": "" },
+      { "cause": "Exhaust leaks upstream of sensor", "probability": "medium", "severity": "medium", "urgency": "soon", "notes": "" }
+    ],
+    "recommended_checks": [
+      "Check live NOx values before and after SCR.",
+      "Inspect sensor wiring near exhaust.",
+      "Check for exhaust leaks."
+    ],
+    "safety_warning": "Faulty NOx readings can disable SCR dosing and cause limp mode."
+  },
+  {
+    "id": "diesel_limp_due_emissions",
+    "title": "Limp Mode Due to Emissions System",
+    "system": "diesel_aftertreatment",
+    "category": "EMISSIONS — LIMP MODE",
+    "symptom_short": "Vehicle enters limp mode due to emissions fault",
+    "symptom_patterns": [
+      "diesel limp emissions",
+      "speed limited diesel",
+      "reduced torque emissions"
+    ],
+    "likely_causes": [
+      { "cause": "DPF soot overload", "probability": "high", "severity": "high", "urgency": "immediate", "notes": "" },
+      { "cause": "SCR/DEF system malfunction", "probability": "medium", "severity": "high", "urgency": "immediate", "notes": "" },
+      { "cause": "Multiple emissions-related sensor faults", "probability": "medium", "severity": "high", "urgency": "immediate", "notes": "" }
+    ],
+    "recommended_checks": [
+      "Scan all emissions modules for active faults.",
+      "Address root cause before clearing codes.",
+      "Perform regen or SCR repair as required."
+    ],
+    "safety_warning": "Limp mode may severely restrict speed—unsafe for highway driving."
+  }
+]
