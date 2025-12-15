@@ -1,0 +1,174 @@
+[
+  {
+    "id": "driveline_click_turning",
+    "title": "Clicking or Popping Noise When Turning",
+    "system": "driveline",
+    "category": "DRIVELINE — CV JOINT",
+    "symptom_short": "Clicking or popping noise when turning at low speed",
+    "symptom_patterns": [
+      "clicking when turning",
+      "popping noise in turns",
+      "cv joint noise",
+      "front axle clicking"
+    ],
+    "likely_causes": [
+      {
+        "cause": "Worn outer CV joint",
+        "probability": "high",
+        "severity": "high",
+        "urgency": "soon",
+        "notes": ""
+      },
+      {
+        "cause": "Damaged or torn CV boot allowing grease loss",
+        "probability": "high",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": ""
+      }
+    ],
+    "recommended_checks": [
+      "Note if noise is louder on full-lock turns.",
+      "Inspect CV boots for tears or grease sling.",
+      "Replace axle assembly if joint is worn."
+    ],
+    "safety_warning": "Severely worn CV joints can fail and leave the vehicle without drive."
+  },
+  {
+    "id": "driveline_vibration_acceleration",
+    "title": "Vibration During Acceleration",
+    "system": "driveline",
+    "category": "DRIVELINE — VIBRATION",
+    "symptom_short": "Vehicle vibrates during acceleration",
+    "symptom_patterns": [
+      "vibration on acceleration",
+      "shudder when accelerating",
+      "driveline vibration"
+    ],
+    "likely_causes": [
+      {
+        "cause": "Worn inner CV joints or axle imbalance",
+        "probability": "high",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": ""
+      },
+      {
+        "cause": "Worn engine or transmission mounts",
+        "probability": "medium",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": ""
+      }
+    ],
+    "recommended_checks": [
+      "Observe whether vibration changes with speed or throttle.",
+      "Inspect engine and transmission mounts.",
+      "Check axle shafts for damage."
+    ],
+    "safety_warning": "Persistent driveline vibration can accelerate wear of drivetrain components."
+  },
+  {
+    "id": "driveline_whine_with_speed",
+    "title": "Whining Noise That Changes With Speed",
+    "system": "driveline",
+    "category": "DRIVELINE — NOISE",
+    "symptom_short": "Whining or humming noise that changes with vehicle speed",
+    "symptom_patterns": [
+      "whining while driving",
+      "humming noise with speed",
+      "gear whine"
+    ],
+    "likely_causes": [
+      {
+        "cause": "Worn wheel bearing",
+        "probability": "high",
+        "severity": "high",
+        "urgency": "soon",
+        "notes": ""
+      },
+      {
+        "cause": "Differential gear wear or low fluid",
+        "probability": "medium",
+        "severity": "high",
+        "urgency": "soon",
+        "notes": ""
+      }
+    ],
+    "recommended_checks": [
+      "Note if noise changes when turning left or right.",
+      "Check differential fluid level and condition.",
+      "Inspect wheel bearings."
+    ],
+    "safety_warning": "Failed bearings or differential components can overheat and seize."
+  },
+  {
+    "id": "driveline_clunk_shift",
+    "title": "Clunk When Shifting From Drive to Reverse",
+    "system": "driveline",
+    "category": "DRIVELINE — PLAY",
+    "symptom_short": "Clunk felt or heard when shifting between gears",
+    "symptom_patterns": [
+      "clunk shifting gears",
+      "thud when changing drive reverse",
+      "driveline slack"
+    ],
+    "likely_causes": [
+      {
+        "cause": "Excessive play in driveshaft or CV joints",
+        "probability": "medium",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": ""
+      },
+      {
+        "cause": "Worn engine, transmission, or differential mounts",
+        "probability": "high",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": ""
+      }
+    ],
+    "recommended_checks": [
+      "Observe clunk severity and frequency.",
+      "Inspect mounts and driveline joints for play.",
+      "Check differential bushings if applicable."
+    ],
+    "safety_warning": "Excessive driveline play can lead to component damage if ignored."
+  },
+  {
+    "id": "driveline_binding_tight_turns",
+    "title": "Binding or Hopping on Tight Turns (AWD/4WD)",
+    "system": "driveline",
+    "category": "DRIVELINE — AWD / 4WD",
+    "symptom_short": "Vehicle binds or hops during tight low-speed turns",
+    "symptom_patterns": [
+      "binding in parking lot",
+      "awd hopping",
+      "4wd wind up",
+      "tight turn hopping"
+    ],
+    "likely_causes": [
+      {
+        "cause": "Part-time 4WD engaged on dry pavement",
+        "probability": "high",
+        "severity": "medium",
+        "urgency": "immediate",
+        "notes": ""
+      },
+      {
+        "cause": "Worn or mismatched tires affecting AWD system",
+        "probability": "medium",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": ""
+      }
+    ],
+    "recommended_checks": [
+      "Verify transfer case mode.",
+      "Check tire sizes and tread depth consistency.",
+      "Service transfer case or AWD coupling if needed."
+    ],
+    "safety_warning": "Driving with driveline binding can damage transfer case and differentials."
+  }
+]
