@@ -2,79 +2,65 @@
 import OpenAI from "openai";
 import { findRelevantIssues } from "../lib/autoKnowledge.js";
 
-export const config = {
-  runtime: "nodejs", // ✅ Vercel يقبلها
-};
+export const config = { runtime: "nodejs18.x" };
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 function detectLanguage(text = "") {
-  const t = String(text || "");
-  if (/[\u0600-\u06FF]/.test(t)) return "ar";
-  if (/[\u0400-\u04FF]/.test(t)) return "ru";
-  if (/[\u4E00-\u9FFF]/.test(t)) return "zh";
-  if (/[\u3040-\u30FF]/.test(t)) return "ja";
-  // Spanish/French/German hints
-  const lower = t.toLowerCase();
-  if (/[ñáéíóúü]/.test(lower) || /\bhola\b/.test(lower)) return "es";
-  if (/[àâçéèêëîïôùûüÿœ]/.test(lower) || /\bbonjour\b/.test(lower)) return "fr";
-  if (/[äöüß]/.test(lower) || /\bhallo\b/.test(lower)) return "de";
+  if (/[\u0600-\u06FF]/.test(text)) return "ar";
+  if (/[а-яА-Я]/.test(text)) return "ru";
+  if (/[一-龯]/.test(text)) return "zh";
+  if (/[ぁ-んァ-ン]/.test(text)) return "ja";
   return "en";
 }
 
 function isGreeting(text = "") {
   const t = text.toLowerCase().trim();
-  const greetings = [
-    "hi","hello","hey","hallo","hola","bonjour","ciao",
-    "مرحبا","هلا","السلام عليكم","سلام","شلونك","هلو"
-  ];
-  return greetings.some((g) => t === g || t.startsWith(g));
+  const greetings = ["hi","hello","hey","hallo","hola","مرحبا","هلا","السلام","سلام","شلونك","هلو"];
+  return greetings.some(g => t === g || t.startsWith(g));
 }
 
 function greetingReply(lang) {
   switch (lang) {
     case "ar":
-      return "مرحباً، أنا FixLens Auto. كيف أقدر أساعدك اليوم؟ صف المشكلة أو أرسل صورة/صوت إذا متوفر.";
-    case "es":
-      return "Hola, soy FixLens Auto. ¿Cómo puedo ayudarte hoy? Describe el problema o envía una foto/sonido si lo tienes.";
-    case "fr":
-      return "Bonjour, je suis FixLens Auto. Comment puis-je vous aider aujourd’hui ? Décrivez le souci ou envoyez une photo/un son.";
-    case "de":
-      return "Hallo, ich bin FixLens Auto. Wie kann ich dir heute helfen? Beschreibe das Problem oder sende ein Foto/Audio.";
+      return "مرحباً، أنا FixLens Auto. كيف أقدر أساعدك اليوم؟ صف المشكلة أو ارسل صورة/صوت إذا متوفر.";
     case "ru":
-      return "Здравствуйте, я FixLens Auto. Чем могу помочь сегодня? Опишите проблему или отправьте фото/аудио.";
+      return "Здравствуйте. Я FixLens Auto. Чем могу помочь сегодня? Опишите проблему или отправьте фото/аудио.";
     case "zh":
-      return "你好，我是 FixLens Auto。今天我怎么帮你？请描述问题，或发送图片/音频。";
+      return "你好，我是 FixLens Auto。今天我能怎么帮你？描述问题或发送图片/音频。";
     case "ja":
-      return "こんにちは。FixLens Autoです。今日はどうしましたか？症状を書いて、必要なら画像/音声も送ってください。";
+      return "こんにちは。FixLens Autoです。今日はどうしましたか？症状を書いて、画像/音声も送れます。";
     default:
-      return "Hi, I’m FixLens Auto. How can I help today? Describe the issue or send an image/audio if you have it.";
+      return "Hello — I’m FixLens Auto. How can I help you today? Describe the issue, or send a photo/voice note if available.";
   }
 }
 
 const SYSTEM_PROMPT = `
-You are FixLens Auto — an expert automotive diagnostic AI (mechanic-level).
-You must be practical, confident, and structured.
-You may use internal matched-issues as hints, but never claim certainty.
+You are FixLens Auto — an expert automotive diagnostician (mechanic + auto electrician).
+Be practical, confident, and structured. No fluff.
 
-Output format:
-🔧 Quick Summary
+When diagnosing, follow this format:
+🔧 Quick Diagnosis
 ⚡ Most Likely Causes (ranked)
-🧪 Quick Tests (fast checks)
-✅ Next Steps (practical)
-⚠️ Safety Notes
+🧪 Quick Tests
+❌ What NOT to do
+🧠 Pro Tip
+
+Rules:
+- Ask 1–2 smart follow-up questions only if needed.
+- Don’t claim certainty.
+- Never say "go to a mechanic".
 `.trim();
 
 export default async function handler(req, res) {
   try {
     if (req.method !== "POST") return res.status(405).json({ error: "Only POST allowed" });
 
-    const { message } = req.body || {};
-    if (!message || !String(message).trim()) {
-      return res.status(400).json({ error: "Message is required" });
-    }
+    const { message, language } = req.body || {};
+    if (!message || !message.trim()) return res.status(400).json({ error: "Message is required" });
 
-    const lang = detectLanguage(message);
+    const detected = detectLanguage(message);
+    const lang = (language && language !== "auto") ? language : detected;
 
     if (isGreeting(message)) {
       return res.status(200).json({ reply: greetingReply(lang), language: lang });
@@ -86,29 +72,25 @@ export default async function handler(req, res) {
 User message:
 ${message}
 
-Matched issues from internal JSON (hints):
+Matched issues from internal JSON:
 ${JSON.stringify(issues, null, 2)}
 
-Respond in: ${lang}
-Keep it concise and mechanic-grade.
+Respond in ${lang}. Follow the format strictly.
 `.trim();
 
-    const completion = await openai.chat.completions.create({
-      model: "gpt-4o",
-      temperature: 0.25,
-      messages: [
+    const out = await client.responses.create({
+      model: "gpt-4.1",
+      input: [
         { role: "system", content: SYSTEM_PROMPT },
-        { role: "user", content: userPrompt },
+        { role: "user", content: userPrompt }
       ],
+      temperature: 0.3
     });
 
-    const reply = completion.choices?.[0]?.message?.content?.trim() || "No reply.";
+    const reply = (out.output_text || "").trim() || "No reply.";
     return res.status(200).json({ reply, language: lang });
   } catch (err) {
     console.error("Diagnose error:", err);
-    return res.status(500).json({
-      error: "FixLens text diagnosis failed",
-      details: err?.message || String(err),
-    });
+    return res.status(500).json({ error: "FixLens text diagnosis failed", details: err?.message || String(err) });
   }
 }
