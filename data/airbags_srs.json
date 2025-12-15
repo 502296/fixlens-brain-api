@@ -1,0 +1,186 @@
+[
+  {
+    "id": "srs_airbag_light_on_constant",
+    "title": "Airbag/SRS Light On (Constant)",
+    "system": "airbags_srs",
+    "category": "SRS — WARNING LIGHT",
+    "symptom_short": "Airbag/SRS warning light stays on",
+    "symptom_patterns": [
+      "airbag light on",
+      "srs light on",
+      "restraint system light",
+      "airbag warning stays on"
+    ],
+    "likely_causes": [
+      { "cause": "Stored SRS fault code (sensor/module/circuit)", "probability": "high", "severity": "high", "urgency": "soon", "notes": "When SRS light is on, airbags may be disabled." },
+      { "cause": "Low battery voltage / recent jump start event", "probability": "medium", "severity": "medium", "urgency": "soon", "notes": "Voltage dips can trigger SRS faults." },
+      { "cause": "Seat connector/occupant sensor connection issue", "probability": "medium", "severity": "high", "urgency": "soon", "notes": "Common after moving seats or spills." }
+    ],
+    "recommended_checks": [
+      "Read SRS codes with a scan tool that supports SRS/ABS modules (not engine-only).",
+      "Check battery health and charging voltage; note any recent jump start or battery replacement.",
+      "Visually inspect for liquid spills under seats and obvious loose connectors WITHOUT unplugging SRS connectors.",
+      "If the light appeared after seat movement, note which seat and when it happened."
+    ],
+    "safety_warning": "Do NOT attempt to bypass, short, probe, or unplug SRS connectors. Airbags may be disabled; seek qualified service."
+  },
+  {
+    "id": "srs_light_intermittent",
+    "title": "Airbag/SRS Light Intermittent",
+    "system": "airbags_srs",
+    "category": "SRS — INTERMITTENT",
+    "symptom_short": "Airbag light comes and goes",
+    "symptom_patterns": [
+      "airbag light intermittent",
+      "srs light comes and goes",
+      "airbag light sometimes on"
+    ],
+    "likely_causes": [
+      { "cause": "Loose ground / corrosion at connector or chassis ground", "probability": "high", "severity": "high", "urgency": "soon", "notes": "" },
+      { "cause": "Seat occupancy sensor harness strain (seat tracks)", "probability": "medium", "severity": "high", "urgency": "soon", "notes": "" },
+      { "cause": "Voltage fluctuation from weak battery/alternator ripple", "probability": "medium", "severity": "medium", "urgency": "soon", "notes": "" }
+    ],
+    "recommended_checks": [
+      "Scan SRS for history codes and freeze-frame data if available.",
+      "Inspect battery terminals and primary grounds for corrosion/looseness (visual only).",
+      "Note correlation: does it happen when moving seat, hitting bumps, or during cold starts?"
+    ],
+    "safety_warning": "Intermittent SRS faults can disable airbags unexpectedly. Avoid DIY electrical probing on SRS circuits."
+  },
+  {
+    "id": "srs_after_collision_or_airbag_deployed",
+    "title": "SRS After Collision / Airbag Deployed",
+    "system": "airbags_srs",
+    "category": "SRS — POST COLLISION",
+    "symptom_short": "Airbag deployed or vehicle had an accident; SRS light on",
+    "symptom_patterns": [
+      "airbag deployed",
+      "after accident airbag light",
+      "srs after collision",
+      "seatbelt pretensioner fired"
+    ],
+    "likely_causes": [
+      { "cause": "Crash event stored; components require professional replacement and system verification", "probability": "high", "severity": "critical", "urgency": "immediate", "notes": "Post-collision restraint system requires certified procedures." },
+      { "cause": "Damaged wiring/harness from impact", "probability": "medium", "severity": "critical", "urgency": "immediate", "notes": "" }
+    ],
+    "recommended_checks": [
+      "Document which airbags deployed and any seatbelt lockup/pretensioner signs.",
+      "Have SRS system inspected by certified repair facility with OEM procedures.",
+      "Do not drive if steering column/seatbelt components are compromised."
+    ],
+    "safety_warning": "Post-deployment SRS work is high-risk and requires certified service; improper handling can cause injury."
+  },
+  {
+    "id": "srs_occupant_detection_fault",
+    "title": "Occupant Detection / Passenger Airbag OFF Issues",
+    "system": "airbags_srs",
+    "category": "SRS — OCCUPANT CLASSIFICATION",
+    "symptom_short": "Passenger airbag OFF light behaves incorrectly or occupancy fault",
+    "symptom_patterns": [
+      "passenger airbag off light",
+      "occupant sensor fault",
+      "seat mat sensor",
+      "passenger airbag disabled"
+    ],
+    "likely_causes": [
+      { "cause": "Occupant classification sensor/mat calibration or fault", "probability": "high", "severity": "high", "urgency": "soon", "notes": "" },
+      { "cause": "Seat wiring/harness issue under passenger seat", "probability": "medium", "severity": "high", "urgency": "soon", "notes": "" },
+      { "cause": "Recent seat removal, seat cover changes, or heavy items on seat", "probability": "medium", "severity": "medium", "urgency": "soon", "notes": "" }
+    ],
+    "recommended_checks": [
+      "Check if the issue started after seat work, detailing, or seat cover changes.",
+      "Use SRS-capable scanner to identify occupant classification related codes.",
+      "Avoid placing heavy items on the passenger seat while diagnosing."
+    ],
+    "safety_warning": "Passenger airbag may not deploy when needed. Do not attempt DIY calibration without OEM tools."
+  },
+  {
+    "id": "srs_clock_spring_signs",
+    "title": "Possible Clock Spring / Steering Wheel SRS Circuit Issue",
+    "system": "airbags_srs",
+    "category": "SRS — STEERING WHEEL CIRCUIT",
+    "symptom_short": "Airbag light + steering wheel button/horn issues",
+    "symptom_patterns": [
+      "airbag light and horn not working",
+      "steering wheel buttons stopped working",
+      "clock spring symptoms",
+      "airbag light after steering wheel work"
+    ],
+    "likely_causes": [
+      { "cause": "Clock spring/steering angle harness circuit issue", "probability": "high", "severity": "high", "urgency": "soon", "notes": "Often paired with horn/buttons faults." },
+      { "cause": "Recent steering wheel removal or column work", "probability": "medium", "severity": "high", "urgency": "soon", "notes": "" }
+    ],
+    "recommended_checks": [
+      "Note any recent steering/column repairs or aftermarket wheel installation.",
+      "Scan SRS for steering wheel circuit related codes.",
+      "Check whether horn and steering wheel controls fail together."
+    ],
+    "safety_warning": "Do not remove airbag/steering wheel modules without certified procedures."
+  },
+  {
+    "id": "srs_water_intrusion_under_seat",
+    "title": "SRS Fault After Water/Spill Under Seat",
+    "system": "airbags_srs",
+    "category": "SRS — WATER INTRUSION",
+    "symptom_short": "SRS light after spill, flood, or wet carpet",
+    "symptom_patterns": [
+      "airbag light after spill",
+      "wet carpet airbag light",
+      "water under seat srs"
+    ],
+    "likely_causes": [
+      { "cause": "Corrosion at under-seat connectors (seat sensors/pretensioners)", "probability": "high", "severity": "high", "urgency": "soon", "notes": "" },
+      { "cause": "Water intrusion into module location (varies by vehicle)", "probability": "medium", "severity": "critical", "urgency": "soon", "notes": "" }
+    ],
+    "recommended_checks": [
+      "Dry the interior thoroughly and address leak source (sunroof drains, door seals, heater core signs).",
+      "Scan SRS codes to identify affected circuit/module.",
+      "Have a qualified shop inspect connectors and corrosion using OEM safety steps."
+    ],
+    "safety_warning": "Moisture can damage restraint circuits. Avoid unplugging SRS connectors yourself."
+  },
+  {
+    "id": "srs_low_voltage_event",
+    "title": "SRS Light After Battery/Jump Start",
+    "system": "airbags_srs",
+    "category": "SRS — LOW VOLTAGE",
+    "symptom_short": "SRS light after battery replacement or jump starting",
+    "symptom_patterns": [
+      "airbag light after battery change",
+      "srs after jump start",
+      "airbag light after dead battery"
+    ],
+    "likely_causes": [
+      { "cause": "Low voltage stored code", "probability": "high", "severity": "medium", "urgency": "soon", "notes": "" },
+      { "cause": "Battery terminals/grounds not tight or corroded", "probability": "medium", "severity": "medium", "urgency": "soon", "notes": "" }
+    ],
+    "recommended_checks": [
+      "Verify battery terminals are clean/tight and main grounds are secure (visual/physical check).",
+      "Scan SRS codes to confirm low-voltage history versus active circuit fault.",
+      "If codes return immediately, treat as active fault and seek service."
+    ],
+    "safety_warning": "Clearing codes without resolving root cause may hide a real SRS failure."
+  },
+  {
+    "id": "srs_do_not_bypass",
+    "title": "Do Not Bypass SRS (Safety Rule)",
+    "system": "airbags_srs",
+    "category": "SRS — SAFETY",
+    "symptom_short": "User asks to bypass, trick, or disable SRS light/airbags",
+    "symptom_patterns": [
+      "bypass airbag",
+      "disable airbag",
+      "remove airbag light",
+      "resistor trick airbag",
+      "emulator airbag"
+    ],
+    "likely_causes": [
+      { "cause": "Unsafe request (bypass/disable)", "probability": "high", "severity": "critical", "urgency": "immediate", "notes": "This can cause injury and legal issues." }
+    ],
+    "recommended_checks": [
+      "Recommend certified diagnostics and OEM-compliant repair.",
+      "If user wants the light off, advise proper fault repair, not bypass."
+    ],
+    "safety_warning": "Never bypass or disable airbags/SRS. It can cause severe injury or death and may be illegal."
+  }
+]
