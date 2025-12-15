@@ -1,0 +1,139 @@
+[
+  {
+    "id": "can_multiple_warning_lights",
+    "title": "Multiple Warning Lights at Once",
+    "system": "network_can",
+    "category": "NETWORK — COMMUNICATION",
+    "symptom_short": "Several warning lights appear simultaneously",
+    "symptom_patterns": [
+      "multiple warning lights",
+      "many lights on dashboard",
+      "dash lights all on",
+      "christmas tree dashboard"
+    ],
+    "likely_causes": [
+      {
+        "cause": "Low battery voltage or charging system issue",
+        "probability": "high",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": "Most common CAN-related trigger."
+      },
+      {
+        "cause": "CAN bus communication error between modules",
+        "probability": "medium",
+        "severity": "high",
+        "urgency": "soon",
+        "notes": ""
+      }
+    ],
+    "recommended_checks": [
+      "Check battery voltage and charging system.",
+      "Scan all modules for communication codes (U-codes).",
+      "Inspect grounds and main power connections."
+    ],
+    "safety_warning": "Multiple system warnings may disable safety features unexpectedly."
+  },
+  {
+    "id": "can_no_communication_module",
+    "title": "No Communication With One or More Modules",
+    "system": "network_can",
+    "category": "NETWORK — MODULE OFFLINE",
+    "symptom_short": "Scan tool cannot communicate with a control module",
+    "symptom_patterns": [
+      "no communication with module",
+      "u code",
+      "module offline"
+    ],
+    "likely_causes": [
+      {
+        "cause": "Module lost power or ground",
+        "probability": "high",
+        "severity": "high",
+        "urgency": "soon",
+        "notes": ""
+      },
+      {
+        "cause": "CAN bus wiring short/open",
+        "probability": "medium",
+        "severity": "high",
+        "urgency": "soon",
+        "notes": ""
+      }
+    ],
+    "recommended_checks": [
+      "Check fuses supplying the affected module.",
+      "Inspect grounds near the module location.",
+      "Measure CAN bus resistance (typically ~60 ohms)."
+    ],
+    "safety_warning": "Loss of module communication can disable related systems."
+  },
+  {
+    "id": "can_intermittent_faults",
+    "title": "Intermittent Electronic Faults",
+    "system": "network_can",
+    "category": "NETWORK — INTERMITTENT",
+    "symptom_short": "Random warnings or features stop working intermittently",
+    "symptom_patterns": [
+      "intermittent electrical issues",
+      "random warning lights",
+      "features stop working randomly"
+    ],
+    "likely_causes": [
+      {
+        "cause": "Loose ground or corroded connector",
+        "probability": "high",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": ""
+      },
+      {
+        "cause": "Water intrusion in wiring harness or module",
+        "probability": "medium",
+        "severity": "high",
+        "urgency": "soon",
+        "notes": ""
+      }
+    ],
+    "recommended_checks": [
+      "Inspect grounds and connectors for corrosion.",
+      "Check for signs of water intrusion.",
+      "Wiggle-test suspect harnesses while monitoring scan data."
+    ],
+    "safety_warning": "Intermittent faults are difficult to predict and can affect safety systems."
+  },
+  {
+    "id": "can_vehicle_no_start",
+    "title": "Vehicle Will Not Start Due to Network Fault",
+    "system": "network_can",
+    "category": "NETWORK — NO START",
+    "symptom_short": "Vehicle does not start despite good battery",
+    "symptom_patterns": [
+      "no start no crank network",
+      "immobilizer communication error",
+      "car won't start electronics"
+    ],
+    "likely_causes": [
+      {
+        "cause": "Immobilizer / BCM / PCM communication failure",
+        "probability": "medium",
+        "severity": "high",
+        "urgency": "soon",
+        "notes": ""
+      },
+      {
+        "cause": "CAN bus short caused by failed module",
+        "probability": "medium",
+        "severity": "high",
+        "urgency": "soon",
+        "notes": ""
+      }
+    ],
+    "recommended_checks": [
+      "Scan for immobilizer and BCM codes.",
+      "Check for aftermarket devices tied into CAN lines.",
+      "Isolate modules if CAN short is suspected."
+    ],
+    "safety_warning": "Network-related no-start conditions often require professional diagnostics."
+  }
+]
