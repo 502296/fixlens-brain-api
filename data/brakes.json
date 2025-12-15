@@ -1,0 +1,228 @@
+[
+  {
+    "id": "brake_squeal_low_speed",
+    "title": "High-Pitched Brake Squeal at Low Speed",
+    "system": "brakes",
+    "category": "BRAKES — NOISE",
+    "symptom_short": "Squealing noise when braking lightly at low speed",
+    "symptom_patterns": [
+      "brake squeal",
+      "squeaking brakes",
+      "high pitched noise when braking",
+      "brakes squeal at low speed"
+    ],
+    "likely_causes": [
+      {
+        "cause": "Brake wear indicator contacting rotor (pads near end of life)",
+        "probability": "high",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": "Designed to make noise as a warning."
+      },
+      {
+        "cause": "Glazed brake pads or rotors",
+        "probability": "medium",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": "Often after overheating or aggressive braking."
+      },
+      {
+        "cause": "Brake dust or light rust on rotors",
+        "probability": "medium",
+        "severity": "low",
+        "urgency": "normal",
+        "notes": "Common after sitting or in humid conditions."
+      }
+    ],
+    "recommended_checks": [
+      "Inspect brake pad thickness.",
+      "Check rotor surface for glazing or rust.",
+      "Have brakes serviced if noise persists."
+    ],
+    "safety_warning": "If noise turns into grinding, stop driving and inspect brakes immediately."
+  },
+  {
+    "id": "brake_grinding_noise",
+    "title": "Grinding or Scraping Noise When Braking",
+    "system": "brakes",
+    "category": "BRAKES — SEVERE WEAR",
+    "symptom_short": "Loud grinding or metal-on-metal noise when braking",
+    "symptom_patterns": [
+      "brakes grinding",
+      "metal scraping when braking",
+      "very loud brake noise"
+    ],
+    "likely_causes": [
+      {
+        "cause": "Brake pads worn completely to metal backing plates",
+        "probability": "high",
+        "severity": "high",
+        "urgency": "immediate",
+        "notes": "Will quickly damage rotors."
+      },
+      {
+        "cause": "Seized caliper causing uneven wear",
+        "probability": "medium",
+        "severity": "high",
+        "urgency": "immediate",
+        "notes": ""
+      }
+    ],
+    "recommended_checks": [
+      "Avoid driving except to reach a safe location.",
+      "Inspect pads, rotors, and calipers.",
+      "Replace damaged components immediately."
+    ],
+    "safety_warning": "Grinding brakes can lead to brake failure and loss of stopping ability."
+  },
+  {
+    "id": "brake_pedal_soft_spongy",
+    "title": "Soft or Spongy Brake Pedal",
+    "system": "brakes",
+    "category": "BRAKES — HYDRAULIC",
+    "symptom_short": "Brake pedal feels soft, spongy, or goes too far down",
+    "symptom_patterns": [
+      "soft brake pedal",
+      "spongy brakes",
+      "brake pedal goes to floor"
+    ],
+    "likely_causes": [
+      {
+        "cause": "Air in brake lines",
+        "probability": "high",
+        "severity": "high",
+        "urgency": "immediate",
+        "notes": "Often after brake service or fluid loss."
+      },
+      {
+        "cause": "Brake fluid leak",
+        "probability": "medium",
+        "severity": "high",
+        "urgency": "immediate",
+        "notes": ""
+      },
+      {
+        "cause": "Failing master cylinder",
+        "probability": "medium",
+        "severity": "high",
+        "urgency": "immediate",
+        "notes": ""
+      }
+    ],
+    "recommended_checks": [
+      "Check brake fluid level and condition.",
+      "Inspect for leaks near wheels and master cylinder.",
+      "Do not drive if pedal feels unsafe."
+    ],
+    "safety_warning": "A soft pedal can indicate imminent brake failure. Tow the vehicle if necessary."
+  },
+  {
+    "id": "brake_pedal_pulsation",
+    "title": "Brake Pedal Pulsation or Steering Wheel Shake",
+    "system": "brakes",
+    "category": "BRAKES — VIBRATION",
+    "symptom_short": "Pedal pulsates or steering wheel shakes during braking",
+    "symptom_patterns": [
+      "brake pedal pulsates",
+      "steering wheel shakes when braking",
+      "brake vibration"
+    ],
+    "likely_causes": [
+      {
+        "cause": "Warped or uneven brake rotors",
+        "probability": "high",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": "Common after overheating."
+      },
+      {
+        "cause": "Wheel hub runout or improper installation",
+        "probability": "medium",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": ""
+      }
+    ],
+    "recommended_checks": [
+      "Measure rotor thickness variation and runout.",
+      "Inspect hub surfaces for rust or debris.",
+      "Resurface or replace rotors if needed."
+    ],
+    "safety_warning": "Severe vibration can reduce braking control, especially at high speeds."
+  },
+  {
+    "id": "abs_warning_light_on",
+    "title": "ABS Warning Light On",
+    "system": "brakes",
+    "category": "BRAKES — ABS",
+    "symptom_short": "ABS warning light stays on while driving",
+    "symptom_patterns": [
+      "abs light on",
+      "anti lock brake warning",
+      "abs fault"
+    ],
+    "likely_causes": [
+      {
+        "cause": "Faulty wheel speed sensor",
+        "probability": "high",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": ""
+      },
+      {
+        "cause": "Damaged sensor wiring or tone ring",
+        "probability": "medium",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": ""
+      },
+      {
+        "cause": "ABS module internal fault",
+        "probability": "low",
+        "severity": "high",
+        "urgency": "soon",
+        "notes": ""
+      }
+    ],
+    "recommended_checks": [
+      "Scan ABS module for fault codes.",
+      "Inspect wheel speed sensors and wiring.",
+      "Check for related traction control warnings."
+    ],
+    "safety_warning": "Normal braking usually remains, but ABS may not function during hard stops."
+  },
+  {
+    "id": "parking_brake_stuck",
+    "title": "Parking Brake Stuck or Not Releasing",
+    "system": "brakes",
+    "category": "BRAKES — PARKING",
+    "symptom_short": "Vehicle drags or will not move after parking brake release",
+    "symptom_patterns": [
+      "parking brake stuck",
+      "car won't move after parking brake",
+      "rear brakes dragging"
+    ],
+    "likely_causes": [
+      {
+        "cause": "Seized parking brake cable",
+        "probability": "high",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": "Common in cold or wet climates."
+      },
+      {
+        "cause": "Corroded rear caliper or drum mechanism",
+        "probability": "medium",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": ""
+      }
+    ],
+    "recommended_checks": [
+      "Verify parking brake fully releases.",
+      "Inspect cables and rear brake mechanisms.",
+      "Avoid driving long distances if brakes are dragging."
+    ],
+    "safety_warning": "Dragging brakes can overheat and cause brake failure or fire."
+  }
+]
