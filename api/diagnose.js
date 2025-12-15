@@ -3,41 +3,36 @@ import OpenAI from "openai";
 import fs from "fs";
 import path from "path";
 
-// =====================
-// OpenAI Client
-// =====================
 const client = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-// =====================
-// Load ALL knowledge files
-// =====================
-const DATA_DIR = path.join(process.cwd(), "data");
+// =========================
+// Load all knowledge files
+// =========================
+function loadKnowledge() {
+  const dataDir = path.join(process.cwd(), "data");
+  const files = fs.readdirSync(dataDir).filter(f => f.endsWith(".json"));
 
-function loadAllKnowledge() {
-  const files = fs.readdirSync(DATA_DIR).filter(f => f.endsWith(".json"));
-  let all = [];
+  let knowledge = [];
   for (const file of files) {
     try {
       const content = JSON.parse(
-        fs.readFileSync(path.join(DATA_DIR, file), "utf8")
+        fs.readFileSync(path.join(dataDir, file), "utf8")
       );
-      if (Array.isArray(content)) {
-        all = all.concat(content);
-      }
+      knowledge.push({ file, content });
     } catch (e) {
-      console.error("Failed loading:", file, e.message);
+      console.error(`Failed to load ${file}`, e);
     }
   }
-  return all;
+  return knowledge;
 }
 
-const AUTO_KNOWLEDGE = loadAllKnowledge();
+const AUTO_KNOWLEDGE = loadKnowledge();
 
-// =====================
+// =========================
 // Language detection
-// =====================
+// =========================
 function detectLanguage(text = "") {
   if (/[\u0600-\u06FF]/.test(text)) return "ar";
   if (/[\u0400-\u04FF]/.test(text)) return "ru";
@@ -47,50 +42,40 @@ function detectLanguage(text = "") {
   return "en";
 }
 
-// =====================
-// Greeting only detector
-// =====================
+// =========================
+// Greeting detection
+// =========================
 function isGreetingOnly(text = "") {
   const t = text.trim().toLowerCase();
   if (!t) return false;
 
   const greetings = [
-    "hi","hello","hey","hola","bonjour","ciao",
-    "مرحبا","هلا","السلام","أهلا",
-    "привет","こんにちは","안녕하세요","你好"
+    "hi", "hello", "hey",
+    "مرحبا", "هلا", "السلام", "أهلاً",
+    "hola", "bonjour", "ciao",
+    "привет", "こんにちは", "안녕하세요"
   ];
 
   return greetings.some(g => t === g || t.startsWith(g));
 }
 
-// =====================
-// Short greeting replies
-// =====================
+// =========================
+// Greeting replies
+// =========================
 function greetingReply(lang) {
-  const replies = {
-    ar: "أهلًا 👋 كيف أقدر أساعدك اليوم؟",
-    en: "Hi 👋 How can I help you today?",
-    ru: "Привет 👋 Чем могу помочь?",
-    zh: "你好 👋 我可以怎么帮你？",
-    ja: "こんにちは 👋 どうしましたか？",
-    ko: "안녕하세요 👋 무엇을 도와드릴까요?"
-  };
-  return replies[lang] || replies.en;
+  switch (lang) {
+    case "ar": return "أهلاً 👋 كيف أقدر أساعدك اليوم؟";
+    case "ru": return "Привет 👋 Чем могу помочь?";
+    case "zh": return "你好 👋 我可以帮你什么？";
+    case "ja": return "こんにちは 👋 どんなお手伝いができますか？";
+    case "ko": return "안녕하세요 👋 무엇을 도와드릴까요?";
+    default: return "Hi 👋 How can I help you today?";
+  }
 }
 
-// =====================
-// Extract relevant issues
-// =====================
-function findRelevantIssues(message) {
-  const t = message.toLowerCase();
-  return AUTO_KNOWLEDGE.filter(item =>
-    item.symptom_patterns?.some(p => t.includes(p.toLowerCase()))
-  ).slice(0, 5);
-}
-
-// =====================
-// API Handler
-// =====================
+// =========================
+// Main handler
+// =========================
 export default async function handler(req, res) {
   try {
     if (req.method !== "POST") {
@@ -99,77 +84,55 @@ export default async function handler(req, res) {
 
     const { message } = req.body;
     if (!message || !message.trim()) {
-      return res.status(400).json({ error: "Message required" });
+      return res.status(400).json({ error: "Empty message" });
     }
 
-    const lang = detectLanguage(message);
+    const language = detectLanguage(message);
 
-    // 1️⃣ GREETING ONLY
+    // 1️⃣ Greeting only
     if (isGreetingOnly(message)) {
       return res.json({
-        reply: greetingReply(lang),
-        language: lang,
+        reply: greetingReply(language),
+        language,
       });
     }
 
-    // 2️⃣ FIND TECHNICAL CONTEXT
-    const issues = findRelevantIssues(message);
+    // 2️⃣ Real mechanical problem
+    const systemPrompt = `
+You are FixLens, a professional automotive diagnostic engineer.
+You speak ONLY in the user's language.
+Do NOT use sections, titles, summaries, or safety disclaimers.
+Respond naturally like an experienced mechanic talking to another technician.
+Be precise, realistic, and practical.
 
-    // 3️⃣ IF NO TECH CONTEXT → ASK ENGINEER QUESTIONS
-    if (issues.length === 0) {
-      const ask = {
-        ar: `تمام. حتى أقدر أشخّص بدقة، أحتاج:
-- نوع السيارة والموديل
-- نوع المحرك (بنزين / ديزل / هجين)
-- متى يظهر العطل؟ (بارد / حار / سرعة)
-- هل توجد لمبة تحذير؟`,
-        en: `Got it. To diagnose accurately, please tell me:
-- Vehicle make & model
-- Engine type (gas / diesel / hybrid)
-- When does it happen? (cold / hot / speed)
-- Any warning lights?`
-      };
+Use this automotive knowledge as reference:
+${JSON.stringify(AUTO_KNOWLEDGE).slice(0, 12000)}
 
-      return res.json({
-        reply: ask[lang] || ask.en,
-        language: lang,
-      });
-    }
-
-    // 4️⃣ FULL AI DIAGNOSIS
-    const prompt = `
-You are a professional automotive diagnostic engineer.
-Respond in ${lang}.
-Be concise and technical.
-
-User issue:
-${message}
-
-Relevant known issues:
-${JSON.stringify(issues, null, 2)}
-
-Provide:
-1. Short technical summary
-2. Most likely causes (ranked)
-3. What to check next (specific)
-4. Safety notes (only if critical)
+Your goal:
+- Analyze the problem
+- Suggest likely causes
+- Ask smart follow-up questions (vehicle, engine, fuel, codes)
+- Keep the response concise and professional
 `;
 
-    const ai = await client.chat.completions.create({
-      model: "gpt-4o-mini",
-      messages: [{ role: "user", content: prompt }],
-      temperature: 0.2,
+    const completion = await client.chat.completions.create({
+      model: "gpt-4o",
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: message },
+      ],
+      temperature: 0.3,
     });
 
     return res.json({
-      reply: ai.choices[0].message.content,
-      language: lang,
+      reply: completion.choices[0].message.content,
+      language,
     });
 
   } catch (err) {
     console.error(err);
-    res.status(500).json({
-      error: "Diagnosis failed",
+    return res.status(500).json({
+      error: "FixLens diagnosis failed",
       details: err.message,
     });
   }
