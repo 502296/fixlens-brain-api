@@ -1,4341 +1,2874 @@
 [
-{
-"id": "engine_rough_idle_shake",
-"title": "Engine Rough Idle or Shaking When Stopped",
-"system": "engine",
-"category": "ENGINE — GENERAL",
-"symptom_short": "Rough idle or shaking when stopped",
-"symptom_patterns": [
-"rough idle",
-"shaking at stop",
-"car vibrates in park",
-"engine feels like it will stall"
-],
-"likely_causes": [
-{
-"cause": "Dirty or failing spark plugs",
-"probability": "high",
-"severity": "medium",
-"urgency": "soon",
-"notes": "Common on high-mileage engines or if maintenance is overdue."
-},
-{
-"cause": "Clogged fuel injector",
-"probability": "medium",
-"severity": "medium",
-"urgency": "soon",
-"notes": "May be worse when engine is cold."
-},
-{
-"cause": "Vacuum leak (cracked hose or gasket)",
-"probability": "medium",
-"severity": "high",
-"urgency": "soon",
-"notes": "Can eventually trigger check-engine light and poor fuel economy."
-}
-],
-"recommended_checks": [
-"Check maintenance history for last spark-plug change.",
-"Listen for hissing sounds around intake hoses.",
-"Scan for misfire or fuel-trim codes with an OBD-II scanner."
-],
-"safety_warning": "Avoid hard acceleration until the misfire cause is identified. Severe misfires can damage the catalytic converter."
-},
-{
-"id": "engine_check_light_flashing",
-"title": "Flashing Check-Engine Light Under Load",
-"system": "engine",
-"category": "ENGINE — MISFIRE / IGNITION",
-"symptom_short": "Flashing check-engine light under load",
-"symptom_patterns": [
-"check engine light flashing",
-"engine light blinks when accelerating"
-],
-"likely_causes": [
-{
-"cause": "Severe engine misfire",
-"probability": "high",
-"severity": "high",
-"urgency": "immediate",
-"notes": "Unburned fuel can overheat and destroy the catalytic converter."
-},
-{
-"cause": "Ignition coil failure",
-"probability": "medium",
-"severity": "high",
-"urgency": "immediate",
-"notes": "Often happens under heavy load or uphill driving."
-}
-],
-"recommended_checks": [
-"If the light is flashing, reduce speed and avoid hard acceleration.",
-"If the flashing continues, safely pull over and shut off the engine.",
-"Scan for misfire codes (e.g., P0300–P0306)."
-],
-"safety_warning": "A flashing check-engine light usually means STOP DRIVING soon. Continuing to drive can cause very expensive damage."
-},
-{
-"id": "engine_hard_start_cold",
-"title": "Hard Starting When Engine Is Cold",
-"system": "engine",
-"category": "ENGINE — STARTING",
-"symptom_short": "Hard starting when engine is cold",
-"symptom_patterns": [
-"hard to start in morning",
-"takes long crank when cold",
-"cold start problem"
-],
-"likely_causes": [
-{
-"cause": "Weak battery or poor battery connections",
-"probability": "medium",
-"severity": "medium",
-"urgency": "soon",
-"notes": ""
-},
-{
-"cause": "Failing coolant-temperature sensor",
-"probability": "medium",
-"severity": "medium",
-"urgency": "soon",
-"notes": ""
-},
-{
-"cause": "Fuel system issue (weak pump or leaking injector)",
-"probability": "medium",
-"severity": "high",
-"urgency": "soon",
-"notes": ""
-}
-],
-"recommended_checks": [
-"Check battery age and look for corrosion on terminals.",
-"Notice if the problem is only on cold mornings or always.",
-"Listen for fuel-pump prime sound when turning key to ON."
-],
-"safety_warning": "If the engine cranks very slowly, avoid repeated attempts that overheat the starter and cables."
-},
-{
-"id": "cooling_overheat_stop_go",
-"title": "Engine Overheating in Traffic but OK at Highway Speed",
-"system": "cooling",
-"category": "COOLING — OVERHEAT",
-"symptom_short": "Engine overheating in traffic but OK at highway speed",
-"symptom_patterns": [
-"overheats in traffic",
-"temperature rises at stop",
-"hot in city driving"
-],
-"likely_causes": [
-{
-"cause": "Cooling fan not working (electric fan or clutch fan)",
-"probability": "high",
-"severity": "high",
-"urgency": "immediate",
-"notes": ""
-},
-{
-"cause": "Restricted radiator fins (bugs, debris)",
-"probability": "medium",
-"severity": "medium",
-"urgency": "soon",
-"notes": ""
-}
-],
-"recommended_checks": [
-"With engine cool, visually check radiator and condenser for blockage.",
-"With AC on and engine warm, verify if cooling fans turn on.",
-"Watch temperature gauge; if it enters red zone, shut engine off safely."
-],
-"safety_warning": "Do not continue driving an overheating engine. Severe overheating can warp the cylinder head and cause head-gasket failure."
-},
-{
-"id": "cooling_overheat_highway",
-"title": "Engine Overheating Mainly at Highway Speeds",
-"system": "cooling",
-"category": "COOLING — OVERHEAT",
-"symptom_short": "Engine overheating mainly at highway speeds",
-"symptom_patterns": [
-"overheats on highway",
-"runs hot at high speed",
-"temperature climbs on long climbs"
-],
-"likely_causes": [
-{
-"cause": "Low coolant or coolant leak",
-"probability": "high",
-"severity": "high",
-"urgency": "immediate",
-"notes": ""
-},
-{
-"cause": "Partially clogged radiator",
-"probability": "medium",
-"severity": "high",
-"urgency": "soon",
-"notes": ""
-},
-{
-"cause": "Failing water pump",
-"probability": "medium",
-"severity": "high",
-"urgency": "immediate",
-"notes": ""
-}
-],
-"recommended_checks": [
-"With engine cool, check coolant level in reservoir.",
-"Look for dried coolant traces around hoses, radiator, and water pump.",
-"Observe for sweet smell or steam from engine bay."
-],
-"safety_warning": "Never open the radiator cap while the engine is hot. Hot coolant can spray and cause serious burns."
-},
-{
-"id": "cooling_no_heat_cabin",
-"title": "No Heat from Cabin Vents but Engine Warm",
-"system": "cooling",
-"category": "COOLING — HEATER",
-"symptom_short": "No heat from cabin vents but engine reaches normal temp",
-"symptom_patterns": [
-"no heat inside",
-"heater blows cold air",
-"heater not working"
-],
-"likely_causes": [
-{
-"cause": "Low coolant level",
-"probability": "high",
-"severity": "medium",
-"urgency": "soon",
-"notes": ""
-},
-{
-"cause": "Clogged heater core",
-"probability": "medium",
-"severity": "medium",
-"urgency": "soon",
-"notes": ""
-},
-{
-"cause": "Air trapped in cooling system",
-"probability": "medium",
-"severity": "medium",
-"urgency": "soon",
-"notes": ""
-}
-],
-"recommended_checks": [
-"Check coolant level when engine is cold.",
-"Note if windshield fogs with sweet smell (may indicate heater-core leak).",
-"Check if both heater hoses in engine bay feel warm when engine is hot."
-],
-"safety_warning": "Coolant leaks that affect the heater can eventually lead to engine overheating if ignored."
-},
-{
-"id": "brakes_squeal_low_speed",
-"title": "High-Pitched Squeal When Braking at Low Speed",
-"system": "brakes",
-"category": "BRAKES — NOISE",
-"symptom_short": "High-pitched squeal when braking at low speed",
-"symptom_patterns": [
-"brake squeal",
-"squeaking brakes",
-"high pitched noise while braking"
-],
-"likely_causes": [
-{
-"cause": "Brake wear indicator contacting rotor (pads near end of life)",
-"probability": "high",
-"severity": "medium",
-"urgency": "soon",
-"notes": ""
-},
-{
-"cause": "Glazed pads or rotors",
-"probability": "medium",
-"severity": "medium",
-"urgency": "soon",
-"notes": ""
-},
-{
-"cause": "Dust or rust on rotor surface after sitting",
-"probability": "medium",
-"severity": "low",
-"urgency": "normal",
-"notes": ""
-}
-],
-"recommended_checks": [
-"Notice if noise happens only first few stops of the day or always.",
-"Check for visible pad thickness through wheel spokes if possible.",
-"Have a technician inspect pad and rotor condition."
-],
-"safety_warning": "If the squeal turns into a grinding or scraping sound, stop driving — you may be down to metal-on-metal brakes."
-},
-{
-"id": "brakes_grinding",
-"title": "Grinding or Scraping Noise When Braking",
-"system": "brakes",
-"category": "BRAKES — SEVERE WEAR",
-"symptom_short": "Grinding or scraping noise when braking",
-"symptom_patterns": [
-"brakes grinding",
-"scraping metal when braking",
-"very loud brake noise"
-],
-"likely_causes": [
-{
-"cause": "Pads worn through to metal backing plate",
-"probability": "high",
-"severity": "high",
-"urgency": "immediate",
-"notes": ""
-},
-{
-"cause": "Stuck caliper or hardware",
-"probability": "medium",
-"severity": "high",
-"urgency": "immediate",
-"notes": ""
-}
-],
-"recommended_checks": [
-"Avoid driving except to move the car to a safe location.",
-"Have brakes inspected as soon as possible.",
-"Check for brake warning lights on dashboard."
-],
-"safety_warning": "Driving with grinding brakes is unsafe and can cause rotor failure and loss of braking ability."
-},
-{
-"id": "brakes_pedal_soft_spongy",
-"title": "Soft or Spongy Brake Pedal",
-"system": "brakes",
-"category": "BRAKES — HYDRAULIC",
-"symptom_short": "Soft or spongy brake pedal",
-"symptom_patterns": [
-"soft brake pedal",
-"pedal goes to floor",
-"spongy brakes"
-],
-"likely_causes": [
-{
-"cause": "Air in brake lines",
-"probability": "high",
-"severity": "high",
-"urgency": "immediate",
-"notes": ""
-},
-{
-"cause": "Brake fluid leak",
-"probability": "medium",
-"severity": "high",
-"urgency": "immediate",
-"notes": ""
-},
-{
-"cause": "Failing master cylinder",
-"probability": "medium",
-"severity": "high",
-"urgency": "immediate",
-"notes": ""
-}
-],
-"recommended_checks": [
-"Press and hold the brake pedal at a stop; note if it slowly sinks.",
-"Look for fluid leaks near wheels or under brake master cylinder.",
-"Do not continue driving if braking ability is reduced."
-],
-"safety_warning": "A soft pedal can mean imminent brake failure. Tow the vehicle rather than driving it."
-},
-{
-"id": "abs_light_on",
-"title": "ABS Warning Light Stays On",
-"system": "brakes",
-"category": "BRAKES — ABS",
-"symptom_short": "ABS warning light stays on",
-"symptom_patterns": [
-"abs light on",
-"anti lock brake light",
-"abs fault"
-],
-"likely_causes": [
-{
-"cause": "Faulty wheel speed sensor",
-"probability": "high",
-"severity": "medium",
-"urgency": "soon",
-"notes": ""
-},
-{
-"cause": "Damaged tone ring or wiring",
-"probability": "medium",
-"severity": "medium",
-"urgency": "soon",
-"notes": ""
-},
-{
-"cause": "ABS module fault",
-"probability": "medium",
-"severity": "high",
-"urgency": "soon",
-"notes": ""
-}
-],
-"recommended_checks": [
-"Note if ABS activates too early or not at all on hard braking.",
-"Scan ABS system for codes using capable scanner.",
-"Inspect wheel-speed sensor wiring near wheels for damage."
-],
-"safety_warning": "Conventional braking usually still works, but anti-lock function may be disabled. Increase following distance on wet or slippery roads."
-},
-{
-"id": "tpms_light_on",
-"title": "Tire Pressure Warning (TPMS) Light On",
-"system": "wheels_tires",
-"category": "WHEELS & TIRES — TPMS",
-"symptom_short": "Tire pressure warning (TPMS) light on",
-"symptom_patterns": [
-"tire pressure light",
-"tpms warning",
-"low tire symbol"
-],
-"likely_causes": [
-{
-"cause": "Low tire pressure in one or more tires",
-"probability": "high",
-"severity": "medium",
-"urgency": "immediate",
-"notes": ""
-},
-{
-"cause": "TPMS sensor battery low or failed",
-"probability": "medium",
-"severity": "low",
-"urgency": "normal",
-"notes": ""
-}
-],
-"recommended_checks": [
-"Check tire pressure with a gauge; fill to door-jamb specification.",
-"Inspect tires for nails, screws, or visible damage.",
-"If pressures are OK but light stays on, have sensors checked."
-],
-"safety_warning": "Driving on an under-inflated tire can cause overheating, poor handling, and potential blowout."
-},
-{
-"id": "tires_vibration_highway",
-"title": "Vibration at Highway Speeds",
-"system": "wheels_tires",
-"category": "WHEELS & TIRES — VIBRATION",
-"symptom_short": "Vibration in steering wheel or seat at highway speeds",
-"symptom_patterns": [
-"vibration at 60 mph",
-"steering wheel shakes",
-"car shakes on highway"
-],
-"likely_causes": [
-{
-"cause": "Wheel balance issue",
-"probability": "high",
-"severity": "medium",
-"urgency": "soon",
-"notes": ""
-},
-{
-"cause": "Uneven tire wear or belt separation",
-"probability": "medium",
-"severity": "high",
-"urgency": "immediate",
-"notes": ""
-},
-{
-"cause": "Bent wheel or suspension component",
-"probability": "medium",
-"severity": "high",
-"urgency": "soon",
-"notes": ""
-}
-],
-"recommended_checks": [
-"Note the speed range where vibration is worst.",
-"Check tires visually for bulges, flat spots, or exposed cords.",
-"Have wheels balanced and alignment checked."
-],
-"safety_warning": "Severe tire defects can lead to blowouts at speed. Reduce speed and inspect tires if vibration is strong or sudden."
-},
-{
-"id": "suspension_clunk_over_bumps",
-"title": "Clunking Noise Over Bumps at Low Speed",
-"system": "suspension",
-"category": "SUSPENSION — NOISE",
-"symptom_short": "Clunking noise over bumps at low speed",
-"symptom_patterns": [
-"clunk over bumps",
-"knocking sound front end",
-"rattle when going over potholes"
-],
-"likely_causes": [
-{
-"cause": "Worn stabilizer bar (sway bar) links or bushings",
-"probability": "high",
-"severity": "medium",
-"urgency": "soon",
-"notes": ""
-},
-{
-"cause": "Loose strut mount or worn strut",
-"probability": "medium",
-"severity": "medium",
-"urgency": "soon",
-"notes": ""
-},
-{
-"cause": "Control arm bushing wear",
-"probability": "medium",
-"severity": "high",
-"urgency": "soon",
-"notes": ""
-}
-],
-"recommended_checks": [
-"Note if the sound is from front, rear, or one side only.",
-"Check if noise is louder when turning and going over bumps.",
-"Have suspension inspected on a lift."
-],
-"safety_warning": "Severely worn suspension parts can affect steering control, especially during emergency maneuvers."
-},
-{
-"id": "suspension_squeak_slow_speed",
-"title": "Squeaking Suspension at Low Speed",
-"system": "suspension",
-"category": "SUSPENSION — NOISE",
-"symptom_short": "Squeaking suspension at low speed or entering driveway",
-"symptom_patterns": [
-"squeak over bumps",
-"creaking when turning into driveway",
-"suspension squeaking"
-],
-"likely_causes": [
-{
-"cause": "Dry control-arm or sway-bar bushings",
-"probability": "high",
-"severity": "low",
-"urgency": "normal",
-"notes": ""
-},
-{
-"cause": "Worn ball joints",
-"probability": "medium",
-"severity": "high",
-"urgency": "soon",
-"notes": ""
-}
-],
-"recommended_checks": [
-"Notice if sound changes with temperature or rain.",
-"Check if squeak occurs while steering, braking, or only with body motion.",
-"Schedule suspension inspection if persistent."
-],
-"safety_warning": "While often not immediately dangerous, squeaks can be an early sign of wear that later affects steering safety."
-},
-{
-"id": "steering_pull_one_side",
-"title": "Car Pulls to One Side While Driving Straight",
-"system": "steering",
-"category": "STEERING — HANDLING",
-"symptom_short": "Car pulls to one side while driving straight",
-"symptom_patterns": [
-"pulls to right",
-"pulls to left",
-"car drifts to one side"
-],
-"likely_causes": [
-{
-"cause": "Incorrect wheel alignment",
-"probability": "high",
-"severity": "medium",
-"urgency": "soon",
-"notes": ""
-},
-{
-"cause": "Uneven tire pressure",
-"probability": "medium",
-"severity": "medium",
-"urgency": "soon",
-"notes": ""
-},
-{
-"cause": "Brake caliper sticking on one wheel",
-"probability": "medium",
-"severity": "high",
-"urgency": "immediate",
-"notes": ""
-}
-],
-"recommended_checks": [
-"Check tire pressures and adjust to spec.",
-"Notice if wheel or brake on one side feels hotter after driving.",
-"Schedule alignment check if pull persists."
-],
-"safety_warning": "Severe pulling, especially under braking, can affect your ability to keep the car in its lane."
-},
-{
-"id": "steering_loose_play",
-"title": "Loose Feeling or Play in Steering Wheel",
-"system": "steering",
-"category": "STEERING — LOOSENESS",
-"symptom_short": "Loose feeling or play in steering wheel",
-"symptom_patterns": [
-"loose steering",
-"excessive play steering wheel",
-"wandering on highway"
-],
-"likely_causes": [
-{
-"cause": "Worn tie-rod ends or steering rack components",
-"probability": "high",
-"severity": "high",
-"urgency": "soon",
-"notes": ""
-},
-{
-"cause": "Worn steering shaft joints",
-"probability": "medium",
-"severity": "high",
-"urgency": "soon",
-"notes": ""
-},
-{
-"cause": "Improper alignment or worn suspension bushings",
-"probability": "medium",
-"severity": "medium",
-"urgency": "soon",
-"notes": ""
-}
-],
-"recommended_checks": [
-"Note if steering response feels delayed when turning.",
-"Observe if car wanders and needs constant correction on highway.",
-"Have steering and suspension checked on a lift."
-],
-"safety_warning": "Serious steering looseness is a safety hazard and can lead to loss of control, especially at speed."
-},
-{
-"id": "driveline_whine_with_speed",
-"title": "Whining Noise That Changes with Vehicle Speed",
-"system": "driveline",
-"category": "DRIVELINE — NOISE",
-"symptom_short": "Whining noise that changes with vehicle speed",
-"symptom_patterns": [
-"whining while driving",
-"gear whine",
-"rear end noise"
-],
-"likely_causes": [
-{
-"cause": "Worn differential or gearset",
-"probability": "medium",
-"severity": "high",
-"urgency": "soon",
-"notes": ""
-},
-{
-"cause": "Wheel bearing wear",
-"probability": "medium",
-"severity": "high",
-"urgency": "soon",
-"notes": ""
-},
-{
-"cause": "Tire pattern noise",
-"probability": "medium",
-"severity": "medium",
-"urgency": "normal",
-"notes": ""
-}
-],
-"recommended_checks": [
-"Note if noise changes when turning left or right.",
-"Observe if pitch changes with throttle on/off or only with speed.",
-"Have wheel bearings and differential fluid checked."
-],
-"safety_warning": "Severely worn bearings or gears can overheat and seize, potentially causing loss of control."
-},
-{
-"id": "driveline_click_turning",
-"title": "Clicking or Popping When Turning at Low Speed",
-"system": "driveline",
-"category": "DRIVELINE — CV JOINT",
-"symptom_short": "Clicking or popping when turning at low speed",
-"symptom_patterns": [
-"clicking when turning",
-"popping noise in turns",
-"cv joint noise"
-],
-"likely_causes": [
-{
-"cause": "Outer CV joint wear on front-wheel-drive or AWD",
-"probability": "high",
-"severity": "high",
-"urgency": "soon",
-"notes": ""
-},
-{
-"cause": "Loose axle nut or suspension component",
-"probability": "medium",
-"severity": "high",
-"urgency": "immediate",
-"notes": ""
-}
-],
-"recommended_checks": [
-"Notice if sound is louder on full lock turns and during acceleration.",
-"Determine if noise comes from one front corner.",
-"Inspect CV boots for tears or missing grease."
-],
-"safety_warning": "Severely worn CV joints can eventually fail and leave the vehicle without drive."
-},
-{
-"id": "electrical_battery_light_on",
-"title": "Battery/Charging Light On While Driving",
-"system": "electrical",
-"category": "ELECTRICAL — CHARGING",
-"symptom_short": "Battery/charging light on while driving",
-"symptom_patterns": [
-"battery light on",
-"alternator light",
-"red battery icon"
-],
-"likely_causes": [
-{
-"cause": "Alternator not charging properly",
-"probability": "high",
-"severity": "high",
-"urgency": "immediate",
-"notes": ""
-},
-{
-"cause": "Loose or slipping serpentine belt",
-"probability": "medium",
-"severity": "high",
-"urgency": "immediate",
-"notes": ""
-},
-{
-"cause": "Corroded battery terminals or cables",
-"probability": "medium",
-"severity": "medium",
-"urgency": "soon",
-"notes": ""
-}
-],
-"recommended_checks": [
-"Turn off non-essential electrical loads (AC, heated seats, rear defrost).",
-"Notice if lights dim or blower slows down.",
-"Have charging system tested as soon as possible."
-],
-"safety_warning": "Once the battery is depleted, the engine may stall suddenly. Avoid long trips and night driving until fixed."
-},
-{
-"id": "electrical_lights_dim_at_idle",
-"title": "Headlights Dim at Idle but Brighten When Revving",
-"system": "electrical",
-"category": "ELECTRICAL — CHARGING",
-"symptom_short": "Headlights dim at idle but brighten when revving",
-"symptom_patterns": [
-"lights dim at idle",
-"headlights brighten when revving",
-"voltage low at stop"
-],
-"likely_causes": [
-{
-"cause": "Weak alternator output at low RPM",
-"probability": "medium",
-"severity": "medium",
-"urgency": "soon",
-"notes": ""
-},
-{
-"cause": "High electrical load at idle (AC, defrost, audio)",
-"probability": "medium",
-"severity": "low",
-"urgency": "normal",
-"notes": ""
-},
-{
-"cause": "Loose or corroded grounds",
-"probability": "medium",
-"severity": "medium",
-"urgency": "soon",
-"notes": ""
-}
-],
-"recommended_checks": [
-"Observe if dimming is worse with AC or rear defrost on.",
-"Check battery age and condition.",
-"Ask for charging-system and ground-circuit inspection."
-],
-"safety_warning": "Severe dimming or flickering can precede alternator failure, which may stall the engine while driving."
-},
-{
-"id": "starter_click_no_crank",
-"title": "Clicking, Engine Does Not Crank",
-"system": "electrical",
-"category": "ELECTRICAL — STARTING",
-"symptom_short": "Single click or rapid clicking, engine does not crank",
-"symptom_patterns": [
-"just clicking no start",
-"car clicks but won't start",
-"rapid click sound from engine bay"
-],
-"likely_causes": [
-{
-"cause": "Weak or discharged battery",
-"probability": "high",
-"severity": "medium",
-"urgency": "immediate",
-"notes": ""
-},
-{
-"cause": "Loose or corroded battery terminals",
-"probability": "high",
-"severity": "medium",
-"urgency": "immediate",
-"notes": ""
-},
-{
-"cause": "Failing starter motor or solenoid",
-"probability": "medium",
-"severity": "medium",
-"urgency": "soon",
-"notes": ""
-}
-],
-"recommended_checks": [
-"Check if interior lights are dim or go out when trying to start.",
-"Inspect battery terminals for white/green corrosion.",
-"Note if problem is worse after car sits overnight."
-],
-"safety_warning": "Repeated attempts to crank with a weak battery can overheat cables and the starter. Avoid cranking for more than 10 seconds at a time."
-},
-{
-"id": "electrical_parasitic_draw_overnight",
-"title": "Battery Repeatedly Dies After Sitting Overnight",
-"system": "electrical",
-"category": "ELECTRICAL — PARASITIC DRAW",
-"symptom_short": "Battery repeatedly dies after sitting overnight",
-"symptom_patterns": [
-"battery dead in morning",
-"needs jump start every day",
-"car sits and battery drains"
-],
-"likely_causes": [
-{
-"cause": "Parasitic electrical draw from module, light, or accessory staying on",
-"probability": "high",
-"severity": "medium",
-"urgency": "soon",
-"notes": "Common causes include glovebox, trunk lights, aftermarket alarms, or radios."
-},
-{
-"cause": "Battery at end of life and unable to hold charge",
-"probability": "medium",
-"severity": "medium",
-"urgency": "soon",
-"notes": "Batteries typically last 3–5 years depending on climate."
-}
-],
-"recommended_checks": [
-"Check battery age and have it load-tested.",
-"After shutting car off, verify that all interior and trunk lights go out.",
-"Have a technician measure key-off current draw with an ammeter."
-],
-"safety_warning": "Frequent jump-starting can damage electronics and leave you stranded in unsafe locations."
-},
-{
-"id": "electrical_shutdown_while_driving",
-"title": "Engine Suddenly Shuts Off While Driving",
-"system": "electrical",
-"category": "ELECTRICAL — STALLING",
-"symptom_short": "Engine suddenly shuts off while driving, then may restart",
-"symptom_patterns": [
-"car died while driving",
-"engine shut off then restarted",
-"sudden stall no warning"
-],
-"likely_causes": [
-{
-"cause": "Intermittent crankshaft or camshaft position sensor failure",
-"probability": "medium",
-"severity": "high",
-"urgency": "immediate",
-"notes": "Often stalls when hot and may restart after cooling."
-},
-{
-"cause": "Main power or ground connection loose (battery or engine ground strap)",
-"probability": "medium",
-"severity": "high",
-"urgency": "immediate",
-"notes": "Can also cause multiple warning lights and random resets."
-},
-{
-"cause": "Failing engine control module power relay",
-"probability": "low",
-"severity": "high",
-"urgency": "soon",
-"notes": ""
-}
-],
-"recommended_checks": [
-"Notice if dash lights also go out when the engine dies or stay on.",
-"Gently wiggle battery cables (engine off) and inspect for corrosion or looseness.",
-"Scan for stored fault codes even if lights are currently off."
-],
-"safety_warning": "Sudden loss of power steering and brake assist can make the car difficult to control. Pull over safely as soon as it is safe if the engine stalls repeatedly."
-},
-{
-"id": "electrical_smell_burning_inside_cabin",
-"title": "Strong Burning Plastic or Electrical Smell Inside Cabin",
-"system": "electrical",
-"category": "ELECTRICAL — OVERHEAT / SMELL",
-"symptom_short": "Strong burning plastic or electrical smell inside cabin",
-"symptom_patterns": [
-"burning plastic smell in cabin",
-"electrical burning odor dashboard",
-"smell like wires burning"
-],
-"likely_causes": [
-{
-"cause": "Overheated wiring, connector, or blower-motor resistor",
-"probability": "medium",
-"severity": "high",
-"urgency": "immediate",
-"notes": "Often related to HVAC fan speeds or aftermarket accessories."
-},
-{
-"cause": "Short circuit in seat heaters, window circuits, or steering column",
-"probability": "low",
-"severity": "high",
-"urgency": "immediate",
-"notes": ""
-}
-],
-"recommended_checks": [
-"Turn off recently used accessories (seat heaters, rear defrost, phone chargers) and see if smell changes.",
-"Do not ignore visible smoke or melted plastic around switches or vents.",
-"Have wiring inspected before continuing to use the affected circuit."
-],
-"safety_warning": "A strong electrical burning smell or visible smoke can precede an interior fire. Safely stop the vehicle, turn it off, and exit if the smell is intense or smoke is visible."
-},
-{
-"id": "electrical_main_fuse_blows_repeatedly",
-"title": "Main Fuse or Large Fuse Blows Repeatedly",
-"system": "electrical",
-"category": "ELECTRICAL — HIGH CURRENT",
-"symptom_short": "Main fuse or large fuse blows repeatedly",
-"symptom_patterns": [
-"main fuse keeps blowing",
-"big fuse under hood blown",
-"replace fuse and it blows again"
-],
-"likely_causes": [
-{
-"cause": "Direct short to ground in a high-current circuit (starter, alternator, or main power feed)",
-"probability": "medium",
-"severity": "high",
-"urgency": "immediate",
-"notes": "Replacing the fuse without fixing the underlying problem can cause further damage."
-}
-],
-"recommended_checks": [
-"Do not keep installing larger or multiple fuses; this is unsafe.",
-"Note which systems stop working when the fuse blows (charging, interior power, etc.).",
-"Have a qualified technician diagnose the short with proper equipment."
-],
-"safety_warning": "High-current shorts can overheat wiring and start a fire. The vehicle should not be driven until the cause is found and repaired."
-},
-{
-"id": "hvac_ac_warm_air",
-"title": "AC Blows Warm Air Instead of Cold",
-"system": "hvac",
-"category": "HVAC — A/C PERFORMANCE",
-"symptom_short": "AC blows warm or only slightly cool air",
-"symptom_patterns": [
-"ac not cold",
-"air conditioner warm",
-"ac weak cooling"
-],
-"likely_causes": [
-{
-"cause": "Low refrigerant charge from small leak",
-"probability": "high",
-"severity": "medium",
-"urgency": "soon",
-"notes": ""
-},
-{
-"cause": "Condenser or radiator fans not operating correctly",
-"probability": "medium",
-"severity": "medium",
-"urgency": "soon",
-"notes": ""
-},
-{
-"cause": "Blend-door or control issue inside HVAC box",
-"probability": "medium",
-"severity": "medium",
-"urgency": "normal",
-"notes": ""
-}
-],
-"recommended_checks": [
-"Note if AC is colder at highway speed than at idle.",
-"Listen for condenser fan operation when AC is on and car is stopped.",
-"Check if AC becomes warm when climbing hills or when engine warms up."
-],
-"safety_warning": "AC performance issues are usually not immediately dangerous, but lack of cooling can contribute to driver fatigue in extreme heat."
-},
-{
-"id": "interior_fuel_smell",
-"title": "Strong Fuel Smell Around Car or Inside Cabin",
-"system": "fuel_system",
-"category": "FUEL — LEAK / ODOR",
-"symptom_short": "Strong fuel smell around car or inside cabin",
-"symptom_patterns": [
-"smell gasoline inside car",
-"gas smell near rear of car",
-"fuel odor after refueling"
-],
-"likely_causes": [
-{
-"cause": "Fuel leak at lines, injectors, or tank area",
-"probability": "medium",
-"severity": "high",
-"urgency": "immediate",
-"notes": ""
-},
-{
-"cause": "Evaporative emissions (EVAP) system leak or loose gas cap",
-"probability": "medium",
-"severity": "medium",
-"urgency": "soon",
-"notes": ""
-}
-],
-"recommended_checks": [
-"Do not smoke or use open flame near a car with fuel smell.",
-"Check that gas cap is tight and in good condition.",
-"Look under car for wet spots or drips when parked."
-],
-"safety_warning": "Fuel leaks can cause fire or explosion, especially in enclosed spaces like garages. If smell is strong, avoid driving and have the car inspected."
-},
-{
-"id": "interior_water_on_floor",
-"title": "Water on Floor or Wet Carpets Inside Car",
-"system": "body",
-"category": "BODY — WATER LEAK",
-"symptom_short": "Water on floor or wet carpets inside car",
-"symptom_patterns": [
-"wet carpet front passenger",
-"water on floor after rain",
-"damp interior musty smell"
-],
-"likely_causes": [
-{
-"cause": "Clogged sunroof or cowl drains",
-"probability": "medium",
-"severity": "medium",
-"urgency": "soon",
-"notes": ""
-},
-{
-"cause": "Blocked AC evaporator drain causing condensate to leak inside",
-"probability": "medium",
-"severity": "medium",
-"urgency": "soon",
-"notes": ""
-},
-{
-"cause": "Door or window seal leak",
-"probability": "medium",
-"severity": "medium",
-"urgency": "normal",
-"notes": ""
-}
-],
-"recommended_checks": [
-"Note if water appears after rain, car wash, or AC use.",
-"Check for visible dripping near passenger footwell when AC is running.",
-"Dry carpets as soon as possible to avoid mold and odor."
-],
-"safety_warning": "While not usually a direct safety issue, long-term moisture can damage electronics under the carpet and cause mold growth harmful to occupants."
-},
-{
-"id": "exhaust_loud_rumble",
-"title": "Loud Exhaust or Rumble Under Car",
-"system": "exhaust",
-"category": "EXHAUST — LEAK / NOISE",
-"symptom_short": "Loud exhaust or rumble under car",
-"symptom_patterns": [
-"exhaust loud",
-"muffler noise",
-"hole in exhaust sound"
-],
-"likely_causes": [
-{
-"cause": "Hole or crack in exhaust pipe, muffler, or flex pipe",
-"probability": "high",
-"severity": "medium",
-"urgency": "soon",
-"notes": ""
-},
-{
-"cause": "Broken exhaust hanger causing pipe to touch body",
-"probability": "medium",
-"severity": "medium",
-"urgency": "soon",
-"notes": ""
-}
-],
-"recommended_checks": [
-"Note if sound is louder on acceleration or cold start.",
-"Listen near center and rear of car (from safe distance) for leakage.",
-"Avoid idling in enclosed spaces due to exhaust fumes."
-],
-"safety_warning": "Exhaust leaks under the car can allow carbon monoxide into the cabin, especially with windows closed."
-},
-{
-"id": "exhaust_sulfur_odor",
-"title": "Rotten-Egg or Sulfur Smell from Exhaust",
-"system": "exhaust",
-"category": "EXHAUST — CATALYST / FUEL",
-"symptom_short": "Rotten-egg or sulfur smell from exhaust",
-"symptom_patterns": [
-"rotten egg smell from exhaust",
-"sulfur odor car",
-"bad smell after hard driving"
-],
-"likely_causes": [
-{
-"cause": "Catalytic converter overheating or failing",
-"probability": "medium",
-"severity": "high",
-"urgency": "soon",
-"notes": ""
-},
-{
-"cause": "Rich fuel mixture causing excess sulfur compounds",
-"probability": "medium",
-"severity": "high",
-"urgency": "soon",
-"notes": ""
-}
-],
-"recommended_checks": [
-"Note if smell occurs mostly after hard acceleration or long hill climbs.",
-"Check for recent misfire, rough running, or poor fuel economy.",
-"Scan for emissions-related fault codes."
-],
-"safety_warning": "A failing catalytic converter can eventually plug and restrict exhaust flow, causing loss of power and potential engine damage."
-},
-{
-"id": "engine_excessive_smoke_exhaust",
-"title": "Excessive Smoke from Exhaust",
-"system": "engine",
-"category": "ENGINE — SMOKE",
-"symptom_short": "Excessive smoke from exhaust (blue, white, or black)",
-"symptom_patterns": [
-"blue smoke exhaust",
-"white smoke continuous",
-"black smoke rich running"
-],
-"likely_causes": [
-{
-"cause": "Blue smoke: burning engine oil (worn piston rings, valve seals, or turbo)",
-"probability": "medium",
-"severity": "high",
-"urgency": "soon",
-"notes": ""
-},
-{
-"cause": "White sweet-smelling smoke that lasts: coolant entering combustion (head gasket leak)",
-"probability": "medium",
-"severity": "high",
-"urgency": "immediate",
-"notes": ""
-},
-{
-"cause": "Black smoke: overly rich fuel mixture (fuel or sensor problems)",
-"probability": "medium",
-"severity": "medium",
-"urgency": "soon",
-"notes": ""
-}
-],
-"recommended_checks": [
-"Observe smoke color, smell, and when it appears (start-up, acceleration, idle).",
-"Check coolant and oil levels frequently if smoke is new.",
-"Avoid long trips until cause is identified."
-],
-"safety_warning": "Coolant or fuel-related smoke can quickly lead to engine damage or catalytic-converter failure. Stop driving if temperature rises or if power drops sharply."
-},
-{
-"id": "engine_ping_knock_accel",
-"title": "Pinging or Knocking Noise on Acceleration",
-"system": "engine",
-"category": "ENGINE — KNOCK",
-"symptom_short": "Pinging or knocking noise on acceleration",
-"symptom_patterns": [
-"pinging uphill",
-"spark knock",
-"rattling sound when accelerating"
-],
-"likely_causes": [
-{
-"cause": "Low octane fuel for the engine's requirement",
-"probability": "medium",
-"severity": "medium",
-"urgency": "soon",
-"notes": ""
-},
-{
-"cause": "Carbon buildup in combustion chamber",
-"probability": "medium",
-"severity": "medium",
-"urgency": "soon",
-"notes": ""
-},
-{
-"cause": "Faulty knock sensor or ignition timing issue",
-"probability": "medium",
-"severity": "high",
-"urgency": "soon",
-"notes": ""
-}
-],
-"recommended_checks": [
-"Note if noise is worse on hot days or under heavy load.",
-"Try one tank of higher-octane fuel if the car specifies premium.",
-"Scan for knock-sensor or timing-related fault codes."
-],
-"safety_warning": "Persistent heavy knocking can damage pistons and bearings. Avoid hard acceleration until the issue is resolved."
-},
-{
-"id": "engine_oil_light_flicker_idle",
-"title": "Oil Pressure Warning Light Flickers at Idle",
-"system": "engine",
-"category": "ENGINE — OIL PRESSURE",
-"symptom_short": "Oil pressure warning light flickers at idle but goes off with revs",
-"symptom_patterns": [
-"oil light flickers",
-"oil pressure low at idle",
-"oil light on when hot"
-],
-"likely_causes": [
-{
-"cause": "Low engine oil level or thin/old oil",
-"probability": "high",
-"severity": "high",
-"urgency": "immediate",
-"notes": ""
-},
-{
-"cause": "Worn engine bearings reducing oil pressure",
-"probability": "medium",
-"severity": "high",
-"urgency": "immediate",
-"notes": ""
-},
-{
-"cause": "Faulty oil pressure sensor (after confirming oil level & condition)",
-"probability": "medium",
-"severity": "medium",
-"urgency": "soon",
-"notes": ""
-}
-],
-"recommended_checks": [
-"Check engine oil level as soon as possible on level ground.",
-"Listen for ticking or knocking noises from engine when hot.",
-"Have mechanical oil pressure tested if light persists."
-],
-"safety_warning": "Driving with low oil pressure can destroy an engine quickly. If the light stays on solid, shut the engine off immediately."
-},
-{
-"id": "engine_cranks_no_start",
-"title": "Engine Cranks but Does Not Start",
-"system": "engine",
-"category": "ENGINE — NO START",
-"symptom_short": "Engine cranks strongly but does not start",
-"symptom_patterns": [
-"engine turns over but won't start",
-"cranks no start",
-"car cranks but never fires"
-],
-"likely_causes": [
-{
-"cause": "No fuel delivery (failed pump, relay, or clogged filter)",
-"probability": "medium",
-"severity": "high",
-"urgency": "soon",
-"notes": ""
-},
-{
-"cause": "No spark (failed crank sensor, ignition coil, or module)",
-"probability": "medium",
-"severity": "high",
-"urgency": "soon",
-"notes": ""
-},
-{
-"cause": "Security/immobilizer preventing start",
-"probability": "medium",
-"severity": "medium",
-"urgency": "normal",
-"notes": ""
-}
-],
-"recommended_checks": [
-"Note if there is fuel smell from exhaust after repeated cranking.",
-"Check if security light is flashing or message appears in cluster.",
-"Listen for fuel-pump priming sound when key is turned to ON."
-],
-"safety_warning": "Avoid extended cranking; it can flood the engine or overheat the starter and cables."
-},
-{
-"id": "engine_loud_knock_low_oil",
-"title": "Loud Knocking from Engine with Low Oil Level",
-"system": "engine",
-"category": "ENGINE — INTERNAL DAMAGE",
-"symptom_short": "Loud knocking from engine with low oil level",
-"symptom_patterns": [
-"loud rod knock",
-"deep knocking noise",
-"engine knocking gets worse with RPM"
-],
-"likely_causes": [
-{
-"cause": "Severe bearing damage from oil starvation",
-"probability": "high",
-"severity": "critical",
-"urgency": "immediate",
-"notes": ""
-}
-],
-"recommended_checks": [
-"Check oil level immediately and do not drive if extremely low or empty.",
-"Notice if knock started after oil-change neglect or leak.",
-"Tow vehicle to a shop; internal repair or engine replacement may be required."
-],
-"safety_warning": "Continuing to run a knocking engine can lead to catastrophic failure, seizure, or broken connecting rods exiting the engine block."
-},
-{
-"id": "engine_overheat_steam_white_smoke",
-"title": "Engine Overheat with Steam or White Vapor from Under Hood",
-"system": "cooling",
-"category": "COOLING — SEVERE OVERHEAT",
-"symptom_short": "Engine overheats and steam or white vapor comes from under hood",
-"symptom_patterns": [
-"steam from engine bay",
-"coolant boiling over",
-"white vapor under hood"
-],
-"likely_causes": [
-{
-"cause": "Major coolant leak or hose rupture",
-"probability": "high",
-"severity": "critical",
-"urgency": "immediate",
-"notes": ""
-},
-{
-"cause": "Radiator cap failure causing boil-over",
-"probability": "medium",
-"severity": "high",
-"urgency": "immediate",
-"notes": ""
-}
-],
-"recommended_checks": [
-"Safely pull over and shut engine off immediately.",
-"Do not open hood until steam subsides.",
-"Do not open radiator cap when hot; wait until fully cooled."
-],
-"safety_warning": "Severe overheating can cause head-gasket failure and engine damage within minutes. Towing is strongly recommended."
-},
-{
-"id": "hv_isolation_fault",
-"title": "High-Voltage Isolation Fault in Hybrid/EV",
-"system": "high_voltage",
-"category": "HIGH VOLTAGE — ISOLATION",
-"symptom_short": "Hybrid/EV shows high-voltage isolation fault or service HV system message",
-"symptom_patterns": [
-"isolation fault",
-"service high voltage system",
-"ev ready light off with hv warning"
-],
-"likely_causes": [
-{
-"cause": "Moisture intrusion into high-voltage components or wiring",
-"probability": "medium",
-"severity": "critical",
-"urgency": "immediate",
-"notes": ""
-},
-{
-"cause": "Insulation damage on HV cables or battery pack",
-"probability": "medium",
-"severity": "critical",
-"urgency": "immediate",
-"notes": ""
-}
-],
-"recommended_checks": [
-"Do not attempt to service high-voltage components yourself.",
-"Note if warning appears after heavy rain, flooding, or car wash.",
-"Have vehicle inspected by a qualified hybrid/EV technician."
-],
-"safety_warning": "High-voltage systems can be lethal. Only trained technicians with proper protective equipment should diagnose HV isolation issues."
-}
   {
-
-    "id": "transmission_harsh_shift",
-
-    "title": "Harsh or Jerky Shifts Between Gears",
-
-    "system": "transmission",
-
-    "category": "TRANSMISSION — SHIFT QUALITY",
-
-    "symptom_short": "Harsh, jerky, or delayed shifts between gears",
-
+    "id": "engine_rough_idle_shake",
+    "title": "Engine Rough Idle or Shaking When Stopped",
+    "system": "engine",
+    "category": "ENGINE — GENERAL",
+    "symptom_short": "Rough idle or shaking when stopped",
     "symptom_patterns": [
-
-      "hard shift",
-
-      "jerk when changing gears",
-
-      "bang into gear",
-
-      "transmission shifts rough"
-
+      "rough idle",
+      "shaking at stop",
+      "car vibrates in park",
+      "engine feels like it will stall"
     ],
-
     "likely_causes": [
-
       {
-
-        "cause": "Low or degraded transmission fluid",
-
+        "cause": "Dirty or failing spark plugs",
         "probability": "high",
-
-        "severity": "high",
-
-        "urgency": "soon",
-
-        "notes": "Especially common if fluid service has been neglected."
-
-      },
-
-      {
-
-        "cause": "Valve body or shift solenoid issues",
-
-        "probability": "medium",
-
-        "severity": "high",
-
-        "urgency": "soon",
-
-        "notes": "May trigger transmission-related fault codes."
-
-      },
-
-      {
-
-        "cause": "Outdated or corrupted transmission control software",
-
-        "probability": "medium",
-
         "severity": "medium",
-
-        "urgency": "normal",
-
-        "notes": "Some vehicles require TCM software updates."
-
-      }
-
-    ],
-
-    "recommended_checks": [
-
-      "Verify transmission fluid level and condition (color, smell).",
-
-      "Note if harsh shifts are worse when cold or after long drives.",
-
-      "Scan the transmission module for stored fault codes."
-
-    ],
-
-    "safety_warning": "Prolonged harsh shifting can accelerate internal wear and lead to expensive transmission failure."
-
-  },
-
-  {
-
-    "id": "transmission_slip_rpm_flare",
-
-    "title": "Engine RPM Flares but Vehicle Does Not Accelerate",
-
-    "system": "transmission",
-
-    "category": "TRANSMISSION — SLIP",
-
-    "symptom_short": "Engine revs up but speed increases slowly",
-
-    "symptom_patterns": [
-
-      "transmission slipping",
-
-      "rpm jumps but car slow",
-
-      "feels like clutch slipping",
-
-      "slip in automatic"
-
-    ],
-
-    "likely_causes": [
-
+        "urgency": "soon",
+        "notes": "Common on high-mileage engines or if maintenance is overdue."
+      },
       {
-
-        "cause": "Worn clutches or bands inside automatic transmission",
-
+        "cause": "Clogged fuel injector",
+        "probability": "medium",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": "May be worse when engine is cold."
+      },
+      {
+        "cause": "Vacuum leak (cracked hose or gasket)",
+        "probability": "medium",
+        "severity": "high",
+        "urgency": "soon",
+        "notes": "Can eventually trigger check-engine light and poor fuel economy."
+      }
+    ],
+    "recommended_checks": [
+      "Check maintenance history for last spark-plug change.",
+      "Listen for hissing sounds around intake hoses.",
+      "Scan for misfire or fuel-trim codes with an OBD-II scanner."
+    ],
+    "safety_warning": "Avoid hard acceleration until the misfire cause is identified. Severe misfires can damage the catalytic converter."
+  },
+  {
+    "id": "engine_check_light_flashing",
+    "title": "Flashing Check-Engine Light Under Load",
+    "system": "engine",
+    "category": "ENGINE — MISFIRE / IGNITION",
+    "symptom_short": "Flashing check-engine light under load",
+    "symptom_patterns": [
+      "check engine light flashing",
+      "engine light blinks when accelerating"
+    ],
+    "likely_causes": [
+      {
+        "cause": "Severe engine misfire",
         "probability": "high",
-
-        "severity": "critical",
-
+        "severity": "high",
         "urgency": "immediate",
-
-        "notes": ""
-
+        "notes": "Unburned fuel can overheat and destroy the catalytic converter."
       },
-
       {
-
-        "cause": "Low transmission fluid due to leak",
-
+        "cause": "Ignition coil failure",
         "probability": "medium",
-
         "severity": "high",
-
         "urgency": "immediate",
-
-        "notes": ""
-
-      },
-
-      {
-
-        "cause": "Failing torque converter",
-
-        "probability": "medium",
-
-        "severity": "high",
-
-        "urgency": "soon",
-
-        "notes": ""
-
+        "notes": "Often happens under heavy load or uphill driving."
       }
-
     ],
-
     "recommended_checks": [
-
-      "Check for red or brown fluid leaks under vehicle.",
-
-      "Note if slipping occurs only in certain gears or all the time.",
-
-      "Avoid towing or heavy acceleration until the issue is diagnosed."
-
+      "If the light is flashing, reduce speed and avoid hard acceleration.",
+      "If the flashing continues, safely pull over and shut off the engine.",
+      "Scan for misfire codes (e.g., P0300–P0306)."
     ],
-
-    "safety_warning": "Severe transmission slip can suddenly leave the car without drive, especially during passing or merging."
-
+    "safety_warning": "A flashing check-engine light usually means STOP DRIVING soon. Continuing to drive can cause very expensive damage."
   },
-
   {
-
-    "id": "transmission_no_reverse",
-
-    "title": "No Reverse Gear or Very Weak Reverse",
-
-    "system": "transmission",
-
-    "category": "TRANSMISSION — GEAR FAILURE",
-
-    "symptom_short": "Reverse gear does not engage or is very weak",
-
+    "id": "engine_hard_start_cold",
+    "title": "Hard Starting When Engine Is Cold",
+    "system": "engine",
+    "category": "ENGINE — STARTING",
+    "symptom_short": "Hard starting when engine is cold",
     "symptom_patterns": [
-
-      "no reverse",
-
-      "reverse not working",
-
-      "car will not move backward"
-
+      "hard to start in morning",
+      "takes long crank when cold",
+      "cold start problem"
     ],
-
     "likely_causes": [
-
       {
-
-        "cause": "Internal transmission damage to reverse clutch or gearset",
-
-        "probability": "high",
-
-        "severity": "high",
-
-        "urgency": "soon",
-
-        "notes": ""
-
-      },
-
-      {
-
-        "cause": "Shifter cable or linkage misadjustment",
-
+        "cause": "Weak battery or poor battery connections",
         "probability": "medium",
-
         "severity": "medium",
-
         "urgency": "soon",
-
         "notes": ""
-
-      }
-
-    ],
-
-    "recommended_checks": [
-
-      "Confirm that shifter indicator matches the actual gear position.",
-
-      "Note if reverse worked intermittently before failing completely.",
-
-      "Have transmission operation tested by a specialist."
-
-    ],
-
-    "safety_warning": "Lack of reverse gear can be dangerous in tight spaces or on slopes. Avoid parking where reverse is required to exit."
-
-  },
-
-  {
-
-    "id": "transmission_delay_into_drive",
-
-    "title": "Delay When Shifting into Drive or Reverse",
-
-    "system": "transmission",
-
-    "category": "TRANSMISSION — ENGAGEMENT DELAY",
-
-    "symptom_short": "Delay or hesitation when shifting from Park to Drive/Reverse",
-
-    "symptom_patterns": [
-
-      "delay into drive",
-
-      "slow to engage reverse",
-
-      "car hesitates before moving"
-
-    ],
-
-    "likely_causes": [
-
-      {
-
-        "cause": "Low or aerated transmission fluid",
-
-        "probability": "high",
-
-        "severity": "high",
-
-        "urgency": "soon",
-
-        "notes": ""
-
       },
-
       {
-
-        "cause": "Internal wear in clutch packs or seals",
-
+        "cause": "Failing coolant-temperature sensor",
         "probability": "medium",
-
-        "severity": "high",
-
-        "urgency": "soon",
-
-        "notes": ""
-
-      }
-
-    ],
-
-    "recommended_checks": [
-
-      "Check fluid level with manufacturer procedure.",
-
-      "Note if delay is worse cold or hot.",
-
-      "Listen for abnormal noises when gear finally engages."
-
-    ],
-
-    "safety_warning": "Long delays can precede more serious transmission failure. Avoid aggressive throttle when gear first engages."
-
-  },
-
-  {
-
-    "id": "awd_binding_tight_turns",
-
-    "title": "Binding or Hopping in Tight Turns (AWD/4x4)",
-
-    "system": "driveline",
-
-    "category": "AWD / 4x4 — BINDING",
-
-    "symptom_short": "Vehicle feels like it hops or binds on tight turns",
-
-    "symptom_patterns": [
-
-      "hopping on tight turn",
-
-      "binding in parking lot",
-
-      "driveline wind up",
-
-      "4x4 feels stuck when turning"
-
-    ],
-
-    "likely_causes": [
-
-      {
-
-        "cause": "Part-time 4x4 engaged on dry pavement",
-
-        "probability": "high",
-
         "severity": "medium",
-
+        "urgency": "soon",
+        "notes": ""
+      },
+      {
+        "cause": "Fuel system issue (weak pump or leaking injector)",
+        "probability": "medium",
+        "severity": "high",
+        "urgency": "soon",
+        "notes": ""
+      }
+    ],
+    "recommended_checks": [
+      "Check battery age and look for corrosion on terminals.",
+      "Notice if the problem is only on cold mornings or always.",
+      "Listen for fuel-pump prime sound when turning key to ON."
+    ],
+    "safety_warning": "If the engine cranks very slowly, avoid repeated attempts that overheat the starter and cables."
+  },
+  {
+    "id": "cooling_overheat_stop_go",
+    "title": "Engine Overheating in Traffic but OK at Highway Speed",
+    "system": "cooling",
+    "category": "COOLING — OVERHEAT",
+    "symptom_short": "Engine overheating in traffic but OK at highway speed",
+    "symptom_patterns": [
+      "overheats in traffic",
+      "temperature rises at stop",
+      "hot in city driving"
+    ],
+    "likely_causes": [
+      {
+        "cause": "Cooling fan not working (electric fan or clutch fan)",
+        "probability": "high",
+        "severity": "high",
         "urgency": "immediate",
-
-        "notes": "Many 4x4 systems are intended for loose surfaces only."
-
+        "notes": ""
       },
-
       {
-
-        "cause": "Worn or contaminated fluid in AWD coupling or differential",
-
+        "cause": "Restricted radiator fins (bugs, debris)",
         "probability": "medium",
-
         "severity": "medium",
-
         "urgency": "soon",
-
         "notes": ""
-
       }
-
     ],
-
     "recommended_checks": [
-
-      "Verify transfer case mode (2H, 4H, 4L, Auto).",
-
-      "Disengage 4x4 on dry pavement and re-test.",
-
-      "Service differential and transfer case fluids if due."
-
+      "With engine cool, visually check radiator and condenser for blockage.",
+      "With AC on and engine warm, verify if cooling fans turn on.",
+      "Watch temperature gauge; if it enters red zone, shut engine off safely."
     ],
-
-    "safety_warning": "Driving a part-time 4x4 on high-grip pavement can damage driveline components and affect handling."
-
+    "safety_warning": "Do not continue driving an overheating engine. Severe overheating can warp the cylinder head and cause head-gasket failure."
   },
-
   {
-
-    "id": "awd_service_4wd_light",
-
-    "title": "Service 4WD or AWD Warning",
-
-    "system": "driveline",
-
-    "category": "AWD / 4x4 — WARNING",
-
-    "symptom_short": "Service 4WD/AWD message or light",
-
+    "id": "cooling_overheat_highway",
+    "title": "Engine Overheating Mainly at Highway Speeds",
+    "system": "cooling",
+    "category": "COOLING — OVERHEAT",
+    "symptom_short": "Engine overheating mainly at highway speeds",
     "symptom_patterns": [
-
-      "service 4wd",
-
-      "awd disabled",
-
-      "4x4 light blinking",
-
-      "4wd not engaging"
-
+      "overheats on highway",
+      "runs hot at high speed",
+      "temperature climbs on long climbs"
     ],
-
     "likely_causes": [
-
       {
-
-        "cause": "Fault in transfer case motor, sensor, or control module",
-
-        "probability": "medium",
-
-        "severity": "medium",
-
-        "urgency": "soon",
-
-        "notes": ""
-
-      },
-
-      {
-
-        "cause": "Wheel-speed sensor issues affecting AWD control",
-
-        "probability": "medium",
-
-        "severity": "medium",
-
-        "urgency": "soon",
-
-        "notes": ""
-
-      }
-
-    ],
-
-    "recommended_checks": [
-
-      "Note if 4WD modes engage or if only 2WD is available.",
-
-      "Scan for drivetrain and ABS-related codes.",
-
-      "Avoid off-road conditions requiring 4x4 until repaired."
-
-    ],
-
-    "safety_warning": "Loss of AWD/4WD can reduce traction on snow, mud, or steep terrain. Plan driving accordingly."
-
-  },
-
-  {
-
-    "id": "diesel_dpf_regen_frequent",
-
-    "title": "Diesel DPF Regenerations Very Frequent",
-
-    "system": "engine",
-
-    "category": "DIESEL — DPF / EMISSIONS",
-
-    "symptom_short": "Diesel particulate filter (DPF) regenerations happen very often",
-
-    "symptom_patterns": [
-
-      "dpf regen often",
-
-      "filter regenerating frequently",
-
-      "diesel exhaust filter message",
-
-      "soot filter clogging"
-
-    ],
-
-    "likely_causes": [
-
-      {
-
-        "cause": "Short-trip driving that never allows full regeneration",
-
+        "cause": "Low coolant or coolant leak",
         "probability": "high",
-
-        "severity": "medium",
-
-        "urgency": "normal",
-
-        "notes": ""
-
-      },
-
-      {
-
-        "cause": "Driving with failing sensors (exhaust temperature, pressure) or injectors causing excess soot",
-
-        "probability": "medium",
-
         "severity": "high",
-
-        "urgency": "soon",
-
+        "urgency": "immediate",
         "notes": ""
-
-      }
-
-    ],
-
-    "recommended_checks": [
-
-      "Perform a continuous highway drive to allow complete regen if safe.",
-
-      "Check for diesel fault codes related to DPF or exhaust sensors.",
-
-      "Avoid interrupting regeneration cycles when possible."
-
-    ],
-
-    "safety_warning": "Ignoring DPF warnings can lead to restricted exhaust and limp mode, and may require expensive filter replacement."
-
-  },
-
-  {
-
-    "id": "diesel_glow_plug_light_flash",
-
-    "title": "Glow Plug Light Flashing While Driving",
-
-    "system": "engine",
-
-    "category": "DIESEL — WARNING",
-
-    "symptom_short": "Diesel glow plug or coil-like light flashes",
-
-    "symptom_patterns": [
-
-      "glow plug light flashing",
-
-      "coil light blinking",
-
-      "diesel warning symbol"
-
-    ],
-
-    "likely_causes": [
-
+      },
       {
-
-        "cause": "Injection or emissions system fault on diesel engine",
-
-        "probability": "high",
-
+        "cause": "Partially clogged radiator",
+        "probability": "medium",
         "severity": "high",
-
         "urgency": "soon",
-
         "notes": ""
-
-      }
-
-    ],
-
-    "recommended_checks": [
-
-      "Note any loss of power or limp mode.",
-
-      "Scan engine for diesel-specific fault codes.",
-
-      "Avoid heavy loads or towing until diagnosed."
-
-    ],
-
-    "safety_warning": "Some diesel faults can cause severe internal or emissions-system damage if ignored."
-
-  },
-
-  {
-
-    "id": "hybrid_battery_reduced_ev_range",
-
-    "title": "Hybrid/EV Shows Noticeably Reduced Electric Range",
-
-    "system": "high_voltage",
-
-    "category": "HYBRID / EV — RANGE",
-
-    "symptom_short": "Hybrid or EV has much lower EV range than usual",
-
-    "symptom_patterns": [
-
-      "ev range dropped",
-
-      "battery not holding charge",
-
-      "short electric range"
-
-    ],
-
-    "likely_causes": [
-
-      {
-
-        "cause": "Battery capacity loss due to age and cycles",
-
-        "probability": "high",
-
-        "severity": "medium",
-
-        "urgency": "normal",
-
-        "notes": ""
-
       },
-
       {
-
-        "cause": "Cold weather reducing effective capacity",
-
+        "cause": "Failing water pump",
         "probability": "medium",
-
-        "severity": "low",
-
-        "urgency": "normal",
-
-        "notes": ""
-
-      },
-
-      {
-
-        "cause": "Tire pressure low or rolling resistance increased",
-
-        "probability": "medium",
-
-        "severity": "low",
-
-        "urgency": "normal",
-
-        "notes": ""
-
-      }
-
-    ],
-
-    "recommended_checks": [
-
-      "Compare range under similar temperature and driving style.",
-
-      "Check tire pressures and alignment.",
-
-      "Review manufacturer battery warranty and capacity guidelines."
-
-    ],
-
-    "safety_warning": "Range loss itself is not usually unsafe, but drivers should avoid planning trips at the edge of remaining range."
-
-  },
-
-  {
-
-    "id": "hybrid_engine_races_low_speed",
-
-    "title": "Hybrid Engine Revs High at Low Speed",
-
-    "system": "high_voltage",
-
-    "category": "HYBRID — DRIVE FEEL",
-
-    "symptom_short": "Engine races or sounds loud even at low vehicle speeds",
-
-    "symptom_patterns": [
-
-      "hybrid engine loud",
-
-      "engine revs high but car slow",
-
-      "eCVT drone noise"
-
-    ],
-
-    "likely_causes": [
-
-      {
-
-        "cause": "Normal behavior of some eCVT-based hybrids under heavy acceleration",
-
-        "probability": "medium",
-
-        "severity": "low",
-
-        "urgency": "normal",
-
-        "notes": "Engine speed may not match road speed like traditional transmissions."
-
-      },
-
-      {
-
-        "cause": "Battery charge low so system relies heavily on engine",
-
-        "probability": "medium",
-
-        "severity": "low",
-
-        "urgency": "normal",
-
-        "notes": ""
-
-      }
-
-    ],
-
-    "recommended_checks": [
-
-      "Notice if behavior is mostly when accelerating uphill or with low battery.",
-
-      "Compare to owner's manual description of typical hybrid operation.",
-
-      "Check for warning lights if noise is accompanied by poor performance."
-
-    ],
-
-    "safety_warning": "If loud engine operation is accompanied by warning lights or severe loss of power, the vehicle should be inspected."
-
-  },
-
-  {
-
-    "id": "hvac_blower_only_high_speed",
-
-    "title": "Blower Fan Works Only on Highest Speed",
-
-    "system": "hvac",
-
-    "category": "HVAC — BLOWER CONTROL",
-
-    "symptom_short": "HVAC fan only works on max speed",
-
-    "symptom_patterns": [
-
-      "ac fan only high",
-
-      "blower only works on 4",
-
-      "no fan on low settings"
-
-    ],
-
-    "likely_causes": [
-
-      {
-
-        "cause": "Failed blower motor resistor or control module",
-
-        "probability": "high",
-
-        "severity": "low",
-
-        "urgency": "normal",
-
-        "notes": ""
-
-      }
-
-    ],
-
-    "recommended_checks": [
-
-      "Test all blower speed positions.",
-
-      "Note if issue started suddenly or after moisture exposure.",
-
-      "Inspect resistor pack area for corrosion if accessible."
-
-    ],
-
-    "safety_warning": "Limited blower control mainly affects comfort and defogging. In very humid or cold weather, poor defrost can affect visibility."
-
-  },
-
-  {
-
-    "id": "hvac_musty_odor_startup",
-
-    "title": "Musty or Moldy Smell When AC First Turns On",
-
-    "system": "hvac",
-
-    "category": "HVAC — ODOR",
-
-    "symptom_short": "Musty odor from vents at AC startup",
-
-    "symptom_patterns": [
-
-      "mold smell ac",
-
-      "musty air vents",
-
-      "bad smell when ac on"
-
-    ],
-
-    "likely_causes": [
-
-      {
-
-        "cause": "Mold or bacteria growth on evaporator core due to moisture",
-
-        "probability": "high",
-
-        "severity": "low",
-
-        "urgency": "normal",
-
-        "notes": ""
-
-      }
-
-    ],
-
-    "recommended_checks": [
-
-      "Run fan for a few minutes without AC before shutting vehicle off to dry the system.",
-
-      "Replace cabin air filter if dirty.",
-
-      "Use HVAC-specific cleaner sprayed into intake as directed."
-
-    ],
-
-    "safety_warning": "While usually not immediately dangerous, prolonged exposure to moldy air can irritate sensitive occupants."
-
-  },
-
-  {
-
-    "id": "window_slow_or_stuck",
-
-    "title": "Power Window Moves Very Slowly or Gets Stuck",
-
-    "system": "body",
-
-    "category": "BODY — WINDOWS",
-
-    "symptom_short": "Power window slow, jerky, or stuck",
-
-    "symptom_patterns": [
-
-      "window goes up slow",
-
-      "window stuck half way",
-
-      "window struggles to move"
-
-    ],
-
-    "likely_causes": [
-
-      {
-
-        "cause": "Dry or contaminated window guides and channels",
-
-        "probability": "high",
-
-        "severity": "low",
-
-        "urgency": "normal",
-
-        "notes": ""
-
-      },
-
-      {
-
-        "cause": "Failing window regulator or motor",
-
-        "probability": "medium",
-
-        "severity": "medium",
-
-        "urgency": "soon",
-
-        "notes": ""
-
-      }
-
-    ],
-
-    "recommended_checks": [
-
-      "Avoid forcing the switch repeatedly if glass barely moves.",
-
-      "Inspect rubber channels for debris or damage.",
-
-      "Consider silicone-safe lubricant on window guides."
-
-    ],
-
-    "safety_warning": "Windows stuck open can be a security and weather issue, but usually not a driving safety risk unless they affect visibility."
-
-  },
-
-  {
-
-    "id": "door_lock_intermittent",
-
-    "title": "Power Door Lock Works Intermittently",
-
-    "system": "body",
-
-    "category": "BODY — LOCKS",
-
-    "symptom_short": "Door lock sometimes does not lock/unlock with remote or switch",
-
-    "symptom_patterns": [
-
-      "door lock intermittent",
-
-      "one door won't lock sometimes",
-
-      "remote lock misses one door"
-
-    ],
-
-    "likely_causes": [
-
-      {
-
-        "cause": "Weak door lock actuator in affected door",
-
-        "probability": "high",
-
-        "severity": "low",
-
-        "urgency": "normal",
-
-        "notes": ""
-
-      },
-
-      {
-
-        "cause": "Broken or corroded wiring in door jamb flex harness",
-
-        "probability": "medium",
-
-        "severity": "medium",
-
-        "urgency": "soon",
-
-        "notes": ""
-
-      }
-
-    ],
-
-    "recommended_checks": [
-
-      "Note which specific door fails most often.",
-
-      "Listen for faint clicking inside door when command is sent.",
-
-      "Check for other electrical issues in same door (window, mirror)."
-
-    ],
-
-    "safety_warning": "A door that fails to lock is a security risk and may be critical for child safety seats."
-
-  },
-
-  {
-
-    "id": "keyless_no_start_key_not_detected",
-
-    "title": "Push-Button Start Says Key Not Detected",
-
-    "system": "electrical",
-
-    "category": "ELECTRICAL — KEYLESS ENTRY",
-
-    "symptom_short": "Keyless system does not detect key for starting",
-
-    "symptom_patterns": [
-
-      "key not detected",
-
-      "car won't start push button",
-
-      "have to hold key near button"
-
-    ],
-
-    "likely_causes": [
-
-      {
-
-        "cause": "Weak key fob battery",
-
-        "probability": "high",
-
-        "severity": "low",
-
-        "urgency": "normal",
-
-        "notes": ""
-
-      },
-
-      {
-
-        "cause": "Radio interference or antenna issue near keyless receiver",
-
-        "probability": "medium",
-
-        "severity": "medium",
-
-        "urgency": "soon",
-
-        "notes": ""
-
-      }
-
-    ],
-
-    "recommended_checks": [
-
-      "Try starting with key placed in the backup location described in the manual.",
-
-      "Replace key fob battery if old.",
-
-      "Check if problem only occurs in certain parking locations (possible interference)."
-
-    ],
-
-    "safety_warning": "If 'key not detected' appears while driving, the vehicle usually continues running but may not restart after shutoff."
-
-  },
-
-  {
-
-    "id": "adas_front_sensor_blocked",
-
-    "title": "Front Collision or Radar Sensor Blocked",
-
-    "system": "adas",
-
-    "category": "ADAS — SENSOR BLOCK",
-
-    "symptom_short": "Collision warning or adaptive cruise temporarily unavailable",
-
-    "symptom_patterns": [
-
-      "front sensor blocked",
-
-      "adaptive cruise unavailable",
-
-      "collision warning off",
-
-      "front camera obstructed"
-
-    ],
-
-    "likely_causes": [
-
-      {
-
-        "cause": "Dirt, ice, snow, or stickers covering radar or camera area",
-
-        "probability": "high",
-
-        "severity": "medium",
-
-        "urgency": "normal",
-
-        "notes": ""
-
-      },
-
-      {
-
-        "cause": "Misaligned radar or camera after minor collision or windshield replacement",
-
-        "probability": "medium",
-
         "severity": "high",
-
-        "urgency": "soon",
-
+        "urgency": "immediate",
         "notes": ""
-
       }
-
     ],
-
     "recommended_checks": [
-
-      "Clean front emblem, bumper area, and windshield where sensors are located.",
-
-      "Note if warning appears mainly in heavy rain, fog, or snow.",
-
-      "After body or glass repair, ensure ADAS calibration was performed."
-
+      "With engine cool, check coolant level in reservoir.",
+      "Look for dried coolant traces around hoses, radiator, and water pump.",
+      "Observe for sweet smell or steam from engine bay."
     ],
-
-    "safety_warning": "Do not rely on ADAS when a sensor-block message is active. Drive as if the assistance systems are not available."
-
+    "safety_warning": "Never open the radiator cap while the engine is hot. Hot coolant can spray and cause serious burns."
   },
-
   {
-
-    "id": "adas_lane_keep_unavailable",
-
-    "title": "Lane Keep Assist or Lane Departure Not Available",
-
-    "system": "adas",
-
-    "category": "ADAS — LANE SYSTEM",
-
-    "symptom_short": "Lane-keeping system off or unavailable",
-
+    "id": "cooling_no_heat_cabin",
+    "title": "No Heat from Cabin Vents but Engine Warm",
+    "system": "cooling",
+    "category": "COOLING — HEATER",
+    "symptom_short": "No heat from cabin vents but engine reaches normal temp",
     "symptom_patterns": [
-
-      "lane assist unavailable",
-
-      "lane departure not working",
-
-      "no lane lines in display"
-
+      "no heat inside",
+      "heater blows cold air",
+      "heater not working"
     ],
-
     "likely_causes": [
-
       {
-
-        "cause": "Camera unable to detect lane markings due to poor paint, darkness, or heavy rain",
-
+        "cause": "Low coolant level",
         "probability": "high",
-
-        "severity": "low",
-
-        "urgency": "normal",
-
+        "severity": "medium",
+        "urgency": "soon",
         "notes": ""
-
       },
-
       {
-
-        "cause": "Dirty or obstructed windshield in camera area",
-
+        "cause": "Clogged heater core",
         "probability": "medium",
-
-        "severity": "low",
-
-        "urgency": "normal",
-
+        "severity": "medium",
+        "urgency": "soon",
         "notes": ""
-
+      },
+      {
+        "cause": "Air trapped in cooling system",
+        "probability": "medium",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": ""
       }
-
     ],
-
     "recommended_checks": [
-
-      "Clean exterior glass around the front camera.",
-
-      "Test on a well-marked highway in good daylight.",
-
-      "Check for warning messages that indicate a fault versus temporary condition."
-
+      "Check coolant level when engine is cold.",
+      "Note if windshield fogs with sweet smell (may indicate heater-core leak).",
+      "Check if both heater hoses in engine bay feel warm when engine is hot."
     ],
-
-    "safety_warning": "Lane systems are driver aids only. Never rely on them to keep the lane if warning messages indicate they are unavailable."
-
+    "safety_warning": "Coolant leaks that affect the heater can eventually lead to engine overheating if ignored."
   },
-
   {
-
-    "id": "fuel_surge_steady_speed",
-
-    "title": "Surging or Bucking at Steady Speed",
-
-    "system": "engine",
-
-    "category": "ENGINE — DRIVEABILITY",
-
-    "symptom_short": "Vehicle surges or bucks when cruising at steady speed",
-
+    "id": "brakes_squeal_low_speed",
+    "title": "High-Pitched Squeal When Braking at Low Speed",
+    "system": "brakes",
+    "category": "BRAKES — NOISE",
+    "symptom_short": "High-pitched squeal when braking at low speed",
     "symptom_patterns": [
-
-      "car surges on highway",
-
-      "bucking at constant throttle",
-
-      "feels like on-off power"
-
+      "brake squeal",
+      "squeaking brakes",
+      "high pitched noise while braking"
     ],
-
     "likely_causes": [
-
       {
-
-        "cause": "Fuel delivery irregularities (pump, filter, or pressure regulator)",
-
-        "probability": "medium",
-
+        "cause": "Brake wear indicator contacting rotor (pads near end of life)",
+        "probability": "high",
         "severity": "medium",
-
         "urgency": "soon",
-
         "notes": ""
-
       },
-
       {
-
-        "cause": "Ignition coil or plug breaking down under light load",
-
+        "cause": "Glazed pads or rotors",
         "probability": "medium",
-
         "severity": "medium",
-
         "urgency": "soon",
-
         "notes": ""
-
       },
-
       {
-
-        "cause": "Throttle body or EGR valve issues",
-
+        "cause": "Dust or rust on rotor surface after sitting",
         "probability": "medium",
-
-        "severity": "medium",
-
-        "urgency": "soon",
-
+        "severity": "low",
+        "urgency": "normal",
         "notes": ""
-
       }
-
     ],
-
     "recommended_checks": [
-
-      "Note if problem happens only at certain speeds or when cruise control is on.",
-
-      "Check for recent misfire or fuel-system fault codes.",
-
-      "Observe if problem is worse on hills or with AC on."
-
+      "Notice if noise happens only first few stops of the day or always.",
+      "Check for visible pad thickness through wheel spokes if possible.",
+      "Have a technician inspect pad and rotor condition."
     ],
-
-    "safety_warning": "Severe surging can affect control, especially on slippery roads. Reduce speed and avoid aggressive maneuvers."
-
+    "safety_warning": "If the squeal turns into a grinding or scraping sound, stop driving — you may be down to metal-on-metal brakes."
   },
-
   {
-
-    "id": "stall_at_stop_after_drive",
-
-    "title": "Engine Stalls When Coming to a Stop",
-
-    "system": "engine",
-
-    "category": "ENGINE — STALL AT IDLE",
-
-    "symptom_short": "Engine dies when slowing or stopping",
-
+    "id": "brakes_grinding",
+    "title": "Grinding or Scraping Noise When Braking",
+    "system": "brakes",
+    "category": "BRAKES — SEVERE WEAR",
+    "symptom_short": "Grinding or scraping noise when braking",
     "symptom_patterns": [
-
-      "car stalls at stop",
-
-      "dies when coming to a light",
-
-      "engine shuts off when braking"
-
+      "brakes grinding",
+      "scraping metal when braking",
+      "very loud brake noise"
     ],
-
     "likely_causes": [
-
       {
-
-        "cause": "Dirty throttle body or idle air control issue",
-
-        "probability": "medium",
-
-        "severity": "medium",
-
-        "urgency": "soon",
-
-        "notes": ""
-
-      },
-
-      {
-
-        "cause": "Torque converter clutch staying locked (automatic transmission)",
-
-        "probability": "medium",
-
+        "cause": "Pads worn through to metal backing plate",
+        "probability": "high",
         "severity": "high",
-
-        "urgency": "soon",
-
+        "urgency": "immediate",
         "notes": ""
-
       },
-
       {
-
-        "cause": "Vacuum leak or inconsistent fuel delivery",
-
+        "cause": "Stuck caliper or hardware",
         "probability": "medium",
-
-        "severity": "medium",
-
-        "urgency": "soon",
-
+        "severity": "high",
+        "urgency": "immediate",
         "notes": ""
-
       }
-
     ],
-
     "recommended_checks": [
-
-      "Note if stall happens only after highway driving or always.",
-
-      "Observe if RPM drops suddenly just before the stall.",
-
-      "Scan for transmission and engine fault codes."
-
+      "Avoid driving except to move the car to a safe location.",
+      "Have brakes inspected as soon as possible.",
+      "Check for brake warning lights on dashboard."
     ],
-
-    "safety_warning": "Stalling while turning or in traffic can be dangerous. If frequent, have the vehicle inspected promptly."
-
+    "safety_warning": "Driving with grinding brakes is unsafe and can cause rotor failure and loss of braking ability."
   },
-
   {
-
-    "id": "evap_small_leak_gas_cap",
-
-    "title": "Check Engine Light for Small Evap Leak (Loose Gas Cap)",
-
-    "system": "fuel_system",
-
-    "category": "FUEL — EVAP SYSTEM",
-
-    "symptom_short": "Check-engine light with small leak evap code",
-
+    "id": "brakes_pedal_soft_spongy",
+    "title": "Soft or Spongy Brake Pedal",
+    "system": "brakes",
+    "category": "BRAKES — HYDRAULIC",
+    "symptom_short": "Soft or spongy brake pedal",
     "symptom_patterns": [
-
-      "small evap leak",
-
-      "p0442",
-
-      "gas cap loose code"
-
+      "soft brake pedal",
+      "pedal goes to floor",
+      "spongy brakes"
     ],
-
     "likely_causes": [
-
       {
-
-        "cause": "Loose or worn gas cap seal",
-
+        "cause": "Air in brake lines",
         "probability": "high",
-
-        "severity": "low",
-
-        "urgency": "normal",
-
+        "severity": "high",
+        "urgency": "immediate",
         "notes": ""
-
       },
-
       {
-
-        "cause": "Small leak in evap hoses or canister",
-
+        "cause": "Brake fluid leak",
         "probability": "medium",
-
-        "severity": "medium",
-
-        "urgency": "soon",
-
+        "severity": "high",
+        "urgency": "immediate",
         "notes": ""
-
+      },
+      {
+        "cause": "Failing master cylinder",
+        "probability": "medium",
+        "severity": "high",
+        "urgency": "immediate",
+        "notes": ""
       }
-
     ],
-
     "recommended_checks": [
-
-      "Tighten gas cap until it clicks several times.",
-
-      "Inspect cap seal for cracks or damage.",
-
-      "After tightening or replacing cap, drive several days to see if light clears."
-
+      "Press and hold the brake pedal at a stop; note if it slowly sinks.",
+      "Look for fluid leaks near wheels or under brake master cylinder.",
+      "Do not continue driving if braking ability is reduced."
     ],
-
-    "safety_warning": "Evap leaks rarely create driving issues but can cause failed emissions tests and fuel vapor release to the atmosphere."
-
+    "safety_warning": "A soft pedal can mean imminent brake failure. Tow the vehicle rather than driving it."
   },
-
   {
-
-    "id": "tire_inside_edge_wear",
-
-    "title": "Tires Wearing Heavily on Inside Edge",
-
+    "id": "abs_light_on",
+    "title": "ABS Warning Light Stays On",
+    "system": "brakes",
+    "category": "BRAKES — ABS",
+    "symptom_short": "ABS warning light stays on",
+    "symptom_patterns": [
+      "abs light on",
+      "anti lock brake light",
+      "abs fault"
+    ],
+    "likely_causes": [
+      {
+        "cause": "Faulty wheel speed sensor",
+        "probability": "high",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": ""
+      },
+      {
+        "cause": "Damaged tone ring or wiring",
+        "probability": "medium",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": ""
+      },
+      {
+        "cause": "ABS module fault",
+        "probability": "medium",
+        "severity": "high",
+        "urgency": "soon",
+        "notes": ""
+      }
+    ],
+    "recommended_checks": [
+      "Note if ABS activates too early or not at all on hard braking.",
+      "Scan ABS system for codes using capable scanner.",
+      "Inspect wheel-speed sensor wiring near wheels for damage."
+    ],
+    "safety_warning": "Conventional braking usually still works, but anti-lock function may be disabled. Increase following distance on wet or slippery roads."
+  },
+  {
+    "id": "tpms_light_on",
+    "title": "Tire Pressure Warning (TPMS) Light On",
     "system": "wheels_tires",
-
-    "category": "WHEELS & TIRES — WEAR PATTERN",
-
-    "symptom_short": "Inside edge of tires worn faster than rest",
-
+    "category": "WHEELS & TIRES — TPMS",
+    "symptom_short": "Tire pressure warning (TPMS) light on",
     "symptom_patterns": [
-
-      "inside tire wear",
-
-      "camber wear",
-
-      "inner edge bald"
-
+      "tire pressure light",
+      "tpms warning",
+      "low tire symbol"
     ],
-
     "likely_causes": [
-
       {
-
-        "cause": "Incorrect camber or toe alignment",
-
+        "cause": "Low tire pressure in one or more tires",
         "probability": "high",
-
         "severity": "medium",
-
-        "urgency": "soon",
-
+        "urgency": "immediate",
         "notes": ""
-
       },
-
       {
-
-        "cause": "Worn suspension bushings or ball joints",
-
+        "cause": "TPMS sensor battery low or failed",
         "probability": "medium",
-
-        "severity": "high",
-
-        "urgency": "soon",
-
+        "severity": "low",
+        "urgency": "normal",
         "notes": ""
-
       }
-
     ],
-
     "recommended_checks": [
-
-      "Run hand across tread to feel for sharp edges or cupping.",
-
-      "Check all four tires; front and rear may show different patterns.",
-
-      "Schedule alignment and suspension inspection before installing new tires."
-
+      "Check tire pressure with a gauge; fill to door-jamb specification.",
+      "Inspect tires for nails, screws, or visible damage.",
+      "If pressures are OK but light stays on, have sensors checked."
     ],
-
-    "safety_warning": "Severe edge wear can expose cords and risk blowout even when the rest of the tread looks acceptable."
-
+    "safety_warning": "Driving on an under-inflated tire can cause overheating, poor handling, and potential blowout."
   },
-
   {
-
-    "id": "wheel_metallic_scrape_constant",
-
-    "title": "Constant Metallic Scraping from One Wheel",
-
+    "id": "tires_vibration_highway",
+    "title": "Vibration at Highway Speeds",
     "system": "wheels_tires",
-
-    "category": "WHEELS & TIRES — NOISE",
-
-    "symptom_short": "Metal scraping sound that changes with speed",
-
+    "category": "WHEELS & TIRES — VIBRATION",
+    "symptom_short": "Vibration in steering wheel or seat at highway speeds",
     "symptom_patterns": [
-
-      "metal scrape wheel",
-
-      "scratching noise while moving",
-
-      "shield rubbing rotor sound"
-
+      "vibration at 60 mph",
+      "steering wheel shakes",
+      "car shakes on highway"
     ],
-
     "likely_causes": [
-
       {
-
-        "cause": "Bent or rusted backing plate touching rotor",
-
+        "cause": "Wheel balance issue",
         "probability": "high",
-
         "severity": "medium",
-
         "urgency": "soon",
-
         "notes": ""
-
       },
-
       {
-
-        "cause": "Small stone caught between rotor and shield",
-
+        "cause": "Uneven tire wear or belt separation",
         "probability": "medium",
-
+        "severity": "high",
+        "urgency": "immediate",
+        "notes": ""
+      },
+      {
+        "cause": "Bent wheel or suspension component",
+        "probability": "medium",
+        "severity": "high",
+        "urgency": "soon",
+        "notes": ""
+      }
+    ],
+    "recommended_checks": [
+      "Note the speed range where vibration is worst.",
+      "Check tires visually for bulges, flat spots, or exposed cords.",
+      "Have wheels balanced and alignment checked."
+    ],
+    "safety_warning": "Severe tire defects can lead to blowouts at speed. Reduce speed and inspect tires if vibration is strong or sudden."
+  },
+  {
+    "id": "suspension_clunk_over_bumps",
+    "title": "Clunking Noise Over Bumps at Low Speed",
+    "system": "suspension",
+    "category": "SUSPENSION — NOISE",
+    "symptom_short": "Clunking noise over bumps at low speed",
+    "symptom_patterns": [
+      "clunk over bumps",
+      "knocking sound front end",
+      "rattle when going over potholes"
+    ],
+    "likely_causes": [
+      {
+        "cause": "Worn stabilizer bar (sway bar) links or bushings",
+        "probability": "high",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": ""
+      },
+      {
+        "cause": "Loose strut mount or worn strut",
+        "probability": "medium",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": ""
+      },
+      {
+        "cause": "Control arm bushing wear",
+        "probability": "medium",
+        "severity": "high",
+        "urgency": "soon",
+        "notes": ""
+      }
+    ],
+    "recommended_checks": [
+      "Note if the sound is from front, rear, or one side only.",
+      "Check if noise is louder when turning and going over bumps.",
+      "Have suspension inspected on a lift."
+    ],
+    "safety_warning": "Severely worn suspension parts can affect steering control, especially during emergency maneuvers."
+  },
+  {
+    "id": "suspension_squeak_slow_speed",
+    "title": "Squeaking Suspension at Low Speed",
+    "system": "suspension",
+    "category": "SUSPENSION — NOISE",
+    "symptom_short": "Squeaking suspension at low speed or entering driveway",
+    "symptom_patterns": [
+      "squeak over bumps",
+      "creaking when turning into driveway",
+      "suspension squeaking"
+    ],
+    "likely_causes": [
+      {
+        "cause": "Dry control-arm or sway-bar bushings",
+        "probability": "high",
         "severity": "low",
-
         "urgency": "normal",
-
         "notes": ""
-
+      },
+      {
+        "cause": "Worn ball joints",
+        "probability": "medium",
+        "severity": "high",
+        "urgency": "soon",
+        "notes": ""
       }
-
     ],
-
     "recommended_checks": [
-
-      "Note if sound changes when turning slightly left or right.",
-
-      "Inspect inside of wheel and brake area with light if safe.",
-
-      "Have brake assembly checked if noise persists."
-
+      "Notice if sound changes with temperature or rain.",
+      "Check if squeak occurs while steering, braking, or only with body motion.",
+      "Schedule suspension inspection if persistent."
     ],
-
-    "safety_warning": "While often minor, some scraping noises can mask more serious brake issues and should not be ignored."
-
+    "safety_warning": "While often not immediately dangerous, squeaks can be an early sign of wear that later affects steering safety."
   },
-
   {
-
-    "id": "lighting_headlight_one_side_out",
-
-    "title": "One Headlight Out But Others OK",
-
+    "id": "steering_pull_one_side",
+    "title": "Car Pulls to One Side While Driving Straight",
+    "system": "steering",
+    "category": "STEERING — HANDLING",
+    "symptom_short": "Car pulls to one side while driving straight",
+    "symptom_patterns": [
+      "pulls to right",
+      "pulls to left",
+      "car drifts to one side"
+    ],
+    "likely_causes": [
+      {
+        "cause": "Incorrect wheel alignment",
+        "probability": "high",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": ""
+      },
+      {
+        "cause": "Uneven tire pressure",
+        "probability": "medium",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": ""
+      },
+      {
+        "cause": "Brake caliper sticking on one wheel",
+        "probability": "medium",
+        "severity": "high",
+        "urgency": "immediate",
+        "notes": ""
+      }
+    ],
+    "recommended_checks": [
+      "Check tire pressures and adjust to spec.",
+      "Notice if wheel or brake on one side feels hotter after driving.",
+      "Schedule alignment check if pull persists."
+    ],
+    "safety_warning": "Severe pulling, especially under braking, can affect your ability to keep the car in its lane."
+  },
+  {
+    "id": "steering_loose_play",
+    "title": "Loose Feeling or Play in Steering Wheel",
+    "system": "steering",
+    "category": "STEERING — LOOSENESS",
+    "symptom_short": "Loose feeling or play in steering wheel",
+    "symptom_patterns": [
+      "loose steering",
+      "excessive play steering wheel",
+      "wandering on highway"
+    ],
+    "likely_causes": [
+      {
+        "cause": "Worn tie-rod ends or steering rack components",
+        "probability": "high",
+        "severity": "high",
+        "urgency": "soon",
+        "notes": ""
+      },
+      {
+        "cause": "Worn steering shaft joints",
+        "probability": "medium",
+        "severity": "high",
+        "urgency": "soon",
+        "notes": ""
+      },
+      {
+        "cause": "Improper alignment or worn suspension bushings",
+        "probability": "medium",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": ""
+      }
+    ],
+    "recommended_checks": [
+      "Note if steering response feels delayed when turning.",
+      "Observe if car wanders and needs constant correction on highway.",
+      "Have steering and suspension checked on a lift."
+    ],
+    "safety_warning": "Serious steering looseness is a safety hazard and can lead to loss of control, especially at speed."
+  },
+  {
+    "id": "driveline_whine_with_speed",
+    "title": "Whining Noise That Changes with Vehicle Speed",
+    "system": "driveline",
+    "category": "DRIVELINE — NOISE",
+    "symptom_short": "Whining noise that changes with vehicle speed",
+    "symptom_patterns": [
+      "whining while driving",
+      "gear whine",
+      "rear end noise"
+    ],
+    "likely_causes": [
+      {
+        "cause": "Worn differential or gearset",
+        "probability": "medium",
+        "severity": "high",
+        "urgency": "soon",
+        "notes": ""
+      },
+      {
+        "cause": "Wheel bearing wear",
+        "probability": "medium",
+        "severity": "high",
+        "urgency": "soon",
+        "notes": ""
+      },
+      {
+        "cause": "Tire pattern noise",
+        "probability": "medium",
+        "severity": "medium",
+        "urgency": "normal",
+        "notes": ""
+      }
+    ],
+    "recommended_checks": [
+      "Note if noise changes when turning left or right.",
+      "Observe if pitch changes with throttle on/off or only with speed.",
+      "Have wheel bearings and differential fluid checked."
+    ],
+    "safety_warning": "Severely worn bearings or gears can overheat and seize, potentially causing loss of control."
+  },
+  {
+    "id": "driveline_click_turning",
+    "title": "Clicking or Popping When Turning at Low Speed",
+    "system": "driveline",
+    "category": "DRIVELINE — CV JOINT",
+    "symptom_short": "Clicking or popping when turning at low speed",
+    "symptom_patterns": [
+      "clicking when turning",
+      "popping noise in turns",
+      "cv joint noise"
+    ],
+    "likely_causes": [
+      {
+        "cause": "Outer CV joint wear on front-wheel-drive or AWD",
+        "probability": "high",
+        "severity": "high",
+        "urgency": "soon",
+        "notes": ""
+      },
+      {
+        "cause": "Loose axle nut or suspension component",
+        "probability": "medium",
+        "severity": "high",
+        "urgency": "immediate",
+        "notes": ""
+      }
+    ],
+    "recommended_checks": [
+      "Notice if sound is louder on full lock turns and during acceleration.",
+      "Determine if noise comes from one front corner.",
+      "Inspect CV boots for tears or missing grease."
+    ],
+    "safety_warning": "Severely worn CV joints can eventually fail and leave the vehicle without drive."
+  },
+  {
+    "id": "electrical_battery_light_on",
+    "title": "Battery/Charging Light On While Driving",
     "system": "electrical",
-
-    "category": "LIGHTING — EXTERIOR",
-
-    "symptom_short": "Single headlight not working",
-
+    "category": "ELECTRICAL — CHARGING",
+    "symptom_short": "Battery/charging light on while driving",
     "symptom_patterns": [
-
-      "one headlight out",
-
-      "driver headlight not working",
-
-      "bulb out front"
-
+      "battery light on",
+      "alternator light",
+      "red battery icon"
     ],
-
     "likely_causes": [
-
       {
-
-        "cause": "Burned-out bulb or LED module failure",
-
+        "cause": "Alternator not charging properly",
         "probability": "high",
-
-        "severity": "medium",
-
-        "urgency": "soon",
-
+        "severity": "high",
+        "urgency": "immediate",
         "notes": ""
-
       },
-
       {
-
-        "cause": "Connector or wiring corrosion at that headlamp",
-
+        "cause": "Loose or slipping serpentine belt",
         "probability": "medium",
-
-        "severity": "medium",
-
-        "urgency": "soon",
-
+        "severity": "high",
+        "urgency": "immediate",
         "notes": ""
-
+      },
+      {
+        "cause": "Corroded battery terminals or cables",
+        "probability": "medium",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": ""
       }
-
     ],
-
     "recommended_checks": [
-
-      "Confirm high beam vs low beam operation on each side.",
-
-      "Inspect connector behind headlamp (if accessible) for corrosion.",
-
-      "For LED systems, check for TSBs (technical bulletins) related to early failure."
-
+      "Turn off non-essential electrical loads (AC, heated seats, rear defrost).",
+      "Notice if lights dim or blower slows down.",
+      "Have charging system tested as soon as possible."
     ],
-
-    "safety_warning": "Driving with one headlight reduces visibility and can confuse other drivers. Repair as soon as feasible."
-
+    "safety_warning": "Once the battery is depleted, the engine may stall suddenly. Avoid long trips and night driving until fixed."
   },
-
   {
-
-    "id": "lighting_water_in_tail_light",
-
-    "title": "Water or Condensation Inside Tail Lamp",
-
-    "system": "body",
-
-    "category": "LIGHTING — MOISTURE",
-
-    "symptom_short": "Water or heavy fog inside rear light cluster",
-
+    "id": "electrical_lights_dim_at_idle",
+    "title": "Headlights Dim at Idle but Brighten When Revving",
+    "system": "electrical",
+    "category": "ELECTRICAL — CHARGING",
+    "symptom_short": "Headlights dim at idle but brighten when revving",
     "symptom_patterns": [
-
-      "water in tail light",
-
-      "condensation rear lamp",
-
-      "foggy tail light"
-
+      "lights dim at idle",
+      "headlights brighten when revving",
+      "voltage low at stop"
     ],
-
     "likely_causes": [
-
       {
-
-        "cause": "Failed lamp housing seal or crack in lens",
-
-        "probability": "high",
-
-        "severity": "medium",
-
-        "urgency": "soon",
-
-        "notes": ""
-
-      }
-
-    ],
-
-    "recommended_checks": [
-
-      "Look for visible cracks or gaps around lamp edges.",
-
-      "Check if moisture appears mainly after rain or car wash.",
-
-      "Ensure bulbs and sockets are not corroded."
-
-    ],
-
-    "safety_warning": "Water intrusion can corrode contacts and eventually cause brake or signal light failure, which is a safety issue."
-
-  },
-
-  {
-
-    "id": "ev_not_charging_home",
-
-    "title": "EV Not Charging Properly at Home",
-
-    "system": "high_voltage",
-
-    "category": "EV — CHARGING",
-
-    "symptom_short": "EV fails to start or complete home charging session",
-
-    "symptom_patterns": [
-
-      "ev won't charge at home",
-
-      "charging stops after few minutes",
-
-      "charge fault on wall charger"
-
-    ],
-
-    "likely_causes": [
-
-      {
-
-        "cause": "Fault or misconfiguration in home EVSE (wall charger) or outlet",
-
+        "cause": "Weak alternator output at low RPM",
         "probability": "medium",
-
         "severity": "medium",
-
         "urgency": "soon",
-
         "notes": ""
-
       },
-
       {
-
-        "cause": "Charge port or cable contamination (dirt, corrosion, ice)",
-
+        "cause": "High electrical load at idle (AC, defrost, audio)",
         "probability": "medium",
-
-        "severity": "medium",
-
-        "urgency": "soon",
-
-        "notes": ""
-
-      },
-
-      {
-
-        "cause": "Vehicle charge settings (schedule, limit) not matching user expectation",
-
-        "probability": "medium",
-
         "severity": "low",
-
         "urgency": "normal",
-
         "notes": ""
-
+      },
+      {
+        "cause": "Loose or corroded grounds",
+        "probability": "medium",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": ""
       }
-
     ],
-
     "recommended_checks": [
-
-      "Check for warning lights or messages on both car and charger.",
-
-      "Test charging at a different location (public station) if possible.",
-
-      "Inspect charge port and connector for debris or signs of damage."
-
+      "Observe if dimming is worse with AC or rear defrost on.",
+      "Check battery age and condition.",
+      "Ask for charging-system and ground-circuit inspection."
     ],
-
-    "safety_warning": "Do not attempt to repair high-voltage or EVSE wiring yourself. Use qualified electricians and follow local electrical codes."
-  }
+    "safety_warning": "Severe dimming or flickering can precede alternator failure, which may stall the engine while driving."
+  },
   {
-
-    "id": "alternator_ac_ripple_high",
-
-    "title": "Alternator AC Ripple Damaging Electronics",
-
+    "id": "starter_click_no_crank",
+    "title": "Clicking, Engine Does Not Crank",
     "system": "electrical",
-
-    "category": "CHARGING SYSTEM — ADVANCED",
-
-    "symptom_short": "Lights flicker, modules reset, battery light may flicker",
-
+    "category": "ELECTRICAL — STARTING",
+    "symptom_short": "Single click or rapid clicking, engine does not crank",
     "symptom_patterns": [
-
-      "lights flicker while driving",
-
-      "modules resetting randomly",
-
-      "voltage unstable with load",
-
-      "alternator ripple issue"
-
+      "just clicking no start",
+      "car clicks but won't start",
+      "rapid click sound from engine bay"
     ],
-
     "likely_causes": [
-
       {
-
-        "cause": "Alternator diode failure causing high AC ripple on DC system",
-
+        "cause": "Weak or discharged battery",
         "probability": "high",
-
-        "severity": "critical",
-
-        "urgency": "immediate",
-
-        "notes": "AC ripple above ~0.3V can damage ECUs, TCMs, BCMs, coils and sensors."
-
-      },
-
-      {
-
-        "cause": "Loose alternator ground or power cable adding noise",
-
-        "probability": "medium",
-
         "severity": "medium",
-
-        "urgency": "soon",
-
+        "urgency": "immediate",
         "notes": ""
-
+      },
+      {
+        "cause": "Loose or corroded battery terminals",
+        "probability": "high",
+        "severity": "medium",
+        "urgency": "immediate",
+        "notes": ""
+      },
+      {
+        "cause": "Failing starter motor or solenoid",
+        "probability": "medium",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": ""
       }
-
     ],
-
     "recommended_checks": [
-
-      "Measure alternator AC ripple with a meter set to AC volts (should be typically under 0.05–0.1V).",
-
-      "Check alternator output cable and grounds for corrosion or loose connections.",
-
-      "Inspect charging system wiring for damaged insulation or poor repairs."
-
+      "Check if interior lights are dim or go out when trying to start.",
+      "Inspect battery terminals for white/green corrosion.",
+      "Note if problem is worse after car sits overnight."
     ],
-
-    "safety_warning": "Driving with high AC ripple can slowly destroy sensitive electronics and ignition components; repair as soon as possible."
-
+    "safety_warning": "Repeated attempts to crank with a weak battery can overheat cables and the starter. Avoid cranking for more than 10 seconds at a time."
   },
-
   {
-
-    "id": "parasitic_draw_advanced",
-
-    "title": "Advanced Parasitic Draw — Battery Dies Overnight",
-
+    "id": "electrical_parasitic_draw_overnight",
+    "title": "Battery Repeatedly Dies After Sitting Overnight",
     "system": "electrical",
-
-    "category": "BATTERY & POWER — PARASITIC",
-
-    "symptom_short": "Battery repeatedly dead after parking for hours",
-
+    "category": "ELECTRICAL — PARASITIC DRAW",
+    "symptom_short": "Battery repeatedly dies after sitting overnight",
     "symptom_patterns": [
-
-      "battery dead every morning",
-
-      "needs jump start daily",
-
-      "car drains battery while parked",
-
-      "parasitic draw suspected"
-
+      "battery dead in morning",
+      "needs jump start every day",
+      "car sits and battery drains"
     ],
-
     "likely_causes": [
-
       {
-
-        "cause": "Module or accessory staying awake (stuck relay, aftermarket alarm, audio amp, telematics unit)",
-
+        "cause": "Parasitic electrical draw from module, light, or accessory staying on",
         "probability": "high",
-
-        "severity": "high",
-
-        "urgency": "soon",
-
-        "notes": ""
-
-      },
-
-      {
-
-        "cause": "Body control module not entering sleep mode due to network or sensor issue",
-
-        "probability": "medium",
-
-        "severity": "high",
-
-        "urgency": "urgent",
-
-        "notes": ""
-
-      },
-
-      {
-
-        "cause": "Old battery that can no longer tolerate normal small draws",
-
-        "probability": "medium",
-
         "severity": "medium",
-
         "urgency": "soon",
-
-        "notes": ""
-
-      }
-
-    ],
-
-    "recommended_checks": [
-
-      "Measure key-off current draw after modules should be asleep (typically < 50 mA on most vehicles).",
-
-      "Pull fuses one by one while monitoring draw to isolate the problematic circuit.",
-
-      "Check trunk, glovebox, and courtesy lights to ensure they fully turn off.",
-
-      "Load-test the battery to confirm it can still hold a charge."
-
-    ],
-
-    "safety_warning": "High parasitic draw can destroy a new battery in days and leave the driver stranded repeatedly."
-
-  },
-
-  {
-
-    "id": "can_bus_network_failure",
-
-    "title": "CAN Bus Network Failure — Multiple Modules Affected",
-
-    "system": "network",
-
-    "category": "CAN BUS — ADVANCED DIAGNOSTICS",
-
-    "symptom_short": "Multiple warning lights, communication errors, random failures",
-
-    "symptom_patterns": [
-
-      "many lights on dash at once",
-
-      "no communication with some modules",
-
-      "speedometer drops out randomly",
-
-      "transmission and ABS faults together",
-
-      "can bus error"
-
-    ],
-
-    "likely_causes": [
-
-      {
-
-        "cause": "CAN high or CAN low wire shorted to ground or power",
-
-        "probability": "high",
-
-        "severity": "critical",
-
-        "urgency": "urgent",
-
-        "notes": ""
-
+        "notes": "Common causes include glovebox, trunk lights, aftermarket alarms, or radios."
       },
-
       {
-
-        "cause": "Failed module pulling down the CAN network",
-
+        "cause": "Battery at end of life and unable to hold charge",
         "probability": "medium",
-
-        "severity": "high",
-
+        "severity": "medium",
         "urgency": "soon",
-
-        "notes": ""
-
-      },
-
-      {
-
-        "cause": "Water intrusion or corrosion in harness connectors or junction blocks",
-
-        "probability": "medium",
-
-        "severity": "high",
-
-        "urgency": "soon",
-
-        "notes": ""
-
+        "notes": "Batteries typically last 3–5 years depending on climate."
       }
-
     ],
-
     "recommended_checks": [
-
-      "Measure CAN bus resistance with the system powered down — should be ~60 ohms across CAN high and CAN low.",
-
-      "Use wiring diagrams to locate bus splice points and check for corrosion or water.",
-
-      "Unplug suspect modules one by one while monitoring network behavior to find the module pulling the bus down."
-
+      "Check battery age and have it load-tested.",
+      "After shutting car off, verify that all interior and trunk lights go out.",
+      "Have a technician measure key-off current draw with an ammeter."
     ],
-
-    "safety_warning": "CAN bus failures can disable ABS, stability control, airbags, transmission control and other critical systems, severely affecting safety."
-
+    "safety_warning": "Frequent jump-starting can damage electronics and leave you stranded in unsafe locations."
   },
-
   {
-
-    "id": "ecu_power_loss_bumps",
-
-    "title": "ECU Power Loss on Bumps — Random Engine Cut Out",
-
+    "id": "electrical_shutdown_while_driving",
+    "title": "Engine Suddenly Shuts Off While Driving",
     "system": "electrical",
-
-    "category": "ENGINE CONTROL — POWER / GROUND",
-
-    "symptom_short": "Engine shuts off randomly, often over bumps, then restarts",
-
+    "category": "ELECTRICAL — STALLING",
+    "symptom_short": "Engine suddenly shuts off while driving, then may restart",
     "symptom_patterns": [
-
-      "car dies when hitting bumps",
-
-      "engine cuts out randomly and comes back",
-
-      "loss of power like key turned off",
-
-      "intermittent ecu power"
-
+      "car died while driving",
+      "engine shut off then restarted",
+      "sudden stall no warning"
     ],
-
     "likely_causes": [
-
       {
-
-        "cause": "Loose ECU power or ground connector/terminal",
-
-        "probability": "high",
-
-        "severity": "critical",
-
+        "cause": "Intermittent crankshaft or camshaft position sensor failure",
+        "probability": "medium",
+        "severity": "high",
         "urgency": "immediate",
-
-        "notes": ""
-
+        "notes": "Often stalls when hot and may restart after cooling."
       },
-
       {
-
-        "cause": "Failing main relay or ECM relay with heat-related or vibration-related failure",
-
+        "cause": "Main power or ground connection loose (battery or engine ground strap)",
         "probability": "medium",
-
         "severity": "high",
-
-        "urgency": "soon",
-
-        "notes": ""
-
-      },
-
-      {
-
-        "cause": "Loose battery or main power cable feeding ECU/under-hood fuse box",
-
-        "probability": "medium",
-
-        "severity": "high",
-
         "urgency": "immediate",
-
-        "notes": ""
-
-      }
-
-    ],
-
-    "recommended_checks": [
-
-      "With engine idling in a safe area, gently tap ECU and fuse box to see if engine stumbles.",
-
-      "Check voltage drop across ECU grounds with engine running (should be very low, ideally < 0.1V).",
-
-      "Inspect connectors for corrosion, bent pins, or poor terminal tension."
-
-    ],
-
-    "safety_warning": "Sudden engine shutdown at speed causes loss of power steering and brake assist, which is extremely dangerous; issue must be addressed immediately."
-
-  },
-
-  {
-
-    "id": "ground_strap_failure",
-
-    "title": "Critical Engine/Chassis Ground Strap Failure",
-
-    "system": "electrical",
-
-    "category": "GROUNDS — ADVANCED",
-
-    "symptom_short": "Random electrical problems and sensor errors across systems",
-
-    "symptom_patterns": [
-
-      "dim lights and weird electrical issues",
-
-      "multiple sensor codes with no pattern",
-
-      "rpm or voltage readings unstable",
-
-      "shifting issues plus electrical glitches"
-
-    ],
-
-    "likely_causes": [
-
-      {
-
-        "cause": "Corroded or broken ground strap between engine and chassis",
-
-        "probability": "high",
-
-        "severity": "high",
-
-        "urgency": "urgent",
-
-        "notes": ""
-
+        "notes": "Can also cause multiple warning lights and random resets."
       },
-
       {
-
-        "cause": "Loose or contaminated battery negative terminal",
-
-        "probability": "medium",
-
-        "severity": "medium",
-
-        "urgency": "soon",
-
-        "notes": ""
-
-      }
-
-    ],
-
-    "recommended_checks": [
-
-      "Measure resistance between engine block and battery negative; it should be very low.",
-
-      "Inspect ground straps visually for broken strands, corrosion, or missing bolts.",
-
-      "Perform voltage drop tests on ground circuits during cranking and with heavy loads on."
-
-    ],
-
-    "safety_warning": "Bad grounds can cause ECU damage, random shutdowns, and unpredictable behavior of safety systems."
-
-  },
-
-  {
-
-    "id": "crank_cam_correlation_error",
-
-    "title": "Crankshaft/Camshaft Correlation Error — Timing Concern",
-
-    "system": "engine",
-
-    "category": "TIMING — ADVANCED",
-
-    "symptom_short": "Hard starting, rough idle, correlation codes like P0016–P0017",
-
-    "symptom_patterns": [
-
-      "hard start with timing codes",
-
-      "rough idle and p0016",
-
-      "cam crank correlation fault",
-
-      "timing chain stretch suspected"
-
-    ],
-
-    "likely_causes": [
-
-      {
-
-        "cause": "Timing chain stretch or wear causing cam and crank to drift out of spec",
-
-        "probability": "high",
-
-        "severity": "high",
-
-        "urgency": "urgent",
-
-        "notes": "Common on engines with extended oil change intervals."
-
-      },
-
-      {
-
-        "cause": "Failed or weak camshaft or crankshaft position sensor",
-
-        "probability": "medium",
-
-        "severity": "high",
-
-        "urgency": "soon",
-
-        "notes": ""
-
-      }
-
-    ],
-
-    "recommended_checks": [
-
-      "Check live data for cam/crank synchronization at different RPMs.",
-
-      "Use scan tool or scope to inspect cam and crank signal relationship.",
-
-      "Inspect mechanical timing marks and chain or belt slack where access allows."
-
-    ],
-
-    "safety_warning": "Driving with correlation issues can lead to severe engine damage if timing jumps further, especially on interference engines."
-
-  },
-
-  {
-
-    "id": "fuel_pump_control_module_advanced",
-
-    "title": "Fuel Pump Control Module (FPDM) Failure",
-
-    "system": "fuel_system",
-
-    "category": "FUEL DELIVERY — ADVANCED",
-
-    "symptom_short": "Long crank, stalls, power loss, unstable fuel pressure",
-
-    "symptom_patterns": [
-
-      "engine loses power randomly",
-
-      "long crank then starts",
-
-      "fuel pressure drops under load",
-
-      "fpdm failure suspected"
-
-    ],
-
-    "likely_causes": [
-
-      {
-
-        "cause": "Fuel pump control module overheating or failing internally",
-
-        "probability": "high",
-
-        "severity": "high",
-
-        "urgency": "urgent",
-
-        "notes": ""
-
-      },
-
-      {
-
-        "cause": "Corroded ground or wiring to the fuel pump module",
-
-        "probability": "medium",
-
-        "severity": "medium",
-
-        "urgency": "soon",
-
-        "notes": ""
-
-      }
-
-    ],
-
-    "recommended_checks": [
-
-      "Monitor fuel pressure while driving and note drops during hesitation.",
-
-      "Tap the fuel pump module lightly (if accessible) to see if symptom changes.",
-
-      "Inspect module housing and connectors for moisture or corrosion."
-
-    ],
-
-    "safety_warning": "Sudden fuel pressure loss can cause the engine to stall in traffic; treat as a safety-critical issue."
-
-  },
-
-  {
-
-    "id": "high_pressure_fuel_system_fault",
-
-    "title": "High-Pressure Fuel System Fault (GDI Engines)",
-
-    "system": "fuel_system",
-
-    "category": "FUEL DELIVERY — HIGH PRESSURE",
-
-    "symptom_short": "Loss of power at high RPM/load, misfires, long crank",
-
-    "symptom_patterns": [
-
-      "gdi engine low power under boost",
-
-      "misfire at high rpm only",
-
-      "fuel rail pressure too low",
-
-      "hpfp failure suspected"
-
-    ],
-
-    "likely_causes": [
-
-      {
-
-        "cause": "Failing high-pressure fuel pump (HPFP)",
-
-        "probability": "medium",
-
-        "severity": "high",
-
-        "urgency": "urgent",
-
-        "notes": "Some HPFP failures shed metal particles that contaminate the entire system."
-
-      },
-
-      {
-
-        "cause": "Faulty high-pressure fuel rail sensor",
-
-        "probability": "medium",
-
-        "severity": "high",
-
-        "urgency": "urgent",
-
-        "notes": ""
-
-      }
-
-    ],
-
-    "recommended_checks": [
-
-      "Monitor commanded vs actual fuel rail pressure under load.",
-
-      "Inspect fuel for metallic debris where applicable.",
-
-      "Perform injector balance or leak-down tests as recommended by manufacturer."
-
-    ],
-
-    "safety_warning": "Low rail pressure on GDI engines can cause lean operation and potential engine damage; do not ignore under-load misfire or power loss."
-
-  },
-
-  {
-
-    "id": "o2_sensor_slow_response_pro",
-
-    "title": "Slow Oxygen Sensor Response — Fuel Trim Issues",
-
-    "system": "engine",
-
-    "category": "FUEL CONTROL — O2 / AF SENSORS",
-
-    "symptom_short": "Poor fuel economy, unstable idle, fluctuating trims",
-
-    "symptom_patterns": [
-
-      "poor mpg with no obvious reason",
-
-      "fuel trims swing slowly",
-
-      "o2 sensor slow code",
-
-      "rich lean fluctuation"
-
-    ],
-
-    "likely_causes": [
-
-      {
-
-        "cause": "Aging oxygen sensor with slow switching response",
-
-        "probability": "high",
-
-        "severity": "medium",
-
-        "urgency": "soon",
-
-        "notes": ""
-
-      },
-
-      {
-
-        "cause": "Small exhaust leak before O2 sensor causing false readings",
-
-        "probability": "medium",
-
-        "severity": "medium",
-
-        "urgency": "soon",
-
-        "notes": ""
-
-      }
-
-    ],
-
-    "recommended_checks": [
-
-      "View upstream O2 sensor waveform; healthy sensors switch rapidly between rich and lean.",
-
-      "Inspect exhaust manifold and flex sections for leaks.",
-
-      "Check long-term fuel trims for chronic rich or lean conditions."
-
-    ],
-
-    "safety_warning": "Slow O2 response can over time stress the catalytic converter and increase emissions and fuel consumption."
-
-  },
-
-  {
-
-    "id": "knock_sensor_false_knock",
-
-    "title": "False Knock Detection — Power Reduced",
-
-    "system": "engine",
-
-    "category": "IGNITION / KNOCK CONTROL",
-
-    "symptom_short": "Engine power reduced, timing pulled, no real knock",
-
-    "symptom_patterns": [
-
-      "reduced power no obvious misfire",
-
-      "knock sensor code but no noise",
-
-      "engine feels held back",
-
-      "false knock suspected"
-
-    ],
-
-    "likely_causes": [
-
-      {
-
-        "cause": "Loose knock sensor or damaged wiring causing noise pickup",
-
-        "probability": "high",
-
-        "severity": "medium",
-
-        "urgency": "soon",
-
-        "notes": ""
-
-      },
-
-      {
-
-        "cause": "Excessive engine vibration or mounts transmitting noise as knock",
-
-        "probability": "medium",
-
-        "severity": "medium",
-
-        "urgency": "soon",
-
-        "notes": ""
-
-      },
-
-      {
-
-        "cause": "Carbon buildup causing real but low-level knock even with normal driving",
-
-        "probability": "medium",
-
-        "severity": "medium",
-
-        "urgency": "soon",
-
-        "notes": ""
-
-      }
-
-    ],
-
-    "recommended_checks": [
-
-      "Verify knock sensor torque to factory spec.",
-
-      "Inspect engine mounts and accessories for abnormal vibration.",
-
-      "Review timing advance and knock retard data while driving."
-
-    ],
-
-    "safety_warning": "While false knock mostly reduces performance, ignoring real knock can be dangerous for the engine. Confirm root cause before aggressive driving."
-
-  },
-
-  {
-
-    "id": "maf_conflict_advanced",
-
-    "title": "MAF/Load Conflict — Hesitation and Stalling",
-
-    "system": "engine",
-
-    "category": "AIR / LOAD CALCULATION",
-
-    "symptom_short": "Hesitation, stalling at idle, inconsistent throttle response",
-
-    "symptom_patterns": [
-
-      "maf sensor code with vacuum leak",
-
-      "rpm hunts at idle",
-
-      "car stalls when stopping after cleaning maf",
-
-      "load reading does not match reality"
-
-    ],
-
-    "likely_causes": [
-
-      {
-
-        "cause": "Dirty or failing mass airflow (MAF) sensor",
-
-        "probability": "high",
-
-        "severity": "medium",
-
-        "urgency": "soon",
-
-        "notes": ""
-
-      },
-
-      {
-
-        "cause": "Vacuum leak causing airflow not to match MAF reading",
-
-        "probability": "medium",
-
-        "severity": "medium",
-
-        "urgency": "soon",
-
-        "notes": ""
-
-      },
-
-      {
-
-        "cause": "Incorrect aftermarket air intake or oiled filter contaminating sensor",
-
-        "probability": "medium",
-
-        "severity": "medium",
-
-        "urgency": "normal",
-
-        "notes": ""
-
-      }
-
-    ],
-
-    "recommended_checks": [
-
-      "Check fuel trims (high positive trims often indicate vacuum leak).",
-
-      "Inspect intake boots and PCV hoses for cracks or loose clamps.",
-
-      "Clean MAF sensor only with appropriate MAF cleaner; avoid touching the element."
-
-    ],
-
-    "safety_warning": "Serious lean conditions from MAF/vacuum issues can cause misfire and overheating of engine components and catalytic converters."
-
-  },
-
-  {
-
-    "id": "bcm_body_control_fault",
-
-    "title": "Body Control Module (BCM) Fault — Random Body Electrical Issues",
-
-    "system": "body",
-
-    "category": "MODULES — BCM",
-
-    "symptom_short": "Random window, lock, light, wiper or chime issues",
-
-    "symptom_patterns": [
-
-      "windows and locks act on their own",
-
-      "lights flicker but charging system ok",
-
-      "random dinging and chimes",
-
-      "bcm failure suspected"
-
-    ],
-
-    "likely_causes": [
-
-      {
-
-        "cause": "Internal BCM failure due to solder cracks or component damage",
-
-        "probability": "medium",
-
-        "severity": "high",
-
-        "urgency": "urgent",
-
-        "notes": ""
-
-      },
-
-      {
-
-        "cause": "Water intrusion into BCM or connectors",
-
-        "probability": "medium",
-
-        "severity": "high",
-
-        "urgency": "soon",
-
-        "notes": ""
-
-      },
-
-      {
-
-        "cause": "Broken wires in door or pillar harness affecting BCM inputs",
-
-        "probability": "medium",
-
-        "severity": "medium",
-
-        "urgency": "soon",
-
-        "notes": ""
-
-      }
-
-    ],
-
-    "recommended_checks": [
-
-      "Scan BCM for multiple unrelated input/output fault codes.",
-
-      "Inspect under-dash and kick panel areas for moisture or corrosion.",
-
-      "Check door boot wiring for broken conductors especially on high-use doors."
-
-    ],
-
-    "safety_warning": "BCM failure can in some vehicles affect immobilizer, lighting, wipers and even starting; it can be both a safety and security issue."
-
-  },
-
-  {
-
-    "id": "evap_large_leak_advanced",
-
-    "title": "EVAP System Large Leak — Hard Start After Refuel",
-
-    "system": "fuel_system",
-
-    "category": "EVAP — ADVANCED",
-
-    "symptom_short": "Check-engine light with EVAP large leak and rough start after fueling",
-
-    "symptom_patterns": [
-
-      "p0455 large evap leak",
-
-      "hard start after filling gas",
-
-      "fuel smell and evap code",
-
-      "purge valve stuck open"
-
-    ],
-
-    "likely_causes": [
-
-      {
-
-        "cause": "EVAP purge valve stuck open allowing raw vapor into intake",
-
-        "probability": "medium",
-
-        "severity": "medium",
-
-        "urgency": "soon",
-
-        "notes": ""
-
-      },
-
-      {
-
-        "cause": "Loose, missing, or damaged gas cap",
-
-        "probability": "high",
-
-        "severity": "low",
-
-        "urgency": "normal",
-
-        "notes": ""
-
-      },
-
-      {
-
-        "cause": "Cracked EVAP hoses or charcoal canister",
-
-        "probability": "medium",
-
-        "severity": "medium",
-
-        "urgency": "soon",
-
-        "notes": ""
-
-      }
-
-    ],
-
-    "recommended_checks": [
-
-      "Ensure gas cap is tight and seal in good condition.",
-
-      "Perform EVAP smoke test to locate large leaks.",
-
-      "Test purge valve operation with scan tool or vacuum source."
-
-    ],
-
-    "safety_warning": "EVAP leaks are rarely an immediate driving hazard but can cause rough running, failed emissions tests, and increased fuel vapor emissions."
-
-  },
-
-  {
-
-    "id": "high_voltage_isolation_fault",
-
-    "title": "High-Voltage Isolation Fault on Hybrid/EV",
-
-    "system": "high_voltage",
-
-    "category": "HV SYSTEM — SAFETY CRITICAL",
-
-    "symptom_short": "High-voltage isolation or \"Service HV system\" warning",
-
-    "symptom_patterns": [
-
-      "hv isolation fault",
-
-      "service high voltage system",
-
-      "isolation resistance low",
-
-      "ev/hybrid electric drive disabled"
-
-    ],
-
-    "likely_causes": [
-
-      {
-
-        "cause": "Moisture or coolant intrusion into high-voltage components or wiring",
-
-        "probability": "high",
-
-        "severity": "critical",
-
-        "urgency": "immediate",
-
-        "notes": "Often affects inverters, junction boxes, battery packs, or cooling plates."
-
-      },
-
-      {
-
-        "cause": "Damaged orange high-voltage cable insulation or chafed wiring to chassis",
-
-        "probability": "medium",
-
-        "severity": "critical",
-
-        "urgency": "immediate",
-
-        "notes": ""
-
-      }
-
-    ],
-
-    "recommended_checks": [
-
-      "Do NOT touch orange high-voltage components or wiring.",
-
-      "Have an HV-qualified technician measure insulation resistance to ground.",
-
-      "Check for service bulletins related to coolant leakage into HV components."
-
-    ],
-
-    "safety_warning": "High-voltage isolation faults are extremely dangerous; only HV-certified personnel should diagnose and repair them."
-
-  },
-
-  {
-
-    "id": "electrical_burning_smell_cabin",
-
-    "title": "Electrical Burning Smell Inside Cabin",
-
-    "system": "electrical",
-
-    "category": "INTERIOR — ELECTRICAL OVERHEAT",
-
-    "symptom_short": "Strong burning plastic or electrical odor inside the car",
-
-    "symptom_patterns": [
-
-      "burning plastic smell under dash",
-
-      "electrical burning near vents",
-
-      "smell like wires burning"
-
-    ],
-
-    "likely_causes": [
-
-      {
-
-        "cause": "Overheated wiring, connector, or blower-motor resistor under dash",
-
-        "probability": "medium",
-
-        "severity": "critical",
-
-        "urgency": "immediate",
-
-        "notes": "Often related to HVAC fan speeds or accessory loads."
-
-      },
-
-      {
-
-        "cause": "Short circuit in seat heaters, window circuits, or steering column wiring",
-
+        "cause": "Failing engine control module power relay",
         "probability": "low",
-
         "severity": "high",
-
-        "urgency": "immediate",
-
+        "urgency": "soon",
         "notes": ""
-
       }
-
     ],
-
     "recommended_checks": [
-
-      "Immediately turn off non-essential electrical accessories including seat heaters, HVAC, and chargers.",
-
-      "Look (from a safe distance) for visible smoke or melted plastics.",
-
-      "Have wiring inspected urgently; do not continue operating circuits that trigger the smell."
-
+      "Notice if dash lights also go out when the engine dies or stay on.",
+      "Gently wiggle battery cables (engine off) and inspect for corrosion or looseness.",
+      "Scan for stored fault codes even if lights are currently off."
     ],
-
-    "safety_warning": "Strong electrical burning smell or visible smoke can precede an interior fire; stop the vehicle safely, shut it off, and exit if the smell is intense."
-
+    "safety_warning": "Sudden loss of power steering and brake assist can make the car difficult to control. Pull over safely as soon as it is safe if the engine stalls repeatedly."
+  },
+  {
+    "id": "electrical_smell_burning_inside_cabin",
+    "title": "Strong Burning Plastic or Electrical Smell Inside Cabin",
+    "system": "electrical",
+    "category": "ELECTRICAL — OVERHEAT / SMELL",
+    "symptom_short": "Strong burning plastic or electrical smell inside cabin",
+    "symptom_patterns": [
+      "burning plastic smell in cabin",
+      "electrical burning odor dashboard",
+      "smell like wires burning"
+    ],
+    "likely_causes": [
+      {
+        "cause": "Overheated wiring, connector, or blower-motor resistor",
+        "probability": "medium",
+        "severity": "high",
+        "urgency": "immediate",
+        "notes": "Often related to HVAC fan speeds or aftermarket accessories."
+      },
+      {
+        "cause": "Short circuit in seat heaters, window circuits, or steering column",
+        "probability": "low",
+        "severity": "high",
+        "urgency": "immediate",
+        "notes": ""
+      }
+    ],
+    "recommended_checks": [
+      "Turn off recently used accessories (seat heaters, rear defrost, phone chargers) and see if smell changes.",
+      "Do not ignore visible smoke or melted plastic around switches or vents.",
+      "Have wiring inspected before continuing to use the affected circuit."
+    ],
+    "safety_warning": "A strong electrical burning smell or visible smoke can precede an interior fire. Safely stop the vehicle, turn it off, and exit if the smell is intense or smoke is visible."
+  },
+  {
+    "id": "electrical_main_fuse_blows_repeatedly",
+    "title": "Main Fuse or Large Fuse Blows Repeatedly",
+    "system": "electrical",
+    "category": "ELECTRICAL — HIGH CURRENT",
+    "symptom_short": "Main fuse or large fuse blows repeatedly",
+    "symptom_patterns": [
+      "main fuse keeps blowing",
+      "big fuse under hood blown",
+      "replace fuse and it blows again"
+    ],
+    "likely_causes": [
+      {
+        "cause": "Direct short to ground in a high-current circuit (starter, alternator, or main power feed)",
+        "probability": "medium",
+        "severity": "high",
+        "urgency": "immediate",
+        "notes": "Replacing the fuse without fixing the underlying problem can cause further damage."
+      }
+    ],
+    "recommended_checks": [
+      "Do not keep installing larger or multiple fuses; this is unsafe.",
+      "Note which systems stop working when the fuse blows (charging, interior power, etc.).",
+      "Have a qualified technician diagnose the short with proper equipment."
+    ],
+    "safety_warning": "High-current shorts can overheat wiring and start a fire. The vehicle should not be driven until the cause is found and repaired."
+  },
+  {
+    "id": "hvac_ac_warm_air",
+    "title": "AC Blows Warm Air Instead of Cold",
+    "system": "hvac",
+    "category": "HVAC — A/C PERFORMANCE",
+    "symptom_short": "AC blows warm or only slightly cool air",
+    "symptom_patterns": [
+      "ac not cold",
+      "air conditioner warm",
+      "ac weak cooling"
+    ],
+    "likely_causes": [
+      {
+        "cause": "Low refrigerant charge from small leak",
+        "probability": "high",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": ""
+      },
+      {
+        "cause": "Condenser or radiator fans not operating correctly",
+        "probability": "medium",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": ""
+      },
+      {
+        "cause": "Blend-door or control issue inside HVAC box",
+        "probability": "medium",
+        "severity": "medium",
+        "urgency": "normal",
+        "notes": ""
+      }
+    ],
+    "recommended_checks": [
+      "Note if AC is colder at highway speed than at idle.",
+      "Listen for condenser fan operation when AC is on and car is stopped.",
+      "Check if AC becomes warm when climbing hills or when engine warms up."
+    ],
+    "safety_warning": "AC performance issues are usually not immediately dangerous, but lack of cooling can contribute to driver fatigue in extreme heat."
+  },
+  {
+    "id": "interior_fuel_smell",
+    "title": "Strong Fuel Smell Around Car or Inside Cabin",
+    "system": "fuel_system",
+    "category": "FUEL — LEAK / ODOR",
+    "symptom_short": "Strong fuel smell around car or inside cabin",
+    "symptom_patterns": [
+      "smell gasoline inside car",
+      "gas smell near rear of car",
+      "fuel odor after refueling"
+    ],
+    "likely_causes": [
+      {
+        "cause": "Fuel leak at lines, injectors, or tank area",
+        "probability": "medium",
+        "severity": "high",
+        "urgency": "immediate",
+        "notes": ""
+      },
+      {
+        "cause": "Evaporative emissions (EVAP) system leak or loose gas cap",
+        "probability": "medium",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": ""
+      }
+    ],
+    "recommended_checks": [
+      "Do not smoke or use open flame near a car with fuel smell.",
+      "Check that gas cap is tight and in good condition.",
+      "Look under car for wet spots or drips when parked."
+    ],
+    "safety_warning": "Fuel leaks can cause fire or explosion, especially in enclosed spaces like garages. If smell is strong, avoid driving and have the car inspected."
+  },
+  {
+    "id": "interior_water_on_floor",
+    "title": "Water on Floor or Wet Carpets Inside Car",
+    "system": "body",
+    "category": "BODY — WATER LEAK",
+    "symptom_short": "Water on floor or wet carpets inside car",
+    "symptom_patterns": [
+      "wet carpet front passenger",
+      "water on floor after rain",
+      "damp interior musty smell"
+    ],
+    "likely_causes": [
+      {
+        "cause": "Clogged sunroof or cowl drains",
+        "probability": "medium",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": ""
+      },
+      {
+        "cause": "Blocked AC evaporator drain causing condensate to leak inside",
+        "probability": "medium",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": ""
+      },
+      {
+        "cause": "Door or window seal leak",
+        "probability": "medium",
+        "severity": "medium",
+        "urgency": "normal",
+        "notes": ""
+      }
+    ],
+    "recommended_checks": [
+      "Note if water appears after rain, car wash, or AC use.",
+      "Check for visible dripping near passenger footwell when AC is running.",
+      "Dry carpets as soon as possible to avoid mold and odor."
+    ],
+    "safety_warning": "While not usually a direct safety issue, long-term moisture can damage electronics under the carpet and cause mold growth harmful to occupants."
+  },
+  {
+    "id": "exhaust_loud_rumble",
+    "title": "Loud Exhaust or Rumble Under Car",
+    "system": "exhaust",
+    "category": "EXHAUST — LEAK / NOISE",
+    "symptom_short": "Loud exhaust or rumble under car",
+    "symptom_patterns": [
+      "exhaust loud",
+      "muffler noise",
+      "hole in exhaust sound"
+    ],
+    "likely_causes": [
+      {
+        "cause": "Hole or crack in exhaust pipe, muffler, or flex pipe",
+        "probability": "high",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": ""
+      },
+      {
+        "cause": "Broken exhaust hanger causing pipe to touch body",
+        "probability": "medium",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": ""
+      }
+    ],
+    "recommended_checks": [
+      "Note if sound is louder on acceleration or cold start.",
+      "Listen near center and rear of car (from safe distance) for leakage.",
+      "Avoid idling in enclosed spaces due to exhaust fumes."
+    ],
+    "safety_warning": "Exhaust leaks under the car can allow carbon monoxide into the cabin, especially with windows closed."
+  },
+  {
+    "id": "exhaust_sulfur_odor",
+    "title": "Rotten-Egg or Sulfur Smell from Exhaust",
+    "system": "exhaust",
+    "category": "EXHAUST — CATALYST / FUEL",
+    "symptom_short": "Rotten-egg or sulfur smell from exhaust",
+    "symptom_patterns": [
+      "rotten egg smell from exhaust",
+      "sulfur odor car",
+      "bad smell after hard driving"
+    ],
+    "likely_causes": [
+      {
+        "cause": "Catalytic converter overheating or failing",
+        "probability": "medium",
+        "severity": "high",
+        "urgency": "soon",
+        "notes": ""
+      },
+      {
+        "cause": "Rich fuel mixture causing excess sulfur compounds",
+        "probability": "medium",
+        "severity": "high",
+        "urgency": "soon",
+        "notes": ""
+      }
+    ],
+    "recommended_checks": [
+      "Note if smell occurs mostly after hard acceleration or long hill climbs.",
+      "Check for recent misfire, rough running, or poor fuel economy.",
+      "Scan for emissions-related fault codes."
+    ],
+    "safety_warning": "A failing catalytic converter can eventually plug and restrict exhaust flow, causing loss of power and potential engine damage."
+  },
+  {
+    "id": "engine_excessive_smoke_exhaust",
+    "title": "Excessive Smoke from Exhaust",
+    "system": "engine",
+    "category": "ENGINE — SMOKE",
+    "symptom_short": "Excessive smoke from exhaust (blue, white, or black)",
+    "symptom_patterns": [
+      "blue smoke exhaust",
+      "white smoke continuous",
+      "black smoke rich running"
+    ],
+    "likely_causes": [
+      {
+        "cause": "Blue smoke: burning engine oil (worn piston rings, valve seals, or turbo)",
+        "probability": "medium",
+        "severity": "high",
+        "urgency": "soon",
+        "notes": ""
+      },
+      {
+        "cause": "White sweet-smelling smoke that lasts: coolant entering combustion (head gasket leak)",
+        "probability": "medium",
+        "severity": "high",
+        "urgency": "immediate",
+        "notes": ""
+      },
+      {
+        "cause": "Black smoke: overly rich fuel mixture (fuel or sensor problems)",
+        "probability": "medium",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": ""
+      }
+    ],
+    "recommended_checks": [
+      "Observe smoke color, smell, and when it appears (start-up, acceleration, idle).",
+      "Check coolant and oil levels frequently if smoke is new.",
+      "Avoid long trips until cause is identified."
+    ],
+    "safety_warning": "Coolant or fuel-related smoke can quickly lead to engine damage or catalytic-converter failure. Stop driving if temperature rises or if power drops sharply."
+  },
+  {
+    "id": "engine_ping_knock_accel",
+    "title": "Pinging or Knocking Noise on Acceleration",
+    "system": "engine",
+    "category": "ENGINE — KNOCK",
+    "symptom_short": "Pinging or knocking noise on acceleration",
+    "symptom_patterns": [
+      "pinging uphill",
+      "spark knock",
+      "rattling sound when accelerating"
+    ],
+    "likely_causes": [
+      {
+        "cause": "Low octane fuel for the engine's requirement",
+        "probability": "medium",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": ""
+      },
+      {
+        "cause": "Carbon buildup in combustion chamber",
+        "probability": "medium",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": ""
+      },
+      {
+        "cause": "Faulty knock sensor or ignition timing issue",
+        "probability": "medium",
+        "severity": "high",
+        "urgency": "soon",
+        "notes": ""
+      }
+    ],
+    "recommended_checks": [
+      "Note if noise is worse on hot days or under heavy load.",
+      "Try one tank of higher-octane fuel if the car specifies premium.",
+      "Scan for knock-sensor or timing-related fault codes."
+    ],
+    "safety_warning": "Persistent heavy knocking can damage pistons and bearings. Avoid hard acceleration until the issue is resolved."
+  },
+  {
+    "id": "engine_oil_light_flicker_idle",
+    "title": "Oil Pressure Warning Light Flickers at Idle",
+    "system": "engine",
+    "category": "ENGINE — OIL PRESSURE",
+    "symptom_short": "Oil pressure warning light flickers at idle but goes off with revs",
+    "symptom_patterns": [
+      "oil light flickers",
+      "oil pressure low at idle",
+      "oil light on when hot"
+    ],
+    "likely_causes": [
+      {
+        "cause": "Low engine oil level or thin/old oil",
+        "probability": "high",
+        "severity": "high",
+        "urgency": "immediate",
+        "notes": ""
+      },
+      {
+        "cause": "Worn engine bearings reducing oil pressure",
+        "probability": "medium",
+        "severity": "high",
+        "urgency": "immediate",
+        "notes": ""
+      },
+      {
+        "cause": "Faulty oil pressure sensor (after confirming oil level & condition)",
+        "probability": "medium",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": ""
+      }
+    ],
+    "recommended_checks": [
+      "Check engine oil level as soon as possible on level ground.",
+      "Listen for ticking or knocking noises from engine when hot.",
+      "Have mechanical oil pressure tested if light persists."
+    ],
+    "safety_warning": "Driving with low oil pressure can destroy an engine quickly. If the light stays on solid, shut the engine off immediately."
+  },
+  {
+    "id": "engine_cranks_no_start",
+    "title": "Engine Cranks but Does Not Start",
+    "system": "engine",
+    "category": "ENGINE — NO START",
+    "symptom_short": "Engine cranks strongly but does not start",
+    "symptom_patterns": [
+      "engine turns over but won't start",
+      "cranks no start",
+      "car cranks but never fires"
+    ],
+    "likely_causes": [
+      {
+        "cause": "No fuel delivery (failed pump, relay, or clogged filter)",
+        "probability": "medium",
+        "severity": "high",
+        "urgency": "soon",
+        "notes": ""
+      },
+      {
+        "cause": "No spark (failed crank sensor, ignition coil, or module)",
+        "probability": "medium",
+        "severity": "high",
+        "urgency": "soon",
+        "notes": ""
+      },
+      {
+        "cause": "Security/immobilizer preventing start",
+        "probability": "medium",
+        "severity": "medium",
+        "urgency": "normal",
+        "notes": ""
+      }
+    ],
+    "recommended_checks": [
+      "Note if there is fuel smell from exhaust after repeated cranking.",
+      "Check if security light is flashing or message appears in cluster.",
+      "Listen for fuel-pump priming sound when key is turned to ON."
+    ],
+    "safety_warning": "Avoid extended cranking; it can flood the engine or overheat the starter and cables."
+  },
+  {
+    "id": "engine_loud_knock_low_oil",
+    "title": "Loud Knocking from Engine with Low Oil Level",
+    "system": "engine",
+    "category": "ENGINE — INTERNAL DAMAGE",
+    "symptom_short": "Loud knocking from engine with low oil level",
+    "symptom_patterns": [
+      "loud rod knock",
+      "deep knocking noise",
+      "engine knocking gets worse with RPM"
+    ],
+    "likely_causes": [
+      {
+        "cause": "Severe bearing damage from oil starvation",
+        "probability": "high",
+        "severity": "critical",
+        "urgency": "immediate",
+        "notes": ""
+      }
+    ],
+    "recommended_checks": [
+      "Check oil level immediately and do not drive if extremely low or empty.",
+      "Notice if knock started after oil-change neglect or leak.",
+      "Tow vehicle to a shop; internal repair or engine replacement may be required."
+    ],
+    "safety_warning": "Continuing to run a knocking engine can lead to catastrophic failure, seizure, or broken connecting rods exiting the engine block."
+  },
+  {
+    "id": "engine_overheat_steam_white_smoke",
+    "title": "Engine Overheat with Steam or White Vapor from Under Hood",
+    "system": "cooling",
+    "category": "COOLING — SEVERE OVERHEAT",
+    "symptom_short": "Engine overheats and steam or white vapor comes from under hood",
+    "symptom_patterns": [
+      "steam from engine bay",
+      "coolant boiling over",
+      "white vapor under hood"
+    ],
+    "likely_causes": [
+      {
+        "cause": "Major coolant leak or hose rupture",
+        "probability": "high",
+        "severity": "critical",
+        "urgency": "immediate",
+        "notes": ""
+      },
+      {
+        "cause": "Radiator cap failure causing boil-over",
+        "probability": "medium",
+        "severity": "high",
+        "urgency": "immediate",
+        "notes": ""
+      }
+    ],
+    "recommended_checks": [
+      "Safely pull over and shut engine off immediately.",
+      "Do not open hood until steam subsides.",
+      "Do not open radiator cap when hot; wait until fully cooled."
+    ],
+    "safety_warning": "Severe overheating can cause head-gasket failure and engine damage within minutes. Towing is strongly recommended."
+  },
+  {
+    "id": "hv_isolation_fault",
+    "title": "High-Voltage Isolation Fault in Hybrid/EV",
+    "system": "high_voltage",
+    "category": "HIGH VOLTAGE — ISOLATION",
+    "symptom_short": "Hybrid/EV shows high-voltage isolation fault or service HV system message",
+    "symptom_patterns": [
+      "isolation fault",
+      "service high voltage system",
+      "ev ready light off with hv warning"
+    ],
+    "likely_causes": [
+      {
+        "cause": "Moisture intrusion into high-voltage components or wiring",
+        "probability": "medium",
+        "severity": "critical",
+        "urgency": "immediate",
+        "notes": ""
+      },
+      {
+        "cause": "Insulation damage on HV cables or battery pack",
+        "probability": "medium",
+        "severity": "critical",
+        "urgency": "immediate",
+        "notes": ""
+      }
+    ],
+    "recommended_checks": [
+      "Do not attempt to service high-voltage components yourself.",
+      "Note if warning appears after heavy rain, flooding, or car wash.",
+      "Have vehicle inspected by a qualified hybrid/EV technician."
+    ],
+    "safety_warning": "High-voltage systems can be lethal. Only trained technicians with proper protective equipment should diagnose HV isolation issues."
   },
 
   {
-
-    "id": "main_fuse_blows_repeatedly",
-
-    "title": "Main Fuse or High-Current Fuse Blows Repeatedly",
-
-    "system": "electrical",
-
-    "category": "FUSES — HIGH CURRENT",
-
-    "symptom_short": "Main or large fuse blows as soon as it is replaced",
-
+    "id": "transmission_harsh_shift",
+    "title": "Harsh or Jerky Shifts Between Gears",
+    "system": "transmission",
+    "category": "TRANSMISSION — SHIFT QUALITY",
+    "symptom_short": "Harsh, jerky, or delayed shifts between gears",
     "symptom_patterns": [
-
-      "main fuse keeps blowing",
-
-      "big fuse under hood blown",
-
-      "replace fuse and it blows again immediately"
-
+      "hard shift",
+      "jerk when changing gears",
+      "bang into gear",
+      "transmission shifts rough"
     ],
-
     "likely_causes": [
-
       {
-
-        "cause": "Direct short to ground in a high-current circuit (starter, alternator, or main power feed)",
-
+        "cause": "Low or degraded transmission fluid",
+        "probability": "high",
+        "severity": "high",
+        "urgency": "soon",
+        "notes": "Especially common if fluid service has been neglected."
+      },
+      {
+        "cause": "Valve body or shift solenoid issues",
         "probability": "medium",
-
-        "severity": "critical",
-
-        "urgency": "immediate",
-
-        "notes": ""
-
+        "severity": "high",
+        "urgency": "soon",
+        "notes": "May trigger transmission-related fault codes."
+      },
+      {
+        "cause": "Outdated or corrupted transmission control software",
+        "probability": "medium",
+        "severity": "medium",
+        "urgency": "normal",
+        "notes": "Some vehicles require TCM software updates."
       }
-
     ],
-
     "recommended_checks": [
-
-      "Do NOT install a larger fuse than specified; this is extremely unsafe.",
-
-      "Determine which systems lose power when the fuse blows (charging, interior power, etc.).",
-
-      "Use a current-limited power supply and proper diagnostic tools to locate the short rather than burning more fuses."
-
+      "Verify transmission fluid level and condition (color, smell).",
+      "Note if harsh shifts are worse when cold or after long drives.",
+      "Scan the transmission module for stored fault codes."
     ],
+    "safety_warning": "Prolonged harsh shifting can accelerate internal wear and lead to expensive transmission failure."
+  },
+  {
+    "id": "transmission_slip_rpm_flare",
+    "title": "Engine RPM Flares but Vehicle Does Not Accelerate",
+    "system": "transmission",
+    "category": "TRANSMISSION — SLIP",
+    "symptom_short": "Engine revs up but speed increases slowly",
+    "symptom_patterns": [
+      "transmission slipping",
+      "rpm jumps but car slow",
+      "feels like clutch slipping",
+      "slip in automatic"
+    ],
+    "likely_causes": [
+      {
+        "cause": "Worn clutches or bands inside automatic transmission",
+        "probability": "high",
+        "severity": "critical",
+        "urgency": "immediate",
+        "notes": ""
+      },
+      {
+        "cause": "Low transmission fluid due to leak",
+        "probability": "medium",
+        "severity": "high",
+        "urgency": "immediate",
+        "notes": ""
+      },
+      {
+        "cause": "Failing torque converter",
+        "probability": "medium",
+        "severity": "high",
+        "urgency": "soon",
+        "notes": ""
+      }
+    ],
+    "recommended_checks": [
+      "Check for red or brown fluid leaks under vehicle.",
+      "Note if slipping occurs only in certain gears or all the time.",
+      "Avoid towing or heavy acceleration until the issue is diagnosed."
+    ],
+    "safety_warning": "Severe transmission slip can suddenly leave the car without drive, especially during passing or merging."
+  },
+  {
+    "id": "transmission_no_reverse",
+    "title": "No Reverse Gear or Very Weak Reverse",
+    "system": "transmission",
+    "category": "TRANSMISSION — GEAR FAILURE",
+    "symptom_short": "Reverse gear does not engage or is very weak",
+    "symptom_patterns": [
+      "no reverse",
+      "reverse not working",
+      "car will not move backward"
+    ],
+    "likely_causes": [
+      {
+        "cause": "Internal transmission damage to reverse clutch or gearset",
+        "probability": "high",
+        "severity": "high",
+        "urgency": "soon",
+        "notes": ""
+      },
+      {
+        "cause": "Shifter cable or linkage misadjustment",
+        "probability": "medium",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": ""
+      }
+    ],
+    "recommended_checks": [
+      "Confirm that shifter indicator matches the actual gear position.",
+      "Note if reverse worked intermittently before failing completely.",
+      "Have transmission operation tested by a specialist."
+    ],
+    "safety_warning": "Lack of reverse gear can be dangerous in tight spaces or on slopes. Avoid parking where reverse is required to exit."
+  },
+  {
+    "id": "transmission_delay_into_drive",
+    "title": "Delay When Shifting into Drive or Reverse",
+    "system": "transmission",
+    "category": "TRANSMISSION — ENGAGEMENT DELAY",
+    "symptom_short": "Delay or hesitation when shifting from Park to Drive/Reverse",
+    "symptom_patterns": [
+      "delay into drive",
+      "slow to engage reverse",
+      "car hesitates before moving"
+    ],
+    "likely_causes": [
+      {
+        "cause": "Low or aerated transmission fluid",
+        "probability": "high",
+        "severity": "high",
+        "urgency": "soon",
+        "notes": ""
+      },
+      {
+        "cause": "Internal wear in clutch packs or seals",
+        "probability": "medium",
+        "severity": "high",
+        "urgency": "soon",
+        "notes": ""
+      }
+    ],
+    "recommended_checks": [
+      "Check fluid level with manufacturer procedure.",
+      "Note if delay is worse cold or hot.",
+      "Listen for abnormal noises when gear finally engages."
+    ],
+    "safety_warning": "Long delays can precede more serious transmission failure. Avoid aggressive throttle when gear first engages."
+  },
+  {
+    "id": "awd_binding_tight_turns",
+    "title": "Binding or Hopping in Tight Turns (AWD/4x4)",
+    "system": "driveline",
+    "category": "AWD / 4x4 — BINDING",
+    "symptom_short": "Vehicle feels like it hops or binds on tight turns",
+    "symptom_patterns": [
+      "hopping on tight turn",
+      "binding in parking lot",
+      "driveline wind up",
+      "4x4 feels stuck when turning"
+    ],
+    "likely_causes": [
+      {
+        "cause": "Part-time 4x4 engaged on dry pavement",
+        "probability": "high",
+        "severity": "medium",
+        "urgency": "immediate",
+        "notes": "Many 4x4 systems are intended for loose surfaces only."
+      },
+      {
+        "cause": "Worn or contaminated fluid in AWD coupling or differential",
+        "probability": "medium",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": ""
+      }
+    ],
+    "recommended_checks": [
+      "Verify transfer case mode (2H, 4H, 4L, Auto).",
+      "Disengage 4x4 on dry pavement and re-test.",
+      "Service differential and transfer case fluids if due."
+    ],
+    "safety_warning": "Driving a part-time 4x4 on high-grip pavement can damage driveline components and affect handling."
+  },
+  {
+    "id": "awd_service_4wd_light",
+    "title": "Service 4WD or AWD Warning",
+    "system": "driveline",
+    "category": "AWD / 4x4 — WARNING",
+    "symptom_short": "Service 4WD/AWD message or light",
+    "symptom_patterns": [
+      "service 4wd",
+      "awd disabled",
+      "4x4 light blinking",
+      "4wd not engaging"
+    ],
+    "likely_causes": [
+      {
+        "cause": "Fault in transfer case motor, sensor, or control module",
+        "probability": "medium",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": ""
+      },
+      {
+        "cause": "Wheel-speed sensor issues affecting AWD control",
+        "probability": "medium",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": ""
+      }
+    ],
+    "recommended_checks": [
+      "Note if 4WD modes engage or if only 2WD is available.",
+      "Scan for drivetrain and ABS-related codes.",
+      "Avoid off-road conditions requiring 4x4 until repaired."
+    ],
+    "safety_warning": "Loss of AWD/4WD can reduce traction on snow, mud, or steep terrain. Plan driving accordingly."
+  },
+  {
+    "id": "diesel_dpf_regen_frequent",
+    "title": "Diesel DPF Regenerations Very Frequent",
+    "system": "engine",
+    "category": "DIESEL — DPF / EMISSIONS",
+    "symptom_short": "Diesel particulate filter (DPF) regenerations happen very often",
+    "symptom_patterns": [
+      "dpf regen often",
+      "filter regenerating frequently",
+      "diesel exhaust filter message",
+      "soot filter clogging"
+    ],
+    "likely_causes": [
+      {
+        "cause": "Short-trip driving that never allows full regeneration",
+        "probability": "high",
+        "severity": "medium",
+        "urgency": "normal",
+        "notes": ""
+      },
+      {
+        "cause": "Driving with failing sensors (exhaust temperature, pressure) or injectors causing excess soot",
+        "probability": "medium",
+        "severity": "high",
+        "urgency": "soon",
+        "notes": ""
+      }
+    ],
+    "recommended_checks": [
+      "Perform a continuous highway drive to allow complete regen if safe.",
+      "Check for diesel fault codes related to DPF or exhaust sensors.",
+      "Avoid interrupting regeneration cycles when possible."
+    ],
+    "safety_warning": "Ignoring DPF warnings can lead to restricted exhaust and limp mode, and may require expensive filter replacement."
+  },
+  {
+    "id": "diesel_glow_plug_light_flash",
+    "title": "Glow Plug Light Flashing While Driving",
+    "system": "engine",
+    "category": "DIESEL — WARNING",
+    "symptom_short": "Diesel glow plug or coil-like light flashes",
+    "symptom_patterns": [
+      "glow plug light flashing",
+      "coil light blinking",
+      "diesel warning symbol"
+    ],
+    "likely_causes": [
+      {
+        "cause": "Injection or emissions system fault on diesel engine",
+        "probability": "high",
+        "severity": "high",
+        "urgency": "soon",
+        "notes": ""
+      }
+    ],
+    "recommended_checks": [
+      "Note any loss of power or limp mode.",
+      "Scan engine for diesel-specific fault codes.",
+      "Avoid heavy loads or towing until diagnosed."
+    ],
+    "safety_warning": "Some diesel faults can cause severe internal or emissions-system damage if ignored."
+  },
+  {
+    "id": "hybrid_battery_reduced_ev_range",
+    "title": "Hybrid/EV Shows Noticeably Reduced Electric Range",
+    "system": "high_voltage",
+    "category": "HYBRID / EV — RANGE",
+    "symptom_short": "Hybrid or EV has much lower EV range than usual",
+    "symptom_patterns": [
+      "ev range dropped",
+      "battery not holding charge",
+      "short electric range"
+    ],
+    "likely_causes": [
+      {
+        "cause": "Battery capacity loss due to age and cycles",
+        "probability": "high",
+        "severity": "medium",
+        "urgency": "normal",
+        "notes": ""
+      },
+      {
+        "cause": "Cold weather reducing effective capacity",
+        "probability": "medium",
+        "severity": "low",
+        "urgency": "normal",
+        "notes": ""
+      },
+      {
+        "cause": "Tire pressure low or rolling resistance increased",
+        "probability": "medium",
+        "severity": "low",
+        "urgency": "normal",
+        "notes": ""
+      }
+    ],
+    "recommended_checks": [
+      "Compare range under similar temperature and driving style.",
+      "Check tire pressures and alignment.",
+      "Review manufacturer battery warranty and capacity guidelines."
+    ],
+    "safety_warning": "Range loss itself is not usually unsafe, but drivers should avoid planning trips at the edge of remaining range."
+  },
+  {
+    "id": "hybrid_engine_races_low_speed",
+    "title": "Hybrid Engine Revs High at Low Speed",
+    "system": "high_voltage",
+    "category": "HYBRID — DRIVE FEEL",
+    "symptom_short": "Engine races or sounds loud even at low vehicle speeds",
+    "symptom_patterns": [
+      "hybrid engine loud",
+      "engine revs high but car slow",
+      "eCVT drone noise"
+    ],
+    "likely_causes": [
+      {
+        "cause": "Normal behavior of some eCVT-based hybrids under heavy acceleration",
+        "probability": "medium",
+        "severity": "low",
+        "urgency": "normal",
+        "notes": "Engine speed may not match road speed like traditional transmissions."
+      },
+      {
+        "cause": "Battery charge low so system relies heavily on engine",
+        "probability": "medium",
+        "severity": "low",
+        "urgency": "normal",
+        "notes": ""
+      }
+    ],
+    "recommended_checks": [
+      "Notice if behavior is mostly when accelerating uphill or with low battery.",
+      "Compare to owner's manual description of typical hybrid operation.",
+      "Check for warning lights if noise is accompanied by poor performance."
+    ],
+    "safety_warning": "If loud engine operation is accompanied by warning lights or severe loss of power, the vehicle should be inspected."
+  },
+  {
+    "id": "hvac_blower_only_high_speed",
+    "title": "Blower Fan Works Only on Highest Speed",
+    "system": "hvac",
+    "category": "HVAC — BLOWER CONTROL",
+    "symptom_short": "HVAC fan only works on max speed",
+    "symptom_patterns": [
+      "ac fan only high",
+      "blower only works on 4",
+      "no fan on low settings"
+    ],
+    "likely_causes": [
+      {
+        "cause": "Failed blower motor resistor or control module",
+        "probability": "high",
+        "severity": "low",
+        "urgency": "normal",
+        "notes": ""
+      }
+    ],
+    "recommended_checks": [
+      "Test all blower speed positions.",
+      "Note if issue started suddenly or after moisture exposure.",
+      "Inspect resistor pack area for corrosion if accessible."
+    ],
+    "safety_warning": "Limited blower control mainly affects comfort and defogging. In very humid or cold weather, poor defrost can affect visibility."
+  },
+  {
+    "id": "hvac_musty_odor_startup",
+    "title": "Musty or Moldy Smell When AC First Turns On",
+    "system": "hvac",
+    "category": "HVAC — ODOR",
+    "symptom_short": "Musty odor from vents at AC startup",
+    "symptom_patterns": [
+      "mold smell ac",
+      "musty air vents",
+      "bad smell when ac on"
+    ],
+    "likely_causes": [
+      {
+        "cause": "Mold or bacteria growth on evaporator core due to moisture",
+        "probability": "high",
+        "severity": "low",
+        "urgency": "normal",
+        "notes": ""
+      }
+    ],
+    "recommended_checks": [
+      "Run fan for a few minutes without AC before shutting vehicle off to dry the system.",
+      "Replace cabin air filter if dirty.",
+      "Use HVAC-specific cleaner sprayed into intake as directed."
+    ],
+    "safety_warning": "While usually not immediately dangerous, prolonged exposure to moldy air can irritate sensitive occupants."
+  },
+  {
+    "id": "window_slow_or_stuck",
+    "title": "Power Window Moves Very Slowly or Gets Stuck",
+    "system": "body",
+    "category": "BODY — WINDOWS",
+    "symptom_short": "Power window slow, jerky, or stuck",
+    "symptom_patterns": [
+      "window goes up slow",
+      "window stuck half way",
+      "window struggles to move"
+    ],
+    "likely_causes": [
+      {
+        "cause": "Dry or contaminated window guides and channels",
+        "probability": "high",
+        "severity": "low",
+        "urgency": "normal",
+        "notes": ""
+      },
+      {
+        "cause": "Failing window regulator or motor",
+        "probability": "medium",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": ""
+      }
+    ],
+    "recommended_checks": [
+      "Avoid forcing the switch repeatedly if glass barely moves.",
+      "Inspect rubber channels for debris or damage.",
+      "Consider silicone-safe lubricant on window guides."
+    ],
+    "safety_warning": "Windows stuck open can be a security and weather issue, but usually not a driving safety risk unless they affect visibility."
+  },
+  {
+    "id": "door_lock_intermittent",
+    "title": "Power Door Lock Works Intermittently",
+    "system": "body",
+    "category": "BODY — LOCKS",
+    "symptom_short": "Door lock sometimes does not lock/unlock with remote or switch",
+    "symptom_patterns": [
+      "door lock intermittent",
+      "one door won't lock sometimes",
+      "remote lock misses one door"
+    ],
+    "likely_causes": [
+      {
+        "cause": "Weak door lock actuator in affected door",
+        "probability": "high",
+        "severity": "low",
+        "urgency": "normal",
+        "notes": ""
+      },
+      {
+        "cause": "Broken or corroded wiring in door jamb flex harness",
+        "probability": "medium",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": ""
+      }
+    ],
+    "recommended_checks": [
+      "Note which specific door fails most often.",
+      "Listen for faint clicking inside door when command is sent.",
+      "Check for other electrical issues in same door (window, mirror)."
+    ],
+    "safety_warning": "A door that fails to lock is a security risk and may be critical for child safety seats."
+  },
+  {
+    "id": "keyless_no_start_key_not_detected",
+    "title": "Push-Button Start Says Key Not Detected",
+    "system": "electrical",
+    "category": "ELECTRICAL — KEYLESS ENTRY",
+    "symptom_short": "Keyless system does not detect key for starting",
+    "symptom_patterns": [
+      "key not detected",
+      "car won't start push button",
+      "have to hold key near button"
+    ],
+    "likely_causes": [
+      {
+        "cause": "Weak key fob battery",
+        "probability": "high",
+        "severity": "low",
+        "urgency": "normal",
+        "notes": ""
+      },
+      {
+        "cause": "Radio interference or antenna issue near keyless receiver",
+        "probability": "medium",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": ""
+      }
+    ],
+    "recommended_checks": [
+      "Try starting with key placed in the backup location described in the manual.",
+      "Replace key fob battery if old.",
+      "Check if problem only occurs in certain parking locations (possible interference)."
+    ],
+    "safety_warning": "If 'key not detected' appears while driving, the vehicle usually continues running but may not restart after shutoff."
+  },
+  {
+    "id": "adas_front_sensor_blocked",
+    "title": "Front Collision or Radar Sensor Blocked",
+    "system": "adas",
+    "category": "ADAS — SENSOR BLOCK",
+    "symptom_short": "Collision warning or adaptive cruise temporarily unavailable",
+    "symptom_patterns": [
+      "front sensor blocked",
+      "adaptive cruise unavailable",
+      "collision warning off",
+      "front camera obstructed"
+    ],
+    "likely_causes": [
+      {
+        "cause": "Dirt, ice, snow, or stickers covering radar or camera area",
+        "probability": "high",
+        "severity": "medium",
+        "urgency": "normal",
+        "notes": ""
+      },
+      {
+        "cause": "Misaligned radar or camera after minor collision or windshield replacement",
+        "probability": "medium",
+        "severity": "high",
+        "urgency": "soon",
+        "notes": ""
+      }
+    ],
+    "recommended_checks": [
+      "Clean front emblem, bumper area, and windshield where sensors are located.",
+      "Note if warning appears mainly in heavy rain, fog, or snow.",
+      "After body or glass repair, ensure ADAS calibration was performed."
+    ],
+    "safety_warning": "Do not rely on ADAS when a sensor-block message is active. Drive as if the assistance systems are not available."
+  },
+  {
+    "id": "adas_lane_keep_unavailable",
+    "title": "Lane Keep Assist or Lane Departure Not Available",
+    "system": "adas",
+    "category": "ADAS — LANE SYSTEM",
+    "symptom_short": "Lane-keeping system off or unavailable",
+    "symptom_patterns": [
+      "lane assist unavailable",
+      "lane departure not working",
+      "no lane lines in display"
+    ],
+    "likely_causes": [
+      {
+        "cause": "Camera unable to detect lane markings due to poor paint, darkness, or heavy rain",
+        "probability": "high",
+        "severity": "low",
+        "urgency": "normal",
+        "notes": ""
+      },
+      {
+        "cause": "Dirty or obstructed windshield in camera area",
+        "probability": "medium",
+        "severity": "low",
+        "urgency": "normal",
+        "notes": ""
+      }
+    ],
+    "recommended_checks": [
+      "Clean exterior glass around the front camera.",
+      "Test on a well-marked highway in good daylight.",
+      "Check for warning messages that indicate a fault versus temporary condition."
+    ],
+    "safety_warning": "Lane systems are driver aids only. Never rely on them to keep the lane if warning messages indicate they are unavailable."
+  },
+  {
+    "id": "fuel_surge_steady_speed",
+    "title": "Surging or Bucking at Steady Speed",
+    "system": "engine",
+    "category": "ENGINE — DRIVEABILITY",
+    "symptom_short": "Vehicle surges or bucks when cruising at steady speed",
+    "symptom_patterns": [
+      "car surges on highway",
+      "bucking at constant throttle",
+      "feels like on-off power"
+    ],
+    "likely_causes": [
+      {
+        "cause": "Fuel delivery irregularities (pump, filter, or pressure regulator)",
+        "probability": "medium",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": ""
+      },
+      {
+        "cause": "Ignition coil or plug breaking down under light load",
+        "probability": "medium",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": ""
+      },
+      {
+        "cause": "Throttle body or EGR valve issues",
+        "probability": "medium",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": ""
+      }
+    ],
+    "recommended_checks": [
+      "Note if problem happens only at certain speeds or when cruise control is on.",
+      "Check for recent misfire or fuel-system fault codes.",
+      "Observe if problem is worse on hills or with AC on."
+    ],
+    "safety_warning": "Severe surging can affect control, especially on slippery roads. Reduce speed and avoid aggressive maneuvers."
+  },
+  {
+    "id": "stall_at_stop_after_drive",
+    "title": "Engine Stalls When Coming to a Stop",
+    "system": "engine",
+    "category": "ENGINE — STALL AT IDLE",
+    "symptom_short": "Engine dies when slowing or stopping",
+    "symptom_patterns": [
+      "car stalls at stop",
+      "dies when coming to a light",
+      "engine shuts off when braking"
+    ],
+    "likely_causes": [
+      {
+        "cause": "Dirty throttle body or idle air control issue",
+        "probability": "medium",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": ""
+      },
+      {
+        "cause": "Torque converter clutch staying locked (automatic transmission)",
+        "probability": "medium",
+        "severity": "high",
+        "urgency": "soon",
+        "notes": ""
+      },
+      {
+        "cause": "Vacuum leak or inconsistent fuel delivery",
+        "probability": "medium",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": ""
+      }
+    ],
+    "recommended_checks": [
+      "Note if stall happens only after highway driving or always.",
+      "Observe if RPM drops suddenly just before the stall.",
+      "Scan for transmission and engine fault codes."
+    ],
+    "safety_warning": "Stalling while turning or in traffic can be dangerous. If frequent, have the vehicle inspected promptly."
+  },
+  {
+    "id": "evap_small_leak_gas_cap",
+    "title": "Check Engine Light for Small Evap Leak (Loose Gas Cap)",
+    "system": "fuel_system",
+    "category": "FUEL — EVAP SYSTEM",
+    "symptom_short": "Check-engine light with small leak evap code",
+    "symptom_patterns": [
+      "small evap leak",
+      "p0442",
+      "gas cap loose code"
+    ],
+    "likely_causes": [
+      {
+        "cause": "Loose or worn gas cap seal",
+        "probability": "high",
+        "severity": "low",
+        "urgency": "normal",
+        "notes": ""
+      },
+      {
+        "cause": "Small leak in evap hoses or canister",
+        "probability": "medium",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": ""
+      }
+    ],
+    "recommended_checks": [
+      "Tighten gas cap until it clicks several times.",
+      "Inspect cap seal for cracks or damage.",
+      "After tightening or replacing cap, drive several days to see if light clears."
+    ],
+    "safety_warning": "Evap leaks rarely create driving issues but can cause failed emissions tests and fuel vapor release to the atmosphere."
+  },
+  {
+    "id": "tire_inside_edge_wear",
+    "title": "Tires Wearing Heavily on Inside Edge",
+    "system": "wheels_tires",
+    "category": "WHEELS & TIRES — WEAR PATTERN",
+    "symptom_short": "Inside edge of tires worn faster than rest",
+    "symptom_patterns": [
+      "inside tire wear",
+      "camber wear",
+      "inner edge bald"
+    ],
+    "likely_causes": [
+      {
+        "cause": "Incorrect camber or toe alignment",
+        "probability": "high",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": ""
+      },
+      {
+        "cause": "Worn suspension bushings or ball joints",
+        "probability": "medium",
+        "severity": "high",
+        "urgency": "soon",
+        "notes": ""
+      }
+    ],
+    "recommended_checks": [
+      "Run hand across tread to feel for sharp edges or cupping.",
+      "Check all four tires; front and rear may show different patterns.",
+      "Schedule alignment and suspension inspection before installing new tires."
+    ],
+    "safety_warning": "Severe edge wear can expose cords and risk blowout even when the rest of the tread looks acceptable."
+  },
+  {
+    "id": "wheel_metallic_scrape_constant",
+    "title": "Constant Metallic Scraping from One Wheel",
+    "system": "wheels_tires",
+    "category": "WHEELS & TIRES — NOISE",
+    "symptom_short": "Metal scraping sound that changes with speed",
+    "symptom_patterns": [
+      "metal scrape wheel",
+      "scratching noise while moving",
+      "shield rubbing rotor sound"
+    ],
+    "likely_causes": [
+      {
+        "cause": "Bent or rusted backing plate touching rotor",
+        "probability": "high",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": ""
+      },
+      {
+        "cause": "Small stone caught between rotor and shield",
+        "probability": "medium",
+        "severity": "low",
+        "urgency": "normal",
+        "notes": ""
+      }
+    ],
+    "recommended_checks": [
+      "Note if sound changes when turning slightly left or right.",
+      "Inspect inside of wheel and brake area with light if safe.",
+      "Have brake assembly checked if noise persists."
+    ],
+    "safety_warning": "While often minor, some scraping noises can mask more serious brake issues and should not be ignored."
+  },
+  {
+    "id": "lighting_headlight_one_side_out",
+    "title": "One Headlight Out But Others OK",
+    "system": "electrical",
+    "category": "LIGHTING — EXTERIOR",
+    "symptom_short": "Single headlight not working",
+    "symptom_patterns": [
+      "one headlight out",
+      "driver headlight not working",
+      "bulb out front"
+    ],
+    "likely_causes": [
+      {
+        "cause": "Burned-out bulb or LED module failure",
+        "probability": "high",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": ""
+      },
+      {
+        "cause": "Connector or wiring corrosion at that headlamp",
+        "probability": "medium",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": ""
+      }
+    ],
+    "recommended_checks": [
+      "Confirm high beam vs low beam operation on each side.",
+      "Inspect connector behind headlamp (if accessible) for corrosion.",
+      "For LED systems, check for TSBs (technical bulletins) related to early failure."
+    ],
+    "safety_warning": "Driving with one headlight reduces visibility and can confuse other drivers. Repair as soon as feasible."
+  },
+  {
+    "id": "lighting_water_in_tail_light",
+    "title": "Water or Condensation Inside Tail Lamp",
+    "system": "body",
+    "category": "LIGHTING — MOISTURE",
+    "symptom_short": "Water or heavy fog inside rear light cluster",
+    "symptom_patterns": [
+      "water in tail light",
+      "condensation rear lamp",
+      "foggy tail light"
+    ],
+    "likely_causes": [
+      {
+        "cause": "Failed lamp housing seal or crack in lens",
+        "probability": "high",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": ""
+      }
+    ],
+    "recommended_checks": [
+      "Look for visible cracks or gaps around lamp edges.",
+      "Check if moisture appears mainly after rain or car wash.",
+      "Ensure bulbs and sockets are not corroded."
+    ],
+    "safety_warning": "Water intrusion can corrode contacts and eventually cause brake or signal light failure, which is a safety issue."
+  },
+  {
+    "id": "ev_not_charging_home",
+    "title": "EV Not Charging Properly at Home",
+    "system": "high_voltage",
+    "category": "EV — CHARGING",
+    "symptom_short": "EV fails to start or complete home charging session",
+    "symptom_patterns": [
+      "ev won't charge at home",
+      "charging stops after few minutes",
+      "charge fault on wall charger"
+    ],
+    "likely_causes": [
+      {
+        "cause": "Fault or misconfiguration in home EVSE (wall charger) or outlet",
+        "probability": "medium",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": ""
+      },
+      {
+        "cause": "Charge port or cable contamination (dirt, corrosion, ice)",
+        "probability": "medium",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": ""
+      },
+      {
+        "cause": "Vehicle charge settings (schedule, limit) not matching user expectation",
+        "probability": "medium",
+        "severity": "low",
+        "urgency": "normal",
+        "notes": ""
+      }
+    ],
+    "recommended_checks": [
+      "Check for warning lights or messages on both car and charger.",
+      "Test charging at a different location (public station) if possible.",
+      "Inspect charge port and connector for debris or signs of damage."
+    ],
+    "safety_warning": "Do not attempt to repair high-voltage or EVSE wiring yourself. Use qualified electricians and follow local electrical codes."
+  },
 
+  {
+    "id": "alternator_ac_ripple_high",
+    "title": "Alternator AC Ripple Damaging Electronics",
+    "system": "electrical",
+    "category": "CHARGING SYSTEM — ADVANCED",
+    "symptom_short": "Lights flicker, modules reset, battery light may flicker",
+    "symptom_patterns": [
+      "lights flicker while driving",
+      "modules resetting randomly",
+      "voltage unstable with load",
+      "alternator ripple issue"
+    ],
+    "likely_causes": [
+      {
+        "cause": "Alternator diode failure causing high AC ripple on DC system",
+        "probability": "high",
+        "severity": "critical",
+        "urgency": "immediate",
+        "notes": "AC ripple above ~0.3V can damage ECUs, TCMs, BCMs, coils and sensors."
+      },
+      {
+        "cause": "Loose alternator ground or power cable adding noise",
+        "probability": "medium",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": ""
+      }
+    ],
+    "recommended_checks": [
+      "Measure alternator AC ripple with a meter set to AC volts (should be typically under 0.05–0.1V).",
+      "Check alternator output cable and grounds for corrosion or loose connections.",
+      "Inspect charging system wiring for damaged insulation or poor repairs."
+    ],
+    "safety_warning": "Driving with high AC ripple can slowly destroy sensitive electronics and ignition components; repair as soon as possible."
+  },
+  {
+    "id": "parasitic_draw_advanced",
+    "title": "Advanced Parasitic Draw — Battery Dies Overnight",
+    "system": "electrical",
+    "category": "BATTERY & POWER — PARASITIC",
+    "symptom_short": "Battery repeatedly dead after parking for hours",
+    "symptom_patterns": [
+      "battery dead every morning",
+      "needs jump start daily",
+      "car drains battery while parked",
+      "parasitic draw suspected"
+    ],
+    "likely_causes": [
+      {
+        "cause": "Module or accessory staying awake (stuck relay, aftermarket alarm, audio amp, telematics unit)",
+        "probability": "high",
+        "severity": "high",
+        "urgency": "soon",
+        "notes": ""
+      },
+      {
+        "cause": "Body control module not entering sleep mode due to network or sensor issue",
+        "probability": "medium",
+        "severity": "high",
+        "urgency": "urgent",
+        "notes": ""
+      },
+      {
+        "cause": "Old battery that can no longer tolerate normal small draws",
+        "probability": "medium",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": ""
+      }
+    ],
+    "recommended_checks": [
+      "Measure key-off current draw after modules should be asleep (typically < 50 mA on most vehicles).",
+      "Pull fuses one by one while monitoring draw to isolate the problematic circuit.",
+      "Check trunk, glovebox, and courtesy lights to ensure they fully turn off.",
+      "Load-test the battery to confirm it can still hold a charge."
+    ],
+    "safety_warning": "High parasitic draw can destroy a new battery in days and leave the driver stranded repeatedly."
+  },
+  {
+    "id": "can_bus_network_failure",
+    "title": "CAN Bus Network Failure — Multiple Modules Affected",
+    "system": "network",
+    "category": "CAN BUS — ADVANCED DIAGNOSTICS",
+    "symptom_short": "Multiple warning lights, communication errors, random failures",
+    "symptom_patterns": [
+      "many lights on dash at once",
+      "no communication with some modules",
+      "speedometer drops out randomly",
+      "transmission and ABS faults together",
+      "can bus error"
+    ],
+    "likely_causes": [
+      {
+        "cause": "CAN high or CAN low wire shorted to ground or power",
+        "probability": "high",
+        "severity": "critical",
+        "urgency": "urgent",
+        "notes": ""
+      },
+      {
+        "cause": "Failed module pulling down the CAN network",
+        "probability": "medium",
+        "severity": "high",
+        "urgency": "soon",
+        "notes": ""
+      },
+      {
+        "cause": "Water intrusion or corrosion in harness connectors or junction blocks",
+        "probability": "medium",
+        "severity": "high",
+        "urgency": "soon",
+        "notes": ""
+      }
+    ],
+    "recommended_checks": [
+      "Measure CAN bus resistance with the system powered down — should be ~60 ohms across CAN high and CAN low.",
+      "Use wiring diagrams to locate bus splice points and check for corrosion or water.",
+      "Unplug suspect modules one by one while monitoring network behavior to find the module pulling the bus down."
+    ],
+    "safety_warning": "CAN bus failures can disable ABS, stability control, airbags, transmission control and other critical systems, severely affecting safety."
+  },
+  {
+    "id": "ecu_power_loss_bumps",
+    "title": "ECU Power Loss on Bumps — Random Engine Cut Out",
+    "system": "electrical",
+    "category": "ENGINE CONTROL — POWER / GROUND",
+    "symptom_short": "Engine shuts off randomly, often over bumps, then restarts",
+    "symptom_patterns": [
+      "car dies when hitting bumps",
+      "engine cuts out randomly and comes back",
+      "loss of power like key turned off",
+      "intermittent ecu power"
+    ],
+    "likely_causes": [
+      {
+        "cause": "Loose ECU power or ground connector/terminal",
+        "probability": "high",
+        "severity": "critical",
+        "urgency": "immediate",
+        "notes": ""
+      },
+      {
+        "cause": "Failing main relay or ECM relay with heat-related or vibration-related failure",
+        "probability": "medium",
+        "severity": "high",
+        "urgency": "soon",
+        "notes": ""
+      },
+      {
+        "cause": "Loose battery or main power cable feeding ECU/under-hood fuse box",
+        "probability": "medium",
+        "severity": "high",
+        "urgency": "immediate",
+        "notes": ""
+      }
+    ],
+    "recommended_checks": [
+      "With engine idling in a safe area, gently tap ECU and fuse box to see if engine stumbles.",
+      "Check voltage drop across ECU grounds with engine running (should be very low, ideally < 0.1V).",
+      "Inspect connectors for corrosion, bent pins, or poor terminal tension."
+    ],
+    "safety_warning": "Sudden engine shutdown at speed causes loss of power steering and brake assist, which is extremely dangerous; issue must be addressed immediately."
+  },
+  {
+    "id": "ground_strap_failure",
+    "title": "Critical Engine/Chassis Ground Strap Failure",
+    "system": "electrical",
+    "category": "GROUNDS — ADVANCED",
+    "symptom_short": "Random electrical problems and sensor errors across systems",
+    "symptom_patterns": [
+      "dim lights and weird electrical issues",
+      "multiple sensor codes with no pattern",
+      "rpm or voltage readings unstable",
+      "shifting issues plus electrical glitches"
+    ],
+    "likely_causes": [
+      {
+        "cause": "Corroded or broken ground strap between engine and chassis",
+        "probability": "high",
+        "severity": "high",
+        "urgency": "urgent",
+        "notes": ""
+      },
+      {
+        "cause": "Loose or contaminated battery negative terminal",
+        "probability": "medium",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": ""
+      }
+    ],
+    "recommended_checks": [
+      "Measure resistance between engine block and battery negative; it should be very low.",
+      "Inspect ground straps visually for broken strands, corrosion, or missing bolts.",
+      "Perform voltage drop tests on ground circuits during cranking and with heavy loads on."
+    ],
+    "safety_warning": "Bad grounds can cause ECU damage, random shutdowns, and unpredictable behavior of safety systems."
+  },
+  {
+    "id": "crank_cam_correlation_error",
+    "title": "Crankshaft/Camshaft Correlation Error — Timing Concern",
+    "system": "engine",
+    "category": "TIMING — ADVANCED",
+    "symptom_short": "Hard starting, rough idle, correlation codes like P0016–P0017",
+    "symptom_patterns": [
+      "hard start with timing codes",
+      "rough idle and p0016",
+      "cam crank correlation fault",
+      "timing chain stretch suspected"
+    ],
+    "likely_causes": [
+      {
+        "cause": "Timing chain stretch or wear causing cam and crank to drift out of spec",
+        "probability": "high",
+        "severity": "high",
+        "urgency": "urgent",
+        "notes": "Common on engines with extended oil change intervals."
+      },
+      {
+        "cause": "Failed or weak camshaft or crankshaft position sensor",
+        "probability": "medium",
+        "severity": "high",
+        "urgency": "soon",
+        "notes": ""
+      }
+    ],
+    "recommended_checks": [
+      "Check live data for cam/crank synchronization at different RPMs.",
+      "Use scan tool or scope to inspect cam and crank signal relationship.",
+      "Inspect mechanical timing marks and chain or belt slack where access allows."
+    ],
+    "safety_warning": "Driving with correlation issues can lead to severe engine damage if timing jumps further, especially on interference engines."
+  },
+  {
+    "id": "fuel_pump_control_module_advanced",
+    "title": "Fuel Pump Control Module (FPDM) Failure",
+    "system": "fuel_system",
+    "category": "FUEL DELIVERY — ADVANCED",
+    "symptom_short": "Long crank, stalls, power loss, unstable fuel pressure",
+    "symptom_patterns": [
+      "engine loses power randomly",
+      "long crank then starts",
+      "fuel pressure drops under load",
+      "fpdm failure suspected"
+    ],
+    "likely_causes": [
+      {
+        "cause": "Fuel pump control module overheating or failing internally",
+        "probability": "high",
+        "severity": "high",
+        "urgency": "urgent",
+        "notes": ""
+      },
+      {
+        "cause": "Corroded ground or wiring to the fuel pump module",
+        "probability": "medium",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": ""
+      }
+    ],
+    "recommended_checks": [
+      "Monitor fuel pressure while driving and note drops during hesitation.",
+      "Tap the fuel pump module lightly (if accessible) to see if symptom changes.",
+      "Inspect module housing and connectors for moisture or corrosion."
+    ],
+    "safety_warning": "Sudden fuel pressure loss can cause the engine to stall in traffic; treat as a safety-critical issue."
+  },
+  {
+    "id": "high_pressure_fuel_system_fault",
+    "title": "High-Pressure Fuel System Fault (GDI Engines)",
+    "system": "fuel_system",
+    "category": "FUEL DELIVERY — HIGH PRESSURE",
+    "symptom_short": "Loss of power at high RPM/load, misfires, long crank",
+    "symptom_patterns": [
+      "gdi engine low power under boost",
+      "misfire at high rpm only",
+      "fuel rail pressure too low",
+      "hpfp failure suspected"
+    ],
+    "likely_causes": [
+      {
+        "cause": "Failing high-pressure fuel pump (HPFP)",
+        "probability": "medium",
+        "severity": "high",
+        "urgency": "urgent",
+        "notes": "Some HPFP failures shed metal particles that contaminate the entire system."
+      },
+      {
+        "cause": "Faulty high-pressure fuel rail sensor",
+        "probability": "medium",
+        "severity": "high",
+        "urgency": "urgent",
+        "notes": ""
+      }
+    ],
+    "recommended_checks": [
+      "Monitor commanded vs actual fuel rail pressure under load.",
+      "Inspect fuel for metallic debris where applicable.",
+      "Perform injector balance or leak-down tests as recommended by manufacturer."
+    ],
+    "safety_warning": "Low rail pressure on GDI engines can cause lean operation and potential engine damage; do not ignore under-load misfire or power loss."
+  },
+  {
+    "id": "o2_sensor_slow_response_pro",
+    "title": "Slow Oxygen Sensor Response — Fuel Trim Issues",
+    "system": "engine",
+    "category": "FUEL CONTROL — O2 / AF SENSORS",
+    "symptom_short": "Poor fuel economy, unstable idle, fluctuating trims",
+    "symptom_patterns": [
+      "poor mpg with no obvious reason",
+      "fuel trims swing slowly",
+      "o2 sensor slow code",
+      "rich lean fluctuation"
+    ],
+    "likely_causes": [
+      {
+        "cause": "Aging oxygen sensor with slow switching response",
+        "probability": "high",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": ""
+      },
+      {
+        "cause": "Small exhaust leak before O2 sensor causing false readings",
+        "probability": "medium",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": ""
+      }
+    ],
+    "recommended_checks": [
+      "View upstream O2 sensor waveform; healthy sensors switch rapidly between rich and lean.",
+      "Inspect exhaust manifold and flex sections for leaks.",
+      "Check long-term fuel trims for chronic rich or lean conditions."
+    ],
+    "safety_warning": "Slow O2 response can over time stress the catalytic converter and increase emissions and fuel consumption."
+  },
+  {
+    "id": "knock_sensor_false_knock",
+    "title": "False Knock Detection — Power Reduced",
+    "system": "engine",
+    "category": "IGNITION / KNOCK CONTROL",
+    "symptom_short": "Engine power reduced, timing pulled, no real knock",
+    "symptom_patterns": [
+      "reduced power no obvious misfire",
+      "knock sensor code but no noise",
+      "engine feels held back",
+      "false knock suspected"
+    ],
+    "likely_causes": [
+      {
+        "cause": "Loose knock sensor or damaged wiring causing noise pickup",
+        "probability": "high",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": ""
+      },
+      {
+        "cause": "Excessive engine vibration or mounts transmitting noise as knock",
+        "probability": "medium",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": ""
+      },
+      {
+        "cause": "Carbon buildup causing real but low-level knock even with normal driving",
+        "probability": "medium",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": ""
+      }
+    ],
+    "recommended_checks": [
+      "Verify knock sensor torque to factory spec.",
+      "Inspect engine mounts and accessories for abnormal vibration.",
+      "Review timing advance and knock retard data while driving."
+    ],
+    "safety_warning": "While false knock mostly reduces performance, ignoring real knock can be dangerous for the engine. Confirm root cause before aggressive driving."
+  },
+  {
+    "id": "maf_conflict_advanced",
+    "title": "MAF/Load Conflict — Hesitation and Stalling",
+    "system": "engine",
+    "category": "AIR / LOAD CALCULATION",
+    "symptom_short": "Hesitation, stalling at idle, inconsistent throttle response",
+    "symptom_patterns": [
+      "maf sensor code with vacuum leak",
+      "rpm hunts at idle",
+      "car stalls when stopping after cleaning maf",
+      "load reading does not match reality"
+    ],
+    "likely_causes": [
+      {
+        "cause": "Dirty or failing mass airflow (MAF) sensor",
+        "probability": "high",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": ""
+      },
+      {
+        "cause": "Vacuum leak causing airflow not to match MAF reading",
+        "probability": "medium",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": ""
+      },
+      {
+        "cause": "Incorrect aftermarket air intake or oiled filter contaminating sensor",
+        "probability": "medium",
+        "severity": "medium",
+        "urgency": "normal",
+        "notes": ""
+      }
+    ],
+    "recommended_checks": [
+      "Check fuel trims (high positive trims often indicate vacuum leak).",
+      "Inspect intake boots and PCV hoses for cracks or loose clamps.",
+      "Clean MAF sensor only with appropriate MAF cleaner; avoid touching the element."
+    ],
+    "safety_warning": "Serious lean conditions from MAF/vacuum issues can cause misfire and overheating of engine components and catalytic converters."
+  },
+  {
+    "id": "bcm_body_control_fault",
+    "title": "Body Control Module (BCM) Fault — Random Body Electrical Issues",
+    "system": "body",
+    "category": "MODULES — BCM",
+    "symptom_short": "Random window, lock, light, wiper or chime issues",
+    "symptom_patterns": [
+      "windows and locks act on their own",
+      "lights flicker but charging system ok",
+      "random dinging and chimes",
+      "bcm failure suspected"
+    ],
+    "likely_causes": [
+      {
+        "cause": "Internal BCM failure due to solder cracks or component damage",
+        "probability": "medium",
+        "severity": "high",
+        "urgency": "urgent",
+        "notes": ""
+      },
+      {
+        "cause": "Water intrusion into BCM or connectors",
+        "probability": "medium",
+        "severity": "high",
+        "urgency": "soon",
+        "notes": ""
+      },
+      {
+        "cause": "Broken wires in door or pillar harness affecting BCM inputs",
+        "probability": "medium",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": ""
+      }
+    ],
+    "recommended_checks": [
+      "Scan BCM for multiple unrelated input/output fault codes.",
+      "Inspect under-dash and kick panel areas for moisture or corrosion.",
+      "Check door boot wiring for broken conductors especially on high-use doors."
+    ],
+    "safety_warning": "BCM failure can in some vehicles affect immobilizer, lighting, wipers and even starting; it can be both a safety and security issue."
+  },
+  {
+    "id": "evap_large_leak_advanced",
+    "title": "EVAP System Large Leak — Hard Start After Refuel",
+    "system": "fuel_system",
+    "category": "EVAP — ADVANCED",
+    "symptom_short": "Check-engine light with EVAP large leak and rough start after fueling",
+    "symptom_patterns": [
+      "p0455 large evap leak",
+      "hard start after filling gas",
+      "fuel smell and evap code",
+      "purge valve stuck open"
+    ],
+    "likely_causes": [
+      {
+        "cause": "EVAP purge valve stuck open allowing raw vapor into intake",
+        "probability": "medium",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": ""
+      },
+      {
+        "cause": "Loose, missing, or damaged gas cap",
+        "probability": "high",
+        "severity": "low",
+        "urgency": "normal",
+        "notes": ""
+      },
+      {
+        "cause": "Cracked EVAP hoses or charcoal canister",
+        "probability": "medium",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": ""
+      }
+    ],
+    "recommended_checks": [
+      "Ensure gas cap is tight and seal in good condition.",
+      "Perform EVAP smoke test to locate large leaks.",
+      "Test purge valve operation with scan tool or vacuum source."
+    ],
+    "safety_warning": "EVAP leaks are rarely an immediate driving hazard but can cause rough running, failed emissions tests, and increased fuel vapor emissions."
+  },
+  {
+    "id": "high_voltage_isolation_fault",
+    "title": "High-Voltage Isolation Fault on Hybrid/EV",
+    "system": "high_voltage",
+    "category": "HV SYSTEM — SAFETY CRITICAL",
+    "symptom_short": "High-voltage isolation or \"Service HV system\" warning",
+    "symptom_patterns": [
+      "hv isolation fault",
+      "service high voltage system",
+      "isolation resistance low",
+      "ev/hybrid electric drive disabled"
+    ],
+    "likely_causes": [
+      {
+        "cause": "Moisture or coolant intrusion into high-voltage components or wiring",
+        "probability": "high",
+        "severity": "critical",
+        "urgency": "immediate",
+        "notes": "Often affects inverters, junction boxes, battery packs, or cooling plates."
+      },
+      {
+        "cause": "Damaged orange high-voltage cable insulation or chafed wiring to chassis",
+        "probability": "medium",
+        "severity": "critical",
+        "urgency": "immediate",
+        "notes": ""
+      }
+    ],
+    "recommended_checks": [
+      "Do NOT touch orange high-voltage components or wiring.",
+      "Have an HV-qualified technician measure insulation resistance to ground.",
+      "Check for service bulletins related to coolant leakage into HV components."
+    ],
+    "safety_warning": "High-voltage isolation faults are extremely dangerous; only HV-certified personnel should diagnose and repair them."
+  },
+  {
+    "id": "electrical_burning_smell_cabin",
+    "title": "Electrical Burning Smell Inside Cabin",
+    "system": "electrical",
+    "category": "INTERIOR — ELECTRICAL OVERHEAT",
+    "symptom_short": "Strong burning plastic or electrical odor inside the car",
+    "symptom_patterns": [
+      "burning plastic smell under dash",
+      "electrical burning near vents",
+      "smell like wires burning"
+    ],
+    "likely_causes": [
+      {
+        "cause": "Overheated wiring, connector, or blower-motor resistor under dash",
+        "probability": "medium",
+        "severity": "critical",
+        "urgency": "immediate",
+        "notes": "Often related to HVAC fan speeds or accessory loads."
+      },
+      {
+        "cause": "Short circuit in seat heaters, window circuits, or steering column wiring",
+        "probability": "low",
+        "severity": "high",
+        "urgency": "immediate",
+        "notes": ""
+      }
+    ],
+    "recommended_checks": [
+      "Immediately turn off non-essential electrical accessories including seat heaters, HVAC, and chargers.",
+      "Look (from a safe distance) for visible smoke or melted plastics.",
+      "Have wiring inspected urgently; do not continue operating circuits that trigger the smell."
+    ],
+    "safety_warning": "Strong electrical burning smell or visible smoke can precede an interior fire; stop the vehicle safely, shut it off, and exit if the smell is intense."
+  },
+  {
+    "id": "main_fuse_blows_repeatedly",
+    "title": "Main Fuse or High-Current Fuse Blows Repeatedly",
+    "system": "electrical",
+    "category": "FUSES — HIGH CURRENT",
+    "symptom_short": "Main or large fuse blows as soon as it is replaced",
+    "symptom_patterns": [
+      "main fuse keeps blowing",
+      "big fuse under hood blown",
+      "replace fuse and it blows again immediately"
+    ],
+    "likely_causes": [
+      {
+        "cause": "Direct short to ground in a high-current circuit (starter, alternator, or main power feed)",
+        "probability": "medium",
+        "severity": "critical",
+        "urgency": "immediate",
+        "notes": ""
+      }
+    ],
+    "recommended_checks": [
+      "Do NOT install a larger fuse than specified; this is extremely unsafe.",
+      "Determine which systems lose power when the fuse blows (charging, interior power, etc.).",
+      "Use a current-limited power supply and proper diagnostic tools to locate the short rather than burning more fuses."
+    ],
     "safety_warning": "High-current shorts can overheat wiring and start a fire; the vehicle should not be driven until the fault is repaired."
-
   }
 ]
