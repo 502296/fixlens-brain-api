@@ -10,6 +10,21 @@ export const config = { runtime: "nodejs18.x" };
 
 const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
+async function readJsonBody(req) {
+  if (req.body && typeof req.body === "object") return req.body;
+
+  let raw = "";
+  for await (const chunk of req) raw += chunk;
+
+  if (!raw) return null;
+
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
 function detectLanguage(text = "") {
   if (/[\u0600-\u06FF]/.test(text)) return "ar";
   if (/[а-яА-Я]/.test(text)) return "ru";
@@ -30,35 +45,46 @@ export default async function handler(req, res) {
   let tmpFile = null;
 
   try {
-    if (req.method !== "POST") return res.status(405).json({ error: "Only POST allowed" });
+    if (req.method !== "POST") {
+      return res.status(405).json({ error: "Only POST allowed" });
+    }
 
-    const { audioBase64, mimeType, text, language } = req.body || {};
+    const body = await readJsonBody(req);
+    if (!body) {
+      return res.status(400).json({
+        error: "Invalid or missing JSON body",
+        hint: "Send Content-Type: application/json with { audioBase64: <base64>, mimeType?: 'audio/m4a', text?: <string>, language?: <code> }",
+      });
+    }
+
+    const { audioBase64, mimeType, text, language } = body;
+
     if (!audioBase64 || typeof audioBase64 !== "string" || audioBase64.trim().length < 50) {
-      return res.status(400).json({ error: "Missing audioBase64. Send JSON field: audioBase64" });
+      return res.status(400).json({
+        error: "Missing audioBase64. Send JSON field: audioBase64",
+      });
     }
 
     const detected = detectLanguage(text || "");
-    const lang = (language && language !== "auto") ? language : detected;
+    const lang = language && language !== "auto" ? language : detected;
 
-    // Write to /tmp for transcription
     const ext = extFromMime(mimeType || "");
     const buf = Buffer.from(audioBase64, "base64");
+
     tmpFile = path.join(os.tmpdir(), `fixlens_audio_${Date.now()}.${ext}`);
     await fsp.writeFile(tmpFile, buf);
 
-    // 1) Transcribe
+    // Transcribe
     const transcript = await client.audio.transcriptions.create({
       file: fs.createReadStream(tmpFile),
-      model: "gpt-4o-mini-transcribe"
+      model: "gpt-4o-mini-transcribe",
     });
 
     const transcriptText = (transcript.text || "").trim();
 
-    // 2) Match internal issues
     const combined = `${text || ""}\n\nAUDIO TRANSCRIPT:\n${transcriptText}`.trim();
     const matchedIssues = findRelevantIssues(combined);
 
-    // 3) Diagnose
     const final = await client.responses.create({
       model: "gpt-4.1",
       input: [
@@ -72,16 +98,23 @@ Format:
 🧪 Quick Tests
 ⚠️ Safety Warnings
 ❌ What NOT to do
-🧠 Pro Tip`
+🧠 Pro Tip`,
         },
         {
           role: "user",
           content: [
-            { type: "input_text", text: `User notes:\n${text || "(none)"}\n\nAudio transcript:\n${transcriptText || "(no transcript)"}\n\nMatched issues:\n${JSON.stringify(matchedIssues, null, 2)}` }
-          ]
-        }
+            {
+              type: "input_text",
+              text: `User notes:\n${text || "(none)"}\n\nAudio transcript:\n${transcriptText || "(no transcript)"}\n\nMatched issues:\n${JSON.stringify(
+                matchedIssues,
+                null,
+                2
+              )}`,
+            },
+          ],
+        },
       ],
-      temperature: 0.3
+      temperature: 0.3,
     });
 
     const reply = (final.output_text || "").trim() || "No reply.";
@@ -90,14 +123,19 @@ Format:
       reply,
       transcript: transcriptText,
       matched_issues: matchedIssues,
-      language: lang
+      language: lang,
     });
   } catch (err) {
     console.error("Audio diagnose error:", err);
-    return res.status(500).json({ error: "Audio diagnosis failed", details: err?.message || String(err) });
+    return res.status(500).json({
+      error: "Audio diagnosis failed",
+      details: err?.message || String(err),
+    });
   } finally {
     if (tmpFile) {
-      try { fs.unlinkSync(tmpFile); } catch (_) {}
+      try {
+        fs.unlinkSync(tmpFile);
+      } catch {}
     }
   }
 }
