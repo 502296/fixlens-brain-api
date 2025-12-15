@@ -5,8 +5,7 @@ import fs from "fs";
 import { buildFixLensPrompt } from "../lib/promptBuilder.js";
 
 export const config = {
-  runtime: "nodejs18.x",
-  api: { bodyParser: false }, // ✅ ضروري
+  api: { bodyParser: false }, // ✅ مهم
 };
 
 const openai = new OpenAI({
@@ -35,10 +34,11 @@ export default async function handler(req, res) {
 
     const { fields, files } = await parseForm(req);
 
-    const preferredLanguage = (fields.preferredLanguage || "").toString().trim() || null;
-    const userNote = (fields.message || "").toString().trim(); // ملاحظة اختيارية من المستخدم
+    const preferredLanguage =
+      (fields.preferredLanguage || "").toString().trim() || null;
 
-    // ✅ لازم اسم الحقل في Flutter يكون 'audio'
+    const userNote = (fields.message || "").toString().trim();
+
     const audioFile = files.audio;
     if (!audioFile) {
       return res.status(400).json({
@@ -47,25 +47,26 @@ export default async function handler(req, res) {
       });
     }
 
-    // 1) Transcribe
+    // 🔊 1) Transcription
     const transcript = await openai.audio.transcriptions.create({
-      model: process.env.FIXLENS_TRANSCRIBE_MODEL || "gpt-4o-mini-transcribe",
+      model:
+        process.env.FIXLENS_TRANSCRIBE_MODEL || "gpt-4o-mini-transcribe",
       file: fs.createReadStream(audioFile.filepath),
     });
 
     const text = (transcript.text || "").trim();
     if (!text) {
-      return res.status(400).json({
-        error: "Transcription returned empty text",
-      });
+      return res.status(400).json({ error: "Empty transcription result" });
     }
 
-    // 2) Diagnose using SAME prompt builder (AutoKnowledge included)
+    // 🧠 2) Diagnose using same AutoKnowledge pipeline
     const prompt = buildFixLensPrompt({
-      userText: `Audio transcript: ${text}\nUser note: ${userNote || "N/A"}`,
+      userText: `Audio transcript: ${text}\nUser note: ${
+        userNote || "N/A"
+      }`,
       preferredLanguage,
       extraContext:
-        "The user provided an audio recording from a vehicle. Infer likely issues from the transcript and note. Ask follow-up questions if needed.",
+        "The user provided a vehicle sound recording. Infer likely causes from the described sound.",
     });
 
     const completion = await openai.chat.completions.create({
@@ -77,12 +78,10 @@ export default async function handler(req, res) {
       temperature: 0.4,
     });
 
-    const reply = completion.choices?.[0]?.message?.content || "";
-
     return res.status(200).json({
-      reply,
+      reply: completion.choices?.[0]?.message?.content || "",
       language: preferredLanguage,
-      transcript: text, // ✅ مفيد للتجربة
+      transcript: text,
     });
   } catch (err) {
     return res.status(500).json({
