@@ -1,0 +1,513 @@
+[
+  {
+    "id": "overheating_at_idle_fan",
+    "title": "Overheats at Idle but Cools While Driving (Fan/Airflow Issue)",
+    "system": "cooling",
+    "category": "OVERHEAT — IDLE",
+    "symptom_short": "Temp rises at stop/idle; drops when moving",
+    "symptom_patterns": [
+      "overheats at idle",
+      "overheats in traffic",
+      "temperature goes down when driving",
+      "runs hot at stop",
+      "fan not coming on"
+    ],
+    "likely_causes": [
+      {
+        "cause": "Radiator cooling fan not working (motor/relay/fuse/control)",
+        "probability": "high",
+        "severity": "critical",
+        "urgency": "immediate",
+        "notes": "Most common when overheating mainly at idle."
+      },
+      {
+        "cause": "Low coolant level from leak",
+        "probability": "medium",
+        "severity": "critical",
+        "urgency": "immediate",
+        "notes": "Low coolant reduces heat transfer and can cause spikes."
+      },
+      {
+        "cause": "Restricted radiator airflow (debris, bent fins)",
+        "probability": "medium",
+        "severity": "high",
+        "urgency": "soon",
+        "notes": ""
+      }
+    ],
+    "recommended_checks": [
+      "Confirm fans run when engine is hot or A/C is ON.",
+      "Check fuses/relays and fan connector for corrosion/heat damage.",
+      "Inspect radiator fins for blockage (bugs/leaves/plastic bag).",
+      "Check coolant level when cold; look for leaks and dried coolant residue."
+    ],
+    "safety_warning": "Overheating can damage head gasket/engine quickly. Stop driving if temp is in the red or steam appears."
+  },
+  {
+    "id": "overheating_highway_restriction",
+    "title": "Overheats at Highway Speeds (Flow Restriction)",
+    "system": "cooling",
+    "category": "OVERHEAT — HIGHWAY",
+    "symptom_short": "Runs hotter at speed; may be stable at idle",
+    "symptom_patterns": [
+      "overheats on highway",
+      "overheats at speed",
+      "temperature rises when driving fast",
+      "runs hot on long drive"
+    ],
+    "likely_causes": [
+      {
+        "cause": "Partially clogged radiator (internal restriction)",
+        "probability": "medium",
+        "severity": "critical",
+        "urgency": "immediate",
+        "notes": "Old coolant, contamination, or stop-leak can clog cores."
+      },
+      {
+        "cause": "Thermostat stuck partially closed",
+        "probability": "medium",
+        "severity": "high",
+        "urgency": "soon",
+        "notes": ""
+      },
+      {
+        "cause": "Water pump impeller worn/slipping (reduced flow)",
+        "probability": "medium",
+        "severity": "critical",
+        "urgency": "immediate",
+        "notes": "Some pumps lose blades or slip on shaft."
+      }
+    ],
+    "recommended_checks": [
+      "Look for uneven radiator temperature (hot/cold spots) with safe method.",
+      "Check for heater performance changes at higher RPM.",
+      "Inspect coolant condition (rust/sludge).",
+      "Verify thermostat operation and water pump health."
+    ],
+    "safety_warning": "Sustained highway overheating can warp cylinder head and destroy engine."
+  },
+  {
+    "id": "coolant_leak_visible_puddle",
+    "title": "Coolant Leak — Visible Puddle / Sweet Smell",
+    "system": "cooling",
+    "category": "LEAK — EXTERNAL",
+    "symptom_short": "Puddle under car; sweet odor; low coolant",
+    "symptom_patterns": [
+      "coolant leaking",
+      "puddle under car green",
+      "sweet smell",
+      "low coolant level",
+      "radiator leak"
+    ],
+    "likely_causes": [
+      {
+        "cause": "Radiator leak (tank seam/core)",
+        "probability": "medium",
+        "severity": "high",
+        "urgency": "soon",
+        "notes": ""
+      },
+      {
+        "cause": "Hose/clam p leak (upper/lower radiator hose, heater hoses)",
+        "probability": "high",
+        "severity": "high",
+        "urgency": "soon",
+        "notes": "Common with aged rubber and weakened clamps."
+      },
+      {
+        "cause": "Water pump leak (weep hole)",
+        "probability": "medium",
+        "severity": "critical",
+        "urgency": "immediate",
+        "notes": "Often leaves crusty coolant trail near pump."
+      },
+      {
+        "cause": "Coolant reservoir crack or cap failure",
+        "probability": "medium",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": ""
+      }
+    ],
+    "recommended_checks": [
+      "Locate leak source: look for dried crusty residue (white/green/orange).",
+      "Pressure test cooling system if tools available.",
+      "Check radiator cap and reservoir cap seals.",
+      "Inspect water pump area for wetness around weep hole."
+    ],
+    "safety_warning": "Do not open radiator cap when hot. Coolant can spray and cause severe burns."
+  },
+  {
+    "id": "coolant_loss_no_puddle",
+    "title": "Coolant Loss with No Visible Puddle (Hidden/Internal Leak)",
+    "system": "cooling",
+    "category": "LEAK — HIDDEN/INTERNAL",
+    "symptom_short": "Coolant keeps dropping but no obvious leak",
+    "symptom_patterns": [
+      "coolant disappearing",
+      "no puddle but low coolant",
+      "coolant loss no leak found",
+      "needs coolant often"
+    ],
+    "likely_causes": [
+      {
+        "cause": "Heater core leak (may fog windows / wet carpet)",
+        "probability": "medium",
+        "severity": "high",
+        "urgency": "soon",
+        "notes": ""
+      },
+      {
+        "cause": "Internal leak/head gasket (coolant into cylinders)",
+        "probability": "medium",
+        "severity": "critical",
+        "urgency": "immediate",
+        "notes": "Look for white smoke, misfire, milky oil, bubbles in reservoir."
+      },
+      {
+        "cause": "Evaporation from small leak only under pressure/heat",
+        "probability": "medium",
+        "severity": "high",
+        "urgency": "soon",
+        "notes": "May only leak while driving."
+      }
+    ],
+    "recommended_checks": [
+      "Check passenger floor for dampness and sweet smell (heater core).",
+      "Look for white smoke from exhaust and sweet odor.",
+      "Check oil for milky appearance; check coolant for oil film.",
+      "Pressure test and use UV dye to find small leaks."
+    ],
+    "safety_warning": "Internal coolant leaks can cause sudden overheating and engine damage."
+  },
+  {
+    "id": "coolant_boiling_overflow",
+    "title": "Coolant Boils/Overflows from Reservoir",
+    "system": "cooling",
+    "category": "PRESSURE — OVERFLOW",
+    "symptom_short": "Reservoir bubbling; coolant pushes out after driving",
+    "symptom_patterns": [
+      "coolant boiling",
+      "overflow bottle bubbles",
+      "coolant puking out",
+      "coolant reservoir overflowing"
+    ],
+    "likely_causes": [
+      {
+        "cause": "Overheating due to fan/thermostat/water pump/radiator issues",
+        "probability": "high",
+        "severity": "critical",
+        "urgency": "immediate",
+        "notes": ""
+      },
+      {
+        "cause": "Radiator cap not holding pressure",
+        "probability": "medium",
+        "severity": "high",
+        "urgency": "soon",
+        "notes": "Low pressure lowers boiling point."
+      },
+      {
+        "cause": "Combustion gases entering coolant (head gasket/cracked head)",
+        "probability": "medium",
+        "severity": "critical",
+        "urgency": "immediate",
+        "notes": "Often continuous bubbles and rapid pressurization."
+      }
+    ],
+    "recommended_checks": [
+      "Check for fan operation and coolant level.",
+      "Test radiator cap (replace if seal weak).",
+      "Look for continuous bubbling from cold start (possible combustion gas).",
+      "Perform block test (combustion leak test) if available."
+    ],
+    "safety_warning": "Do not drive if it’s boiling/overflowing; severe engine damage can happen quickly."
+  },
+  {
+    "id": "thermostat_stuck_open",
+    "title": "Engine Runs Too Cool (Thermostat Stuck Open)",
+    "system": "cooling",
+    "category": "TEMP — TOO COOL",
+    "symptom_short": "Takes too long to warm up; weak heat; poor MPG",
+    "symptom_patterns": [
+      "engine runs cold",
+      "temperature gauge low",
+      "takes long to warm up",
+      "no heat in winter",
+      "P0128"
+    ],
+    "likely_causes": [
+      {
+        "cause": "Thermostat stuck open",
+        "probability": "high",
+        "severity": "low",
+        "urgency": "normal",
+        "notes": "Common with P0128 in many vehicles."
+      },
+      {
+        "cause": "Coolant temperature sensor reading low incorrectly",
+        "probability": "medium",
+        "severity": "low",
+        "urgency": "normal",
+        "notes": "Can mimic thermostat issue."
+      }
+    ],
+    "recommended_checks": [
+      "Scan for P0128 and compare live coolant temp vs gauge.",
+      "Feel upper radiator hose from cold start: if it warms too early, thermostat may be open.",
+      "Replace thermostat with OEM-quality part."
+    ],
+    "safety_warning": "Running too cool increases engine wear and emissions over time."
+  },
+  {
+    "id": "thermostat_stuck_closed",
+    "title": "Thermostat Stuck Closed (Rapid Overheat)",
+    "system": "cooling",
+    "category": "OVERHEAT — RAPID",
+    "symptom_short": "Heats up fast; upper hose stays cool; little/no circulation",
+    "symptom_patterns": [
+      "overheats quickly",
+      "upper hose cold",
+      "no coolant circulation",
+      "rapid temperature rise"
+    ],
+    "likely_causes": [
+      {
+        "cause": "Thermostat stuck closed",
+        "probability": "high",
+        "severity": "critical",
+        "urgency": "immediate",
+        "notes": ""
+      },
+      {
+        "cause": "Airlock/poor bleeding after coolant service",
+        "probability": "medium",
+        "severity": "critical",
+        "urgency": "immediate",
+        "notes": "Some cars trap air and overheat quickly."
+      }
+    ],
+    "recommended_checks": [
+      "Do not continue driving once temp climbs rapidly.",
+      "Confirm coolant level and proper bleeding procedure.",
+      "Replace thermostat and gasket if stuck suspected."
+    ],
+    "safety_warning": "Rapid overheating can damage engine in minutes."
+  },
+  {
+    "id": "heater_no_heat_overheat",
+    "title": "No Cabin Heat + Overheating (Possible Low Coolant/Airlock)",
+    "system": "cooling",
+    "category": "HEATER — NO HEAT",
+    "symptom_short": "Cabin heat is cold while engine temp rises",
+    "symptom_patterns": [
+      "no heat and overheating",
+      "heater blows cold and temp high",
+      "no cabin heat overheat"
+    ],
+    "likely_causes": [
+      {
+        "cause": "Low coolant level",
+        "probability": "high",
+        "severity": "critical",
+        "urgency": "immediate",
+        "notes": ""
+      },
+      {
+        "cause": "Air trapped in heater core/cooling system",
+        "probability": "medium",
+        "severity": "high",
+        "urgency": "soon",
+        "notes": "Often after coolant refill."
+      },
+      {
+        "cause": "Water pump not circulating",
+        "probability": "medium",
+        "severity": "critical",
+        "urgency": "immediate",
+        "notes": ""
+      }
+    ],
+    "recommended_checks": [
+      "Check coolant level when cold and look for leaks.",
+      "Follow correct bleeding procedure for the vehicle.",
+      "Check for circulation in reservoir/return hose (varies by design)."
+    ],
+    "safety_warning": "If overheating, stop driving; using heater as a temporary trick is not a real fix."
+  },
+  {
+    "id": "radiator_hose_collapses",
+    "title": "Radiator Hose Collapses / Sucks Flat",
+    "system": "cooling",
+    "category": "HOSES — VACUUM",
+    "symptom_short": "Lower hose collapses; overheating or poor flow",
+    "symptom_patterns": [
+      "radiator hose collapses",
+      "lower hose sucked flat",
+      "hose collapses at rpm"
+    ],
+    "likely_causes": [
+      {
+        "cause": "Weak hose with missing internal spring (lower hose)",
+        "probability": "high",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": "Lower hose often needs a spring to prevent collapse."
+      },
+      {
+        "cause": "Radiator cap vacuum valve stuck",
+        "probability": "medium",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": ""
+      }
+    ],
+    "recommended_checks": [
+      "Inspect hose condition and confirm spring presence (if design uses one).",
+      "Replace hose if soft or deformed.",
+      "Check/replace radiator cap if vacuum valve suspected."
+    ],
+    "safety_warning": "Restricted flow can cause overheating under load."
+  },
+  {
+    "id": "coolant_temp_sensor_fault",
+    "title": "Coolant Temperature Sensor Fault (Gauge Erratic / Fan Issues)",
+    "system": "cooling",
+    "category": "SENSORS — ECT",
+    "symptom_short": "Gauge jumps; fans behave oddly; codes present",
+    "symptom_patterns": [
+      "temp gauge jumps",
+      "coolant temp sensor",
+      "fan runs all the time",
+      "P0117",
+      "P0118"
+    ],
+    "likely_causes": [
+      {
+        "cause": "Coolant temperature sensor failure or wiring issue",
+        "probability": "high",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": "Some cars run fans full speed as fail-safe."
+      },
+      {
+        "cause": "Connector corrosion/coolant intrusion",
+        "probability": "medium",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": ""
+      }
+    ],
+    "recommended_checks": [
+      "Scan codes and compare live temp reading to actual warm-up behavior.",
+      "Inspect sensor connector for green corrosion or coolant contamination.",
+      "Check wiring for rub-through near engine."
+    ],
+    "safety_warning": "False readings can hide real overheating or trigger unnecessary limp strategies."
+  },
+  {
+    "id": "cooling_fan_runs_constant",
+    "title": "Cooling Fan Runs Constantly (Even When Cold)",
+    "system": "cooling",
+    "category": "FANS — ALWAYS ON",
+    "symptom_short": "Fans stay on; possible sensor/control fault",
+    "symptom_patterns": [
+      "cooling fan runs all the time",
+      "fan stays on after shutoff",
+      "fan runs when cold"
+    ],
+    "likely_causes": [
+      {
+        "cause": "ECT sensor fault (failsafe fan on)",
+        "probability": "high",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": ""
+      },
+      {
+        "cause": "Fan relay stuck closed",
+        "probability": "medium",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": ""
+      },
+      {
+        "cause": "PCM/BCM control issue or A/C pressure sensor fault",
+        "probability": "low",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": ""
+      }
+    ],
+    "recommended_checks": [
+      "Check for ECT codes and verify temp reading.",
+      "Swap fan relay with identical relay for test.",
+      "Check A/C pressure sensor readings if fan behavior changes with A/C."
+    ],
+    "safety_warning": "Constant fan operation can drain battery and indicates an underlying fault."
+  },
+  {
+    "id": "radiator_cap_failure",
+    "title": "Radiator Cap Failure (Low Pressure, Overheat, Coolant Loss)",
+    "system": "cooling",
+    "category": "PRESSURE — CAP",
+    "symptom_short": "Coolant loss, boiling, or overheating with no obvious cause",
+    "symptom_patterns": [
+      "radiator cap bad",
+      "coolant boiling at normal temp",
+      "coolant loss overflow"
+    ],
+    "likely_causes": [
+      {
+        "cause": "Cap seal worn; cap not holding pressure",
+        "probability": "high",
+        "severity": "high",
+        "urgency": "soon",
+        "notes": "Lower pressure lowers boiling point."
+      }
+    ],
+    "recommended_checks": [
+      "Inspect cap seal for cracks and spring tension.",
+      "Replace cap with correct pressure rating.",
+      "Retest for overflow/boiling."
+    ],
+    "safety_warning": "Never remove cap hot; wait until completely cool."
+  },
+  {
+    "id": "head_gasket_suspected",
+    "title": "Head Gasket Suspected (Overheat + White Smoke + Coolant Loss)",
+    "system": "cooling",
+    "category": "INTERNAL — HEAD GASKET",
+    "symptom_short": "Overheats; coolant loss; white smoke; misfires",
+    "symptom_patterns": [
+      "white smoke",
+      "coolant loss and overheating",
+      "bubbles in coolant",
+      "milky oil",
+      "sweet smoke from exhaust"
+    ],
+    "likely_causes": [
+      {
+        "cause": "Head gasket failure allowing combustion gas into coolant",
+        "probability": "medium",
+        "severity": "critical",
+        "urgency": "immediate",
+        "notes": "Can pressurize system quickly and push coolant out."
+      },
+      {
+        "cause": "Cracked cylinder head or block",
+        "probability": "low",
+        "severity": "critical",
+        "urgency": "immediate",
+        "notes": ""
+      }
+    ],
+    "recommended_checks": [
+      "Check for continuous bubbles in reservoir from cold start.",
+      "Perform combustion leak (block) test and cooling system pressure test.",
+      "Check spark plugs for steam-cleaned appearance on one cylinder.",
+      "Compression/leak-down test if available."
+    ],
+    "safety_warning": "Continuing to drive can destroy the engine and cause sudden overheating."
+  }
+]
