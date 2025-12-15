@@ -1,0 +1,360 @@
+[
+  {
+    "id": "trans_harsh_shift_12",
+    "title": "Harsh 1–2 Shift / Jerky Upshifts",
+    "system": "transmission",
+    "category": "AUTO — SHIFT QUALITY",
+    "vehicle_class": "both",
+    "trans_type": "auto",
+    "symptom_short": "Hard shift when going 1–2 or during upshifts",
+    "symptom_patterns": ["hard shift", "harsh shift", "jerky upshift", "bang shift", "shift shock", "1-2 shift hard", "2-3 shift hard"],
+    "likely_causes": [
+      {"cause": "Low/old transmission fluid or wrong fluid type", "probability": "high", "severity": "high", "urgency": "soon", "notes": "Most common; wrong fluid causes pressure/shift issues."},
+      {"cause": "Adaptive shift strategy needs relearn (after battery/TCM reset)", "probability": "medium", "severity": "medium", "urgency": "normal", "notes": "Often after battery disconnect or repair."},
+      {"cause": "Shift solenoid sticking / valve body wear", "probability": "medium", "severity": "high", "urgency": "urgent", "notes": "Can trigger P075x/P076x codes."},
+      {"cause": "Engine/Transmission mount worn causing clunk", "probability": "medium", "severity": "medium", "urgency": "soon", "notes": "Feels like a bang but actually drivetrain movement."}
+    ],
+    "recommended_checks": [
+      "Check for transmission fluid level/condition (follow correct procedure; some are sealed).",
+      "Scan for transmission-related codes (P07xx) and check live data if possible.",
+      "Note if harsh shift happens only when cold vs always.",
+      "Inspect mounts for cracks or excessive movement."
+    ],
+    "safety_warning": "Repeated harsh shifting can accelerate internal wear. Avoid aggressive driving until diagnosed."
+  },
+  {
+    "id": "trans_delayed_engagement_drive_reverse",
+    "title": "Delayed Engagement into Drive or Reverse",
+    "system": "transmission",
+    "category": "AUTO — ENGAGEMENT DELAY",
+    "vehicle_class": "both",
+    "trans_type": "auto",
+    "symptom_short": "Delay before moving after shifting to D or R",
+    "symptom_patterns": ["delayed engagement", "delay into drive", "delay into reverse", "takes seconds to move", "rev then catches"],
+    "likely_causes": [
+      {"cause": "Low transmission fluid level due to leak", "probability": "high", "severity": "high", "urgency": "urgent", "notes": "Air in hydraulic circuits causes delay."},
+      {"cause": "Worn internal clutches / pump wear", "probability": "medium", "severity": "high", "urgency": "urgent", "notes": "Often accompanied by slipping."},
+      {"cause": "Valve body pressure control issue / solenoid fault", "probability": "medium", "severity": "high", "urgency": "urgent", "notes": "May set pressure control codes."}
+    ],
+    "recommended_checks": [
+      "Look under vehicle for red/brown fluid leaks.",
+      "Check fluid level/condition per OEM procedure.",
+      "Scan for codes; note if delay is worse when hot."
+    ],
+    "safety_warning": "Driving with low fluid can destroy the transmission quickly. If engagement becomes very delayed, avoid driving."
+  },
+  {
+    "id": "trans_slipping_under_load",
+    "title": "Transmission Slipping (RPM Flare) Under Acceleration",
+    "system": "transmission",
+    "category": "AUTO — SLIP",
+    "vehicle_class": "both",
+    "trans_type": "auto",
+    "symptom_short": "RPM rises but speed does not increase properly",
+    "symptom_patterns": ["transmission slipping", "rpm flare", "slips when accelerating", "won't shift and revs", "slips in gear"],
+    "likely_causes": [
+      {"cause": "Low/overheated transmission fluid", "probability": "high", "severity": "high", "urgency": "urgent", "notes": "Burnt smell, dark fluid."},
+      {"cause": "Worn clutch packs / bands", "probability": "medium", "severity": "high", "urgency": "urgent", "notes": "Often progressive and worse under load."},
+      {"cause": "Torque converter clutch or internal pressure loss", "probability": "low", "severity": "high", "urgency": "urgent", "notes": "May have shudder or lockup issues."}
+    ],
+    "recommended_checks": [
+      "Check for burnt smell and dark fluid (if accessible).",
+      "Scan for slip/ratio codes (P0730–P0736) and TCC codes (P0740–P0744).",
+      "Stop towing/heavy load until resolved."
+    ],
+    "safety_warning": "Continued driving while slipping can rapidly burn clutches and require full rebuild."
+  },
+  {
+    "id": "trans_no_reverse",
+    "title": "No Reverse (Automatic)",
+    "system": "transmission",
+    "category": "AUTO — LOSS OF GEAR",
+    "vehicle_class": "both",
+    "trans_type": "auto",
+    "symptom_short": "Reverse does not engage but forward gears may work",
+    "symptom_patterns": ["no reverse", "reverse won't engage", "won't back up", "reverse slip"],
+    "likely_causes": [
+      {"cause": "Low transmission fluid / internal leak", "probability": "medium", "severity": "high", "urgency": "urgent", "notes": "May also delay engagement."},
+      {"cause": "Reverse clutch/band failure", "probability": "medium", "severity": "high", "urgency": "urgent", "notes": "Common in worn high-mileage units."},
+      {"cause": "Valve body / solenoid control fault", "probability": "low", "severity": "high", "urgency": "urgent", "notes": "May set P07xx codes."}
+    ],
+    "recommended_checks": [
+      "Check fluid level/condition and scan for codes.",
+      "Confirm shift linkage/cable is selecting Reverse properly.",
+      "Avoid repeatedly revving in Reverse—causes more damage."
+    ],
+    "safety_warning": "Do not rev the engine trying to force reverse. If reverse is gone, professional diagnosis is needed."
+  },
+  {
+    "id": "trans_stuck_in_one_gear_limp",
+    "title": "Stuck in One Gear / Limp Mode (Automatic)",
+    "system": "transmission",
+    "category": "AUTO — FAILSAFE",
+    "vehicle_class": "both",
+    "trans_type": "auto",
+    "symptom_short": "Limited gears, sluggish, may start in 2nd/3rd only",
+    "symptom_patterns": ["limp mode transmission", "stuck in gear", "won't shift", "only one gear", "failsafe mode"],
+    "likely_causes": [
+      {"cause": "Transmission solenoid / pressure control fault", "probability": "medium", "severity": "high", "urgency": "urgent", "notes": "Common with P075x/P076x/P077x codes."},
+      {"cause": "TCM/PCM issue or low system voltage", "probability": "medium", "severity": "medium", "urgency": "soon", "notes": "Weak battery/alternator can trigger failsafe."},
+      {"cause": "Internal mechanical failure detected by ratio monitoring", "probability": "low", "severity": "high", "urgency": "urgent", "notes": "Often P073x ratio codes."}
+    ],
+    "recommended_checks": [
+      "Scan codes from TCM (not just engine ECU).",
+      "Check battery/charging voltage and related fuses.",
+      "Let transmission cool and see if behavior changes."
+    ],
+    "safety_warning": "Avoid highway driving if limited to one gear. Limp mode is protective; don’t ignore it."
+  },
+  {
+    "id": "trans_tcc_shudder_45_60",
+    "title": "Torque Converter Shudder at 45–60 mph",
+    "system": "transmission",
+    "category": "AUTO — TCC",
+    "vehicle_class": "both",
+    "trans_type": "auto",
+    "symptom_short": "Vibration/shudder during light cruise, often in lockup",
+    "symptom_patterns": ["tcc shudder", "shudder 45 mph", "vibration at 50 mph", "converter shudder", "lockup shudder"],
+    "likely_causes": [
+      {"cause": "Degraded transmission fluid / wrong friction modifiers", "probability": "high", "severity": "medium", "urgency": "soon", "notes": "Often improved with proper fluid service."},
+      {"cause": "TCC solenoid or valve body wear", "probability": "medium", "severity": "high", "urgency": "urgent", "notes": "May set P0741/P0742."},
+      {"cause": "Torque converter clutch lining wear", "probability": "medium", "severity": "high", "urgency": "urgent", "notes": "Can require converter replacement."}
+    ],
+    "recommended_checks": [
+      "Confirm symptom occurs during light throttle cruise and disappears when you slightly accelerate or shift manually.",
+      "Scan for TCC-related codes and monitor slip RPM data if possible.",
+      "Check for any engine misfire (misfire can mimic shudder)."
+    ],
+    "safety_warning": "Prolonged shudder can contaminate fluid and damage valve body. Avoid long highway trips until diagnosed."
+  },
+  {
+    "id": "trans_fluid_leak_red",
+    "title": "Red/Brown Fluid Leak Under Vehicle",
+    "system": "transmission",
+    "category": "AUTO — LEAK",
+    "vehicle_class": "both",
+    "trans_type": "any",
+    "symptom_short": "Transmission fluid leak spots after parking",
+    "symptom_patterns": ["red fluid leak", "brown fluid leak", "transmission leaking", "leak after parking"],
+    "likely_causes": [
+      {"cause": "Pan gasket seepage or loose pan bolts", "probability": "medium", "severity": "medium", "urgency": "soon", "notes": "Common on older units."},
+      {"cause": "Axle seal / output seal leak", "probability": "medium", "severity": "high", "urgency": "soon", "notes": "Can drop fluid quickly."},
+      {"cause": "Cooler line leak / radiator transmission cooler leak", "probability": "medium", "severity": "high", "urgency": "urgent", "notes": "Line can burst suddenly."}
+    ],
+    "recommended_checks": [
+      "Check leak location: front (bellhousing), middle (pan), sides (axle), front grille area (cooler lines).",
+      "Measure fluid level ASAP if procedure allows.",
+      "Do not drive far if leak is active."
+    ],
+    "safety_warning": "Low transmission fluid can lead to sudden loss of drive and expensive damage. If leaking heavily, tow is safer."
+  },
+  {
+    "id": "cvt_rubber_band_feel",
+    "title": "CVT ‘Rubber Band’ Feel / High RPM with Slow Acceleration",
+    "system": "transmission",
+    "category": "CVT — DRIVEABILITY",
+    "vehicle_class": "both",
+    "trans_type": "cvt",
+    "symptom_short": "Engine revs high but acceleration feels delayed/soft",
+    "symptom_patterns": ["cvt rubber band", "cvt revs high", "cvt slow acceleration", "cvt slipping feel"],
+    "likely_causes": [
+      {"cause": "Normal CVT behavior under certain throttle", "probability": "medium", "severity": "low", "urgency": "normal", "notes": "Some CVTs hold RPM for efficiency."},
+      {"cause": "CVT fluid degraded or wrong fluid", "probability": "medium", "severity": "high", "urgency": "soon", "notes": "CVT is sensitive to fluid spec."},
+      {"cause": "CVT belt/chain wear or pulley issues", "probability": "low", "severity": "high", "urgency": "urgent", "notes": "May show whine or ratio codes."}
+    ],
+    "recommended_checks": [
+      "Check service history: CVT fluid interval is critical.",
+      "Scan for CVT ratio/pressure codes (varies by manufacturer).",
+      "Listen for whine that changes with speed."
+    ],
+    "safety_warning": "If the symptom is getting worse quickly or accompanied by whining/burning smell, avoid driving to prevent major CVT damage."
+  },
+  {
+    "id": "cvt_overheat_warning",
+    "title": "CVT Overheat Warning / Limp Mode When Hot",
+    "system": "transmission",
+    "category": "CVT — OVERHEAT",
+    "vehicle_class": "both",
+    "trans_type": "cvt",
+    "symptom_short": "Warning message, reduced power after heat buildup",
+    "symptom_patterns": ["cvt overheat", "transmission hot", "overheat warning", "limp mode when hot", "after driving uphill"],
+    "likely_causes": [
+      {"cause": "Low CVT fluid level / leak", "probability": "medium", "severity": "high", "urgency": "urgent", "notes": "Heat rises fast when fluid low."},
+      {"cause": "CVT cooler restriction or cooling fan issue", "probability": "medium", "severity": "high", "urgency": "urgent", "notes": "Cooling problem triggers warning."},
+      {"cause": "Internal CVT wear generating excess heat", "probability": "low", "severity": "high", "urgency": "urgent", "notes": "May be late-stage."}
+    ],
+    "recommended_checks": [
+      "Stop, let it cool, and avoid aggressive driving.",
+      "Inspect for leaks and check cooler lines if accessible.",
+      "Scan TCM for temperature-related codes/data."
+    ],
+    "safety_warning": "Overheated CVT fluid can permanently damage belts and pulleys. If warning repeats, get professional inspection."
+  },
+  {
+    "id": "dct_low_speed_shudder",
+    "title": "DCT/DSG Shudder at Low Speed / Takeoff",
+    "system": "transmission",
+    "category": "DCT — CLUTCH CONTROL",
+    "vehicle_class": "both",
+    "trans_type": "dct",
+    "symptom_short": "Shudder/jerk in stop-and-go, especially when taking off",
+    "symptom_patterns": ["dsg shudder", "dct shudder", "jerk at takeoff", "shudder in traffic", "dual clutch jerk"],
+    "likely_causes": [
+      {"cause": "Normal DCT characteristics in slow crawling", "probability": "medium", "severity": "low", "urgency": "normal", "notes": "DCT behaves like automated manual."},
+      {"cause": "Clutch adaptation needed / software update", "probability": "medium", "severity": "medium", "urgency": "soon", "notes": "Often improved with adaptation procedure."},
+      {"cause": "Clutch pack wear / mechatronics issue", "probability": "low", "severity": "high", "urgency": "urgent", "notes": "May have fault codes and harsh engagement."}
+    ],
+    "recommended_checks": [
+      "Check if symptom is worse when hot and in traffic.",
+      "Scan for DCT/Mechatronics codes and clutch adaptation values.",
+      "Avoid creeping on throttle—use deliberate takeoffs if safe."
+    ],
+    "safety_warning": "Excessive creeping can overheat DCT clutches. If warning lights appear, stop and cool down."
+  },
+  {
+    "id": "manual_clutch_slip_burn_smell",
+    "title": "Manual Clutch Slipping + Burnt Smell",
+    "system": "transmission",
+    "category": "MANUAL — CLUTCH",
+    "vehicle_class": "both",
+    "trans_type": "manual",
+    "symptom_short": "RPM rises without speed increase, burnt odor",
+    "symptom_patterns": ["clutch slipping", "burnt clutch smell", "revs but no acceleration", "slips in higher gears"],
+    "likely_causes": [
+      {"cause": "Worn clutch disc/pressure plate", "probability": "high", "severity": "high", "urgency": "urgent", "notes": "Most common; worsens quickly under load."},
+      {"cause": "Oil contamination on clutch (rear main seal leak)", "probability": "medium", "severity": "high", "urgency": "urgent", "notes": "Leak can ruin new clutch if not fixed."},
+      {"cause": "Hydraulic clutch partially engaged (master/slave issue)", "probability": "low", "severity": "medium", "urgency": "soon", "notes": "Less common than wear."}
+    ],
+    "recommended_checks": [
+      "Test slip: in a higher gear at low speed, accelerate and watch RPM vs speed.",
+      "Inspect for engine/trans oil leaks near bellhousing.",
+      "Check clutch pedal feel and engagement point."
+    ],
+    "safety_warning": "A slipping clutch can fail suddenly, leaving you unable to move. Avoid towing and hard acceleration."
+  },
+  {
+    "id": "manual_grinds_into_gear",
+    "title": "Grinding When Shifting into Gear (Manual)",
+    "system": "transmission",
+    "category": "MANUAL — SHIFTING",
+    "vehicle_class": "both",
+    "trans_type": "manual",
+    "symptom_short": "Gear grind, difficult engagement",
+    "symptom_patterns": ["grinding into gear", "hard to shift", "grinds 2nd", "grinds reverse", "notchy shift"],
+    "likely_causes": [
+      {"cause": "Clutch not fully disengaging (hydraulic issue, worn clutch)", "probability": "high", "severity": "high", "urgency": "urgent", "notes": "Common cause of reverse grind."},
+      {"cause": "Worn synchronizers (synchro wear)", "probability": "medium", "severity": "high", "urgency": "soon", "notes": "Often one gear worse than others."},
+      {"cause": "Low or wrong gear oil", "probability": "medium", "severity": "medium", "urgency": "soon", "notes": "Check fluid spec."}
+    ],
+    "recommended_checks": [
+      "Check clutch pedal free play and fluid level (if hydraulic).",
+      "Try shifting with engine off (if easier, clutch disengagement suspected).",
+      "Inspect for leaks around master/slave cylinder."
+    ],
+    "safety_warning": "Forcing gears can damage synchronizers and gears. Fix clutch/hydraulics first."
+  },
+  {
+    "id": "trans_whine_with_speed",
+    "title": "Whining Noise that Changes with Vehicle Speed",
+    "system": "transmission",
+    "category": "ANY — NOISE",
+    "vehicle_class": "both",
+    "trans_type": "any",
+    "symptom_short": "Whine/hum varies with speed (not engine RPM)",
+    "symptom_patterns": ["transmission whine", "whining noise with speed", "hum increases with speed", "gear whine"],
+    "likely_causes": [
+      {"cause": "Low fluid level causing pump or bearing noise", "probability": "medium", "severity": "high", "urgency": "urgent", "notes": "Can worsen fast."},
+      {"cause": "Bearing wear (input/output/differential)", "probability": "medium", "severity": "high", "urgency": "urgent", "notes": "Often accompanied by vibration."},
+      {"cause": "Not transmission: wheel bearing or tire noise", "probability": "medium", "severity": "medium", "urgency": "normal", "notes": "Rule out wheel bearings first."}
+    ],
+    "recommended_checks": [
+      "Note if noise changes when you turn left/right (wheel bearing clue).",
+      "Check fluid level/condition if possible.",
+      "Scan for codes if drivability issues also present."
+    ],
+    "safety_warning": "If noise becomes loud suddenly or you feel vibration + loss of drive, stop driving and tow."
+  },
+  {
+    "id": "trans_overheat_towing",
+    "title": "Transmission Overheating During Towing / Hills",
+    "system": "transmission",
+    "category": "AUTO — OVERHEAT",
+    "vehicle_class": "both",
+    "trans_type": "auto",
+    "symptom_short": "Overheat warning or burnt smell when towing or climbing",
+    "symptom_patterns": ["transmission overheat", "burnt trans smell", "overheat towing", "hot transmission warning"],
+    "likely_causes": [
+      {"cause": "Fluid degraded / low level", "probability": "high", "severity": "high", "urgency": "urgent", "notes": "Heat kills fluid quickly."},
+      {"cause": "Cooler restriction / failed fan / blocked radiator fins", "probability": "medium", "severity": "high", "urgency": "urgent", "notes": "Cooling stack issue."},
+      {"cause": "TCC not locking properly generating extra heat", "probability": "low", "severity": "high", "urgency": "urgent", "notes": "Often with P0741."}
+    ],
+    "recommended_checks": [
+      "Stop and cool down; do not keep pushing when overheated.",
+      "Inspect cooler lines and radiator area for blockage.",
+      "Avoid towing until fluid/cooling system is verified."
+    ],
+    "safety_warning": "Overheated transmission fluid can lead to sudden failure. If warning persists, tow is safer than driving."
+  },
+  {
+    "id": "trans_shift_linkage_misadjust",
+    "title": "Shifter Position Mismatch (PRNDL) / Won’t Start in Park",
+    "system": "transmission",
+    "category": "AUTO — LINKAGE / RANGE",
+    "vehicle_class": "both",
+    "trans_type": "auto",
+    "symptom_short": "Shifter says Park but car acts like Neutral (or won’t start)",
+    "symptom_patterns": ["won't start in park", "prndl wrong", "shift indicator wrong", "range sensor", "neutral safety switch"],
+    "likely_causes": [
+      {"cause": "Transmission range sensor / neutral safety switch fault", "probability": "medium", "severity": "medium", "urgency": "soon", "notes": "May set P0705."},
+      {"cause": "Shift cable/linkage misadjusted or worn", "probability": "medium", "severity": "medium", "urgency": "soon", "notes": "Mechanical issue."},
+      {"cause": "Low voltage affecting module readings", "probability": "low", "severity": "medium", "urgency": "normal", "notes": ""}
+    ],
+    "recommended_checks": [
+      "Try starting in Neutral (N) as a test (if safe).",
+      "Scan for P0705 and check range sensor data if possible.",
+      "Inspect shifter cable bushings and adjustment."
+    ],
+    "safety_warning": "If the vehicle can start in gear, it’s a serious safety hazard. Fix immediately."
+  },
+  {
+    "id": "trans_ratio_incorrect",
+    "title": "Incorrect Gear Ratio Codes (P0730–P0736)",
+    "system": "transmission",
+    "category": "AUTO/CVT/DCT — RATIO",
+    "vehicle_class": "both",
+    "trans_type": "any",
+    "symptom_short": "Ratio codes, slipping, harsh shifts, limp mode possible",
+    "symptom_patterns": ["p0730", "p0731", "p0732", "p0733", "p0734", "p0735", "p0736", "incorrect gear ratio"],
+    "likely_causes": [
+      {"cause": "Low fluid / pressure loss", "probability": "high", "severity": "high", "urgency": "urgent", "notes": "Often first check."},
+      {"cause": "Internal clutch/band wear", "probability": "medium", "severity": "high", "urgency": "urgent", "notes": "May require rebuild."},
+      {"cause": "Speed sensor issues (input/output speed sensor)", "probability": "medium", "severity": "medium", "urgency": "soon", "notes": "False ratio reading possible."}
+    ],
+    "recommended_checks": [
+      "Check fluid level/condition; note any burnt smell.",
+      "Scan TCM and confirm if speed sensor signals look correct.",
+      "If ratio code + slip present, reduce driving immediately."
+    ],
+    "safety_warning": "Ratio codes often indicate internal slip. Continued driving can turn a repair into a full rebuild."
+  },
+  {
+    "id": "trans_p0700_general",
+    "title": "P0700 — Transmission Control System Malfunction",
+    "system": "transmission",
+    "category": "AUTO — GENERAL",
+    "vehicle_class": "both",
+    "trans_type": "auto",
+    "symptom_short": "P0700 in engine ECU indicates TCM has stored faults",
+    "symptom_patterns": ["p0700", "transmission code p0700", "check transmission light"],
+    "likely_causes": [
+      {"cause": "TCM has specific stored codes (solenoid, pressure, ratio, sensor)", "probability": "high", "severity": "medium", "urgency": "soon", "notes": "P0700 is a flag, not root cause."},
+      {"cause": "Wiring/connector issues to TCM", "probability": "medium", "severity": "medium", "urgency": "soon", "notes": "Water intrusion common in some vehicles."}
+    ],
+    "recommended_checks": [
+      "Read codes from the transmission module (TCM) specifically.",
+      "Inspect transmission harness connectors for corrosion.",
+      "Check battery/charging health; low voltage can trigger module faults."
+    ],
+    "safety_warning": "If accompanied by limp mode or slipping, reduce driving and diagnose quickly."
+  }
+]
