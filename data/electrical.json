@@ -1,0 +1,1271 @@
+[
+  {
+    "id": "battery_dead_no_lights",
+    "title": "Completely Dead Battery — No Dash Lights, No Crank",
+    "system": "electrical",
+    "category": "BATTERY — NO POWER",
+    "symptom_short": "No interior/dash lights, no crank, totally dead",
+    "symptom_patterns": [
+      "no power at all",
+      "no dash lights",
+      "battery dead",
+      "nothing happens when key turned",
+      "car completely dead"
+    ],
+    "likely_causes": [
+      {
+        "cause": "Battery fully discharged or failed internally",
+        "probability": "high",
+        "severity": "high",
+        "urgency": "immediate",
+        "notes": "Battery may have an internal open cell even if it shows voltage at rest."
+      },
+      {
+        "cause": "Loose or corroded battery terminals",
+        "probability": "high",
+        "severity": "high",
+        "urgency": "immediate",
+        "notes": "A loose clamp can mimic a dead battery."
+      },
+      {
+        "cause": "Main fuse/fusible link open",
+        "probability": "medium",
+        "severity": "high",
+        "urgency": "immediate",
+        "notes": "Especially after jump-start mistakes or shorts."
+      }
+    ],
+    "recommended_checks": [
+      "Check battery terminals for looseness/corrosion (white/green crust).",
+      "Measure battery voltage (healthy ~12.4–12.7V engine OFF).",
+      "Try jump start; if it starts, test charging system and parasitic draw.",
+      "Inspect main fuse/fusible link near battery/under-hood fuse box."
+    ],
+    "safety_warning": "Avoid repeated jump starts without fixing the cause; reverse polarity can damage modules and cause fire risk."
+  },
+  {
+    "id": "battery_dies_overnight_basic",
+    "title": "Battery Dies Overnight (Parasitic Drain — Basic)",
+    "system": "electrical",
+    "category": "BATTERY — PARASITIC DRAW",
+    "symptom_short": "Battery repeatedly dead after sitting overnight",
+    "symptom_patterns": [
+      "battery dead in morning",
+      "needs jump start every day",
+      "dies overnight",
+      "parasitic draw"
+    ],
+    "likely_causes": [
+      {
+        "cause": "Interior/trunk/glovebox light staying on",
+        "probability": "high",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": "Very common, especially with faulty latches."
+      },
+      {
+        "cause": "Aftermarket accessory (alarm, amp, dashcam) not sleeping",
+        "probability": "medium",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": "Wired incorrectly to constant power."
+      },
+      {
+        "cause": "Aging battery can’t hold charge",
+        "probability": "medium",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": "Typical life 3–5 years depending on climate/usage."
+      }
+    ],
+    "recommended_checks": [
+      "Check battery age and do a load test (parts stores often do this).",
+      "Verify all lights turn off after closing doors/trunk.",
+      "If possible, measure key-off draw after 30–60 minutes (goal often < 50 mA on many cars).",
+      "Temporarily unplug aftermarket devices and retest overnight."
+    ],
+    "safety_warning": "Frequent jump-starting can stress electronics; avoid being stranded in unsafe locations."
+  },
+  {
+    "id": "parasitic_draw_advanced",
+    "title": "Advanced Parasitic Draw — Module Staying Awake",
+    "system": "electrical",
+    "category": "BATTERY — PARASITIC DRAW ADVANCED",
+    "symptom_short": "Battery drains in hours; car may behave “awake” after shutdown",
+    "symptom_patterns": [
+      "battery drains in a few hours",
+      "modules stay on",
+      "fan runs after car off",
+      "clicking relays after shutdown",
+      "parasitic draw suspected"
+    ],
+    "likely_causes": [
+      {
+        "cause": "Stuck relay (cooling fan, fuel pump, blower, etc.)",
+        "probability": "high",
+        "severity": "high",
+        "urgency": "soon",
+        "notes": "Relay contacts can weld shut."
+      },
+      {
+        "cause": "Body control module not entering sleep mode (network issue)",
+        "probability": "medium",
+        "severity": "high",
+        "urgency": "soon",
+        "notes": "Door switch input or CAN traffic can keep modules awake."
+      },
+      {
+        "cause": "Shorted alternator diode causing backfeed",
+        "probability": "medium",
+        "severity": "high",
+        "urgency": "soon",
+        "notes": "Can drain battery even with good alternator output."
+      }
+    ],
+    "recommended_checks": [
+      "Measure key-off draw after modules should be asleep; then pull fuses one-by-one to isolate circuit.",
+      "Feel for warm relays/modules after shutdown (careful).",
+      "Test alternator for diode leakage/AC ripple.",
+      "Scan for network errors or modules not sleeping (advanced scan tool)."
+    ],
+    "safety_warning": "Do not keep replacing batteries without finding the draw; overheating wiring/relays is possible."
+  },
+  {
+    "id": "starter_click_no_crank",
+    "title": "Single Click or Rapid Clicking — No Crank",
+    "system": "electrical",
+    "category": "STARTING — NO CRANK",
+    "symptom_short": "Clicks but engine does not crank",
+    "symptom_patterns": [
+      "just clicking",
+      "rapid clicking",
+      "no crank",
+      "starter clicks"
+    ],
+    "likely_causes": [
+      {
+        "cause": "Weak battery / low voltage under load",
+        "probability": "high",
+        "severity": "medium",
+        "urgency": "immediate",
+        "notes": ""
+      },
+      {
+        "cause": "Corroded terminals or poor ground connection",
+        "probability": "high",
+        "severity": "high",
+        "urgency": "immediate",
+        "notes": "High resistance can prevent starter current."
+      },
+      {
+        "cause": "Failing starter/solenoid",
+        "probability": "medium",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": ""
+      }
+    ],
+    "recommended_checks": [
+      "Observe if lights dim heavily when cranking.",
+      "Clean/tighten terminals and check engine-to-chassis ground strap.",
+      "Measure battery voltage while cranking (dropping below ~9.6V often indicates weak battery).",
+      "Tap starter lightly (only if safe) as a temporary diagnostic clue."
+    ],
+    "safety_warning": "Avoid long crank attempts (no more than 10 seconds) to prevent cable/starter overheating."
+  },
+  {
+    "id": "no_crank_no_click",
+    "title": "No Crank, No Click (But Dash Has Power)",
+    "system": "electrical",
+    "category": "STARTING — CONTROL CIRCUIT",
+    "symptom_short": "Dash lights on but nothing happens at START",
+    "symptom_patterns": [
+      "dash lights on but no crank",
+      "no click no crank",
+      "key turned nothing happens"
+    ],
+    "likely_causes": [
+      {
+        "cause": "Neutral safety switch / PRNDL range switch issue",
+        "probability": "medium",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": "Try starting in Neutral if automatic."
+      },
+      {
+        "cause": "Bad starter relay or ignition switch",
+        "probability": "medium",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": ""
+      },
+      {
+        "cause": "Immobilizer/key not recognized",
+        "probability": "medium",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": "Common with push-button systems and weak key fob battery."
+      }
+    ],
+    "recommended_checks": [
+      "Try starting in Neutral (automatic) or press clutch fully (manual).",
+      "Check for security/immobilizer warning light messages.",
+      "Swap starter relay with an identical relay (for test only) if available.",
+      "Try spare key or replace key fob battery."
+    ],
+    "safety_warning": "Avoid bypassing safety interlocks; improper jumpers can cause vehicle movement or electrical damage."
+  },
+  {
+    "id": "cranks_no_start_fuel_spark_power",
+    "title": "Cranks Strongly But Will Not Start (Electrical/Control Related)",
+    "system": "electrical",
+    "category": "STARTING — CRANK NO START",
+    "symptom_short": "Engine turns over but never fires",
+    "symptom_patterns": [
+      "cranks but won't start",
+      "turns over no start",
+      "crank no start"
+    ],
+    "likely_causes": [
+      {
+        "cause": "Ignition system power loss (relay/fuse) or no spark",
+        "probability": "medium",
+        "severity": "high",
+        "urgency": "soon",
+        "notes": ""
+      },
+      {
+        "cause": "Crankshaft/camshaft position sensor failure",
+        "probability": "medium",
+        "severity": "high",
+        "urgency": "soon",
+        "notes": "Often no RPM signal while cranking."
+      },
+      {
+        "cause": "Immobilizer preventing injector pulse",
+        "probability": "medium",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": "Security light may flash."
+      }
+    ],
+    "recommended_checks": [
+      "Scan for codes (P0335/P0340 etc.).",
+      "Confirm fuel pump prime sound (key ON).",
+      "Check engine RPM on scan tool while cranking (0 RPM suggests crank sensor).",
+      "Check relevant fuses/relays (ECM, ignition, fuel pump)."
+    ],
+    "safety_warning": "Avoid excessive cranking; it can flood the engine and overheat the starter."
+  },
+  {
+    "id": "alternator_battery_light_on",
+    "title": "Battery/Charging Light On While Driving",
+    "system": "electrical",
+    "category": "CHARGING — WARNING",
+    "symptom_short": "Battery light on; voltage may be low",
+    "symptom_patterns": [
+      "battery light on",
+      "alternator light",
+      "charging system warning"
+    ],
+    "likely_causes": [
+      {
+        "cause": "Alternator not charging (failed regulator/diodes)",
+        "probability": "high",
+        "severity": "high",
+        "urgency": "immediate",
+        "notes": ""
+      },
+      {
+        "cause": "Loose/slipping serpentine belt",
+        "probability": "medium",
+        "severity": "high",
+        "urgency": "immediate",
+        "notes": "May squeal; belt tensioner could be weak."
+      },
+      {
+        "cause": "Corroded main charging cables or grounds",
+        "probability": "medium",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": "Voltage drop reduces charging at battery."
+      }
+    ],
+    "recommended_checks": [
+      "Measure voltage engine running (typical 13.5–14.8V depending on system).",
+      "Inspect belt condition and tension.",
+      "Check for hot/burnt smell near alternator wiring and battery cables.",
+      "Have charging system load-tested."
+    ],
+    "safety_warning": "The engine can stall once the battery depletes. Avoid long trips and night driving until fixed."
+  },
+  {
+    "id": "alternator_ac_ripple_high",
+    "title": "High Alternator AC Ripple — Flickering Lights, Module Resets",
+    "system": "electrical",
+    "category": "CHARGING — ADVANCED",
+    "symptom_short": "Lights flicker; electronics glitch; random resets",
+    "symptom_patterns": [
+      "lights flicker while driving",
+      "radio resets",
+      "modules resetting randomly",
+      "voltage unstable",
+      "alternator ripple"
+    ],
+    "likely_causes": [
+      {
+        "cause": "Alternator diode failure causing high AC ripple",
+        "probability": "high",
+        "severity": "critical",
+        "urgency": "immediate",
+        "notes": "High ripple can damage sensitive ECUs and sensors."
+      },
+      {
+        "cause": "Loose alternator ground/power connections",
+        "probability": "medium",
+        "severity": "high",
+        "urgency": "soon",
+        "notes": ""
+      }
+    ],
+    "recommended_checks": [
+      "Measure AC ripple at battery with meter set to AC volts (healthy usually very low).",
+      "Inspect alternator output cable and grounds for corrosion/loose bolts.",
+      "Replace alternator if ripple is excessive and symptoms match."
+    ],
+    "safety_warning": "Driving with high ripple can slowly damage electronics; repair as soon as possible."
+  },
+  {
+    "id": "lights_dim_at_idle",
+    "title": "Headlights Dim at Idle but Brighten When Revving",
+    "system": "electrical",
+    "category": "CHARGING — LOW OUTPUT",
+    "symptom_short": "Dimming at stop; brighter with RPM",
+    "symptom_patterns": [
+      "lights dim at idle",
+      "headlights brighten when revving",
+      "voltage low at stop"
+    ],
+    "likely_causes": [
+      {
+        "cause": "Weak alternator output at low RPM",
+        "probability": "medium",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": ""
+      },
+      {
+        "cause": "High load at idle (blower, rear defrost, heated seats)",
+        "probability": "medium",
+        "severity": "low",
+        "urgency": "normal",
+        "notes": ""
+      },
+      {
+        "cause": "Poor grounds causing voltage drop",
+        "probability": "medium",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": ""
+      }
+    ],
+    "recommended_checks": [
+      "Turn off loads and see if dimming improves.",
+      "Perform voltage drop test on grounds (battery negative to engine block/chassis).",
+      "Test alternator output and battery condition."
+    ],
+    "safety_warning": "Severe flicker can precede alternator failure and potential engine stall."
+  },
+  {
+    "id": "ground_strap_failure",
+    "title": "Engine/Chassis Ground Strap Failure — Random Electrical Issues",
+    "system": "electrical",
+    "category": "GROUNDS — CRITICAL",
+    "symptom_short": "Random sensor codes, dim lights, weird behavior",
+    "symptom_patterns": [
+      "random electrical problems",
+      "multiple sensor codes",
+      "dim lights and weird issues",
+      "voltage unstable"
+    ],
+    "likely_causes": [
+      {
+        "cause": "Corroded/broken ground strap between engine and chassis",
+        "probability": "high",
+        "severity": "high",
+        "urgency": "urgent",
+        "notes": ""
+      },
+      {
+        "cause": "Loose battery negative terminal or chassis ground point",
+        "probability": "medium",
+        "severity": "high",
+        "urgency": "soon",
+        "notes": ""
+      }
+    ],
+    "recommended_checks": [
+      "Inspect ground straps for broken strands/corrosion/missing bolts.",
+      "Clean ground points to bare metal and re-tighten.",
+      "Do a voltage drop test during cranking and with loads ON."
+    ],
+    "safety_warning": "Bad grounds can cause ECU damage and sudden shutdowns."
+  },
+  {
+    "id": "main_fuse_blows_repeatedly",
+    "title": "Main Fuse / Fusible Link Blows Repeatedly",
+    "system": "electrical",
+    "category": "FUSES — HIGH CURRENT",
+    "symptom_short": "Large fuse blows as soon as replaced",
+    "symptom_patterns": [
+      "main fuse keeps blowing",
+      "fusible link blown",
+      "replace fuse it blows again"
+    ],
+    "likely_causes": [
+      {
+        "cause": "Direct short to ground in high-current circuit (starter/alternator/main feed)",
+        "probability": "high",
+        "severity": "critical",
+        "urgency": "immediate",
+        "notes": "Often due to chafed cable or incorrect jump start."
+      }
+    ],
+    "recommended_checks": [
+      "Do NOT install bigger fuse; locate short properly.",
+      "Inspect battery cables for rubbing/chafing near engine/transmission.",
+      "Check alternator output wire insulation and starter cable routing.",
+      "Use proper diagnostic methods (current-limited supply, short finder) if available."
+    ],
+    "safety_warning": "High-current shorts can overheat wiring and start a fire. Do not drive until repaired."
+  },
+  {
+    "id": "burning_smell_cabin",
+    "title": "Electrical Burning Smell Inside Cabin",
+    "system": "electrical",
+    "category": "INTERIOR — OVERHEAT",
+    "symptom_short": "Strong burning plastic / electrical odor under dash",
+    "symptom_patterns": [
+      "burning plastic smell",
+      "electrical burning odor",
+      "smell like wires burning",
+      "smoke under dash"
+    ],
+    "likely_causes": [
+      {
+        "cause": "Overheated connector or wiring (high resistance connection)",
+        "probability": "medium",
+        "severity": "critical",
+        "urgency": "immediate",
+        "notes": "Common at blower motor resistor, ignition switch, power outlet."
+      },
+      {
+        "cause": "Short circuit in seat heater/window/steering column wiring",
+        "probability": "low",
+        "severity": "critical",
+        "urgency": "immediate",
+        "notes": ""
+      }
+    ],
+    "recommended_checks": [
+      "Turn off non-essential loads (HVAC, heaters, chargers) immediately.",
+      "Look for visible smoke/melted plastic (safe distance).",
+      "Pull over safely and shut vehicle off if smell is intense.",
+      "Have wiring inspected before using the affected circuit again."
+    ],
+    "safety_warning": "This can precede an interior fire. Stop and exit if smoke is visible."
+  },
+  {
+    "id": "obd_no_comm",
+    "title": "No Communication with OBD-II Scanner",
+    "system": "electrical",
+    "category": "DIAGNOSTICS — NO COMM",
+    "symptom_short": "Scanner won’t connect; possible network/power issue",
+    "symptom_patterns": [
+      "no communication obd",
+      "scanner won't connect",
+      "obd no link"
+    ],
+    "likely_causes": [
+      {
+        "cause": "Blown OBD port power fuse (often shares cigarette lighter circuit)",
+        "probability": "high",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": "Very common after plugging accessories."
+      },
+      {
+        "cause": "CAN bus issue preventing module communication",
+        "probability": "medium",
+        "severity": "high",
+        "urgency": "soon",
+        "notes": ""
+      }
+    ],
+    "recommended_checks": [
+      "Check if 12V power outlet/cigarette lighter works; if not, check its fuse.",
+      "Inspect OBD connector pins for damage/corrosion.",
+      "If multiple modules show no comm, suspect CAN network problem."
+    ],
+    "safety_warning": "If multiple warning lights are on with no comm, critical systems may be affected."
+  },
+  {
+    "id": "can_bus_failure_multiple_lights",
+    "title": "CAN Bus Failure — Many Warning Lights & Random Faults",
+    "system": "electrical",
+    "category": "NETWORK — CAN BUS",
+    "symptom_short": "Multiple lights, shifting issues, ABS/TC/airbag warnings together",
+    "symptom_patterns": [
+      "many lights on dash",
+      "abs and traction and airbag lights",
+      "no communication with modules",
+      "can bus error",
+      "random failures"
+    ],
+    "likely_causes": [
+      {
+        "cause": "CAN high/low shorted to ground or power",
+        "probability": "high",
+        "severity": "critical",
+        "urgency": "urgent",
+        "notes": "Wiring chafed or water intrusion."
+      },
+      {
+        "cause": "Failed module pulling down the bus",
+        "probability": "medium",
+        "severity": "high",
+        "urgency": "soon",
+        "notes": "A single bad module can disrupt communication."
+      },
+      {
+        "cause": "Water intrusion/corrosion in connectors or junction blocks",
+        "probability": "medium",
+        "severity": "high",
+        "urgency": "soon",
+        "notes": ""
+      }
+    ],
+    "recommended_checks": [
+      "If available, measure CAN resistance with power OFF (~60 ohms across CAN H/L is common).",
+      "Inspect known water-intrusion areas (kick panels, under seats, fuse boxes).",
+      "Unplug suspect modules one-by-one (advanced) to find the one dragging the network.",
+      "Scan with a tool that shows module topology and U-codes."
+    ],
+    "safety_warning": "CAN failures can disable ABS/stability/airbags/transmission control — drive cautiously or tow if severe."
+  },
+  {
+    "id": "bcm_fault_random_body",
+    "title": "Body Control Module Issues — Random Locks/Windows/Lights",
+    "system": "electrical",
+    "category": "MODULES — BCM",
+    "symptom_short": "Windows/locks/wipers/lights behave randomly",
+    "symptom_patterns": [
+      "locks act by themselves",
+      "windows intermittent",
+      "wipers turn on randomly",
+      "random chimes"
+    ],
+    "likely_causes": [
+      {
+        "cause": "Water intrusion into BCM or connectors",
+        "probability": "medium",
+        "severity": "high",
+        "urgency": "soon",
+        "notes": "Check for wet carpet or musty smell."
+      },
+      {
+        "cause": "Broken wiring in door jamb harness",
+        "probability": "medium",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": "Repeated door movement breaks conductors."
+      },
+      {
+        "cause": "Internal BCM failure (solder cracks/component damage)",
+        "probability": "low",
+        "severity": "high",
+        "urgency": "soon",
+        "notes": ""
+      }
+    ],
+    "recommended_checks": [
+      "Scan for multiple unrelated body codes.",
+      "Inspect door boot wiring and check for cracked insulation.",
+      "Check for moisture under dash/kick panels; dry and repair leaks."
+    ],
+    "safety_warning": "BCM issues can affect lighting and wipers (visibility) and sometimes immobilizer (no-start)."
+  },
+  {
+    "id": "immobilizer_no_start",
+    "title": "Immobilizer / Security No-Start",
+    "system": "electrical",
+    "category": "SECURITY — IMMOBILIZER",
+    "symptom_short": "Crank/no start or no crank with security light",
+    "symptom_patterns": [
+      "security light flashing",
+      "immobilizer active",
+      "car won't start key not recognized",
+      "anti theft"
+    ],
+    "likely_causes": [
+      {
+        "cause": "Key transponder not recognized / key fob battery weak",
+        "probability": "high",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": "Try spare key or replace fob battery."
+      },
+      {
+        "cause": "Antenna/receiver issue near ignition or push-button area",
+        "probability": "medium",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": ""
+      },
+      {
+        "cause": "Module sync or immobilizer fault",
+        "probability": "low",
+        "severity": "high",
+        "urgency": "soon",
+        "notes": "May require reprogramming."
+      }
+    ],
+    "recommended_checks": [
+      "Try spare key and/or replace key fob battery.",
+      "Use the backup start location (per owner’s manual).",
+      "Check for related DTCs in immobilizer/BCM.",
+      "Inspect for recent battery disconnect or low voltage events."
+    ],
+    "safety_warning": "Do not attempt bypass methods; they can damage modules or violate laws in some regions."
+  },
+  {
+    "id": "key_not_detected",
+    "title": "Push-Button Start: Key Not Detected / No Start",
+    "system": "electrical",
+    "category": "KEYLESS — START",
+    "symptom_short": "Keyless system does not detect key",
+    "symptom_patterns": [
+      "key not detected",
+      "push button start won't work",
+      "have to hold key near button"
+    ],
+    "likely_causes": [
+      {
+        "cause": "Weak key fob battery",
+        "probability": "high",
+        "severity": "low",
+        "urgency": "normal",
+        "notes": ""
+      },
+      {
+        "cause": "Radio interference or receiver antenna issue",
+        "probability": "medium",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": "Often happens only in certain parking locations."
+      }
+    ],
+    "recommended_checks": [
+      "Replace key fob battery.",
+      "Use backup start method described in the manual.",
+      "Test with spare fob if available."
+    ],
+    "safety_warning": "If this happens after you shut the car off, you may be stranded; fix before long trips."
+  },
+  {
+    "id": "dash_lights_flicker_bumps",
+    "title": "Dash Lights Flicker / Car Cuts Out Over Bumps",
+    "system": "electrical",
+    "category": "POWER — INTERMITTENT",
+    "symptom_short": "Power loss over bumps; may stall and restart",
+    "symptom_patterns": [
+      "dies when hitting bumps",
+      "lights flicker over bumps",
+      "random engine cut out",
+      "like key turned off"
+    ],
+    "likely_causes": [
+      {
+        "cause": "Loose battery terminals or main power cable",
+        "probability": "high",
+        "severity": "critical",
+        "urgency": "immediate",
+        "notes": ""
+      },
+      {
+        "cause": "Loose ECU/fuse box connector or failing main relay",
+        "probability": "medium",
+        "severity": "critical",
+        "urgency": "immediate",
+        "notes": ""
+      },
+      {
+        "cause": "Ground connection intermittent",
+        "probability": "medium",
+        "severity": "high",
+        "urgency": "urgent",
+        "notes": ""
+      }
+    ],
+    "recommended_checks": [
+      "Check battery clamps tightness and inspect cables for broken strands.",
+      "Inspect under-hood fuse box for loose terminals or heat damage.",
+      "Perform wiggle test carefully (engine idling, safe area) to locate intermittent connection."
+    ],
+    "safety_warning": "Sudden engine shutdown causes loss of power steering/brake assist — this is safety-critical."
+  },
+  {
+    "id": "one_headlight_out",
+    "title": "One Headlight Out (Other Lights OK)",
+    "system": "electrical",
+    "category": "LIGHTING — HEADLIGHT",
+    "symptom_short": "Single headlight not working",
+    "symptom_patterns": [
+      "one headlight out",
+      "driver headlight not working",
+      "passenger headlight out"
+    ],
+    "likely_causes": [
+      {
+        "cause": "Burned out bulb or LED module failure",
+        "probability": "high",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": ""
+      },
+      {
+        "cause": "Corroded connector or wiring at that headlamp",
+        "probability": "medium",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": ""
+      },
+      {
+        "cause": "Failed headlight driver/module (on some systems)",
+        "probability": "low",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": ""
+      }
+    ],
+    "recommended_checks": [
+      "Check high beam vs low beam function.",
+      "Inspect connector for corrosion/overheating.",
+      "Swap bulb (if halogen) to confirm; for LED systems, check for TSBs."
+    ],
+    "safety_warning": "Reduced visibility and higher risk at night — repair soon."
+  },
+  {
+    "id": "both_headlights_out",
+    "title": "Both Headlights Out Suddenly",
+    "system": "electrical",
+    "category": "LIGHTING — BOTH OUT",
+    "symptom_short": "Both low beams or both headlights fail at once",
+    "symptom_patterns": [
+      "both headlights out",
+      "no low beams",
+      "headlights stopped working"
+    ],
+    "likely_causes": [
+      {
+        "cause": "Blown fuse or headlight relay",
+        "probability": "high",
+        "severity": "high",
+        "urgency": "immediate",
+        "notes": ""
+      },
+      {
+        "cause": "Headlight switch or BCM control fault",
+        "probability": "medium",
+        "severity": "high",
+        "urgency": "soon",
+        "notes": ""
+      }
+    ],
+    "recommended_checks": [
+      "Check fuses/relays for low beam and headlight power.",
+      "Try high beams; if high works but low doesn’t, suspect low-beam circuit/fuse.",
+      "Scan BCM for lighting-related codes if available."
+    ],
+    "safety_warning": "Do not drive at night without headlights."
+  },
+  {
+    "id": "brake_lights_stuck_on",
+    "title": "Brake Lights Stuck On / Won’t Turn Off",
+    "system": "electrical",
+    "category": "LIGHTING — BRAKE SWITCH",
+    "symptom_short": "Brake lights stay on; battery may drain",
+    "symptom_patterns": [
+      "brake lights stay on",
+      "brake lights won't turn off",
+      "battery drains and brake lights on"
+    ],
+    "likely_causes": [
+      {
+        "cause": "Brake pedal switch misadjusted or failed",
+        "probability": "high",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": "Often a simple switch near pedal."
+      },
+      {
+        "cause": "Pedal stopper pad missing/broken",
+        "probability": "medium",
+        "severity": "low",
+        "urgency": "soon",
+        "notes": "Small plastic/rubber pad can fall out."
+      }
+    ],
+    "recommended_checks": [
+      "Check if pedal returns fully; inspect switch at pedal.",
+      "Look for missing stopper pad.",
+      "Unplug brake switch temporarily to prevent battery drain (temporary only)."
+    ],
+    "safety_warning": "Brake lights stuck on can confuse drivers behind you and drain the battery."
+  },
+  {
+    "id": "turn_signal_fast_flash",
+    "title": "Turn Signal Hyper-Flash (Fast Blinking)",
+    "system": "electrical",
+    "category": "LIGHTING — TURN SIGNAL",
+    "symptom_short": "Turn signal blinks fast on one side",
+    "symptom_patterns": [
+      "turn signal blinks fast",
+      "hyperflash",
+      "signal fast on right",
+      "signal fast on left"
+    ],
+    "likely_causes": [
+      {
+        "cause": "Bulb out on that side",
+        "probability": "high",
+        "severity": "low",
+        "urgency": "soon",
+        "notes": ""
+      },
+      {
+        "cause": "Incorrect LED retrofit without proper resistor/programming",
+        "probability": "medium",
+        "severity": "low",
+        "urgency": "normal",
+        "notes": ""
+      }
+    ],
+    "recommended_checks": [
+      "Walk around and confirm which lamp is out.",
+      "Replace bulb or repair socket/corrosion.",
+      "If LED retrofit, use correct load resistor or BCM coding if supported."
+    ],
+    "safety_warning": "Signals are critical for safety — fix promptly."
+  },
+  {
+    "id": "power_window_slow",
+    "title": "Power Window Slow or Stuck",
+    "system": "electrical",
+    "category": "ACCESSORIES — WINDOWS",
+    "symptom_short": "Window moves slowly or stops",
+    "symptom_patterns": [
+      "window goes up slow",
+      "window stuck",
+      "power window intermittent"
+    ],
+    "likely_causes": [
+      {
+        "cause": "Dry/dirty window channels causing high load",
+        "probability": "high",
+        "severity": "low",
+        "urgency": "normal",
+        "notes": "Friction overload can trip protection."
+      },
+      {
+        "cause": "Failing window regulator or motor",
+        "probability": "medium",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": ""
+      },
+      {
+        "cause": "Broken wiring in door jamb",
+        "probability": "medium",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": ""
+      }
+    ],
+    "recommended_checks": [
+      "Listen for motor sound; if motor runs but glass doesn’t move, regulator likely.",
+      "Inspect door boot wiring for breaks.",
+      "Clean/lubricate window channels with silicone-safe product."
+    ],
+    "safety_warning": "Window stuck open is a security/weather issue; fix before heavy rain or freezing temps."
+  },
+  {
+    "id": "door_lock_intermittent",
+    "title": "Door Lock Works Intermittently",
+    "system": "electrical",
+    "category": "ACCESSORIES — LOCKS",
+    "symptom_short": "One door sometimes won’t lock/unlock",
+    "symptom_patterns": [
+      "door lock intermittent",
+      "one door won't lock",
+      "remote lock misses one door"
+    ],
+    "likely_causes": [
+      {
+        "cause": "Weak door lock actuator",
+        "probability": "high",
+        "severity": "low",
+        "urgency": "normal",
+        "notes": ""
+      },
+      {
+        "cause": "Broken wiring in door jamb harness",
+        "probability": "medium",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": ""
+      }
+    ],
+    "recommended_checks": [
+      "Identify which door fails consistently.",
+      "Listen for faint actuator clicks.",
+      "Inspect door boot wiring for cracked conductors."
+    ],
+    "safety_warning": "Lock failures are a security concern and can be critical for child safety."
+  },
+  {
+    "id": "horn_inoperative",
+    "title": "Horn Not Working",
+    "system": "electrical",
+    "category": "SAFETY — HORN",
+    "symptom_short": "Horn does not sound",
+    "symptom_patterns": [
+      "horn not working",
+      "no horn sound"
+    ],
+    "likely_causes": [
+      {
+        "cause": "Blown horn fuse or failed horn relay",
+        "probability": "high",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": ""
+      },
+      {
+        "cause": "Failed horn unit or corroded connector",
+        "probability": "medium",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": ""
+      },
+      {
+        "cause": "Clock spring issue (if horn on steering wheel and airbags lights also)",
+        "probability": "low",
+        "severity": "high",
+        "urgency": "soon",
+        "notes": "May affect airbag circuits."
+      }
+    ],
+    "recommended_checks": [
+      "Check fuse/relay first.",
+      "Test horn directly with 12V (advanced).",
+      "If airbag light + horn issue together, suspect clock spring and scan for codes."
+    ],
+    "safety_warning": "A bad clock spring can affect airbag system — inspect promptly."
+  },
+  {
+    "id": "wipers_not_working",
+    "title": "Wipers Not Working / Intermittent",
+    "system": "electrical",
+    "category": "VISIBILITY — WIPERS",
+    "symptom_short": "Wipers stop, work intermittently, or only on one speed",
+    "symptom_patterns": [
+      "wipers not working",
+      "wipers intermittent",
+      "wipers only high speed"
+    ],
+    "likely_causes": [
+      {
+        "cause": "Wiper motor or linkage issue",
+        "probability": "medium",
+        "severity": "high",
+        "urgency": "soon",
+        "notes": ""
+      },
+      {
+        "cause": "Blown fuse/relay or BCM control fault",
+        "probability": "medium",
+        "severity": "high",
+        "urgency": "soon",
+        "notes": ""
+      },
+      {
+        "cause": "Bad multifunction switch (stalk)",
+        "probability": "medium",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": ""
+      }
+    ],
+    "recommended_checks": [
+      "Check fuses and wiper relay.",
+      "Listen for motor sound; if motor runs but arms don’t move, linkage may be off.",
+      "Scan BCM for wiper-related codes if available."
+    ],
+    "safety_warning": "Wiper failure is dangerous in rain/snow — fix before driving in bad weather."
+  },
+  {
+    "id": "blower_only_high_speed",
+    "title": "HVAC Blower Works Only on Highest Speed",
+    "system": "electrical",
+    "category": "HVAC — BLOWER CONTROL",
+    "symptom_short": "Fan only works on max",
+    "symptom_patterns": [
+      "blower only works on high",
+      "fan only speed 4",
+      "no blower on low speeds"
+    ],
+    "likely_causes": [
+      {
+        "cause": "Failed blower motor resistor or control module",
+        "probability": "high",
+        "severity": "low",
+        "urgency": "normal",
+        "notes": "Classic symptom: only highest speed works."
+      },
+      {
+        "cause": "Overheated connector at resistor",
+        "probability": "medium",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": "May show melted plug."
+      }
+    ],
+    "recommended_checks": [
+      "Inspect resistor/module and connector for heat damage.",
+      "Replace resistor/module and repair connector if melted.",
+      "Check cabin filter and blower load to prevent repeat failure."
+    ],
+    "safety_warning": "Limited defrost control can reduce visibility in cold/wet conditions."
+  },
+  {
+    "id": "power_outlet_no_power",
+    "title": "Cigarette Lighter / Power Outlet Not Working",
+    "system": "electrical",
+    "category": "ACCESSORIES — POWER OUTLET",
+    "symptom_short": "12V socket dead; chargers won’t work",
+    "symptom_patterns": [
+      "power outlet not working",
+      "cigarette lighter dead",
+      "usb socket no power"
+    ],
+    "likely_causes": [
+      {
+        "cause": "Blown outlet fuse from overloaded accessory",
+        "probability": "high",
+        "severity": "low",
+        "urgency": "normal",
+        "notes": ""
+      },
+      {
+        "cause": "Socket contamination/short (coin or metal object)",
+        "probability": "medium",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": ""
+      }
+    ],
+    "recommended_checks": [
+      "Check outlet fuse (often same as OBD power).",
+      "Inspect inside socket for debris/metal objects.",
+      "Use correct-rated accessories."
+    ],
+    "safety_warning": "Repeated fuse blowing suggests a short; don’t keep replacing fuses without inspection."
+  },
+  {
+    "id": "battery_corrosion",
+    "title": "Battery Terminal Corrosion / High Resistance Connection",
+    "system": "electrical",
+    "category": "BATTERY — CONNECTIONS",
+    "symptom_short": "Hard start, intermittent power, charging issues",
+    "symptom_patterns": [
+      "battery terminals corroded",
+      "white powder on battery",
+      "intermittent electrical"
+    ],
+    "likely_causes": [
+      {
+        "cause": "Acid vapor corrosion at terminals",
+        "probability": "high",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": ""
+      },
+      {
+        "cause": "Loose terminal clamp",
+        "probability": "medium",
+        "severity": "high",
+        "urgency": "immediate",
+        "notes": "Can cause stalls and no-crank."
+      }
+    ],
+    "recommended_checks": [
+      "Clean terminals (proper battery-safe method) and tighten clamps.",
+      "Inspect cables for swelling/green corrosion inside insulation.",
+      "Apply terminal protectant after cleaning."
+    ],
+    "safety_warning": "Loose terminals can cause arcing and heat — fire risk and sudden shutdown risk."
+  },
+  {
+    "id": "charging_overvoltage",
+    "title": "Overcharging — Voltage Too High (Battery Boils, Lights Bright)",
+    "system": "electrical",
+    "category": "CHARGING — OVERVOLTAGE",
+    "symptom_short": "Voltage high; battery smell, bulbs failing",
+    "symptom_patterns": [
+      "overcharging",
+      "battery boiling smell",
+      "lights too bright",
+      "voltage 15.5",
+      "multiple bulbs burning out"
+    ],
+    "likely_causes": [
+      {
+        "cause": "Failed alternator voltage regulator",
+        "probability": "high",
+        "severity": "critical",
+        "urgency": "immediate",
+        "notes": "Can damage modules and battery."
+      },
+      {
+        "cause": "Incorrect battery type coding on smart charging systems",
+        "probability": "low",
+        "severity": "high",
+        "urgency": "soon",
+        "notes": "Some vehicles require battery registration/coding."
+      }
+    ],
+    "recommended_checks": [
+      "Measure running voltage; if persistently high, stop driving soon.",
+      "Replace alternator/regulator as needed.",
+      "If vehicle uses battery monitoring, ensure correct battery registration."
+    ],
+    "safety_warning": "Overvoltage can destroy electronics and may cause battery venting; treat as urgent."
+  },
+  {
+    "id": "battery_light_flicker_accessories",
+    "title": "Voltage Drops When Accessories Turn On",
+    "system": "electrical",
+    "category": "CHARGING — LOAD RESPONSE",
+    "symptom_short": "Voltage dips when blower/defrost/AC activates",
+    "symptom_patterns": [
+      "voltage drops when ac on",
+      "battery light flickers with loads",
+      "lights dim when blower on"
+    ],
+    "likely_causes": [
+      {
+        "cause": "Weak alternator or poor belt drive",
+        "probability": "medium",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": ""
+      },
+      {
+        "cause": "High resistance in power or ground circuits",
+        "probability": "medium",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": "Bad connections heat up under load."
+      }
+    ],
+    "recommended_checks": [
+      "Check belt/tensioner condition.",
+      "Perform voltage drop tests on main power and grounds under load.",
+      "Load-test alternator and battery."
+    ],
+    "safety_warning": "If voltage collapses while driving, the engine may stall; plan repairs soon."
+  },
+  {
+    "id": "airbag_light_on",
+    "title": "Airbag / SRS Light On",
+    "system": "electrical",
+    "category": "SAFETY — SRS",
+    "symptom_short": "Airbag warning light stays on",
+    "symptom_patterns": [
+      "airbag light on",
+      "srs light on",
+      "restraint system warning"
+    ],
+    "likely_causes": [
+      {
+        "cause": "Seat connector issue (under-seat wiring) or occupancy sensor",
+        "probability": "medium",
+        "severity": "high",
+        "urgency": "soon",
+        "notes": "Moving seat can stress connectors."
+      },
+      {
+        "cause": "Clock spring failure",
+        "probability": "medium",
+        "severity": "high",
+        "urgency": "soon",
+        "notes": "May also affect horn and steering wheel buttons."
+      },
+      {
+        "cause": "Low voltage events causing stored codes",
+        "probability": "low",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": ""
+      }
+    ],
+    "recommended_checks": [
+      "Scan SRS codes with an SRS-capable tool (generic OBD may not read).",
+      "Inspect under-seat connectors for looseness or corrosion.",
+      "If steering wheel functions/horn affected too, suspect clock spring."
+    ],
+    "safety_warning": "Airbags may be disabled when the light is on. Repair promptly."
+  },
+  {
+    "id": "abs_light_on",
+    "title": "ABS Light On (ABS Disabled)",
+    "system": "electrical",
+    "category": "BRAKE ELECTRONICS — ABS",
+    "symptom_short": "ABS warning light stays on",
+    "symptom_patterns": [
+      "abs light on",
+      "anti lock brake light",
+      "abs fault"
+    ],
+    "likely_causes": [
+      {
+        "cause": "Wheel speed sensor or wiring damage",
+        "probability": "high",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": ""
+      },
+      {
+        "cause": "Tone ring damage/corrosion",
+        "probability": "medium",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": ""
+      },
+      {
+        "cause": "ABS module fault",
+        "probability": "low",
+        "severity": "high",
+        "urgency": "soon",
+        "notes": ""
+      }
+    ],
+    "recommended_checks": [
+      "Scan ABS codes with capable scanner.",
+      "Inspect sensor wiring near wheels for rub-through.",
+      "Check if ABS activates unexpectedly or not at all."
+    ],
+    "safety_warning": "Normal braking may still work, but ABS may be disabled; increase following distance on wet/icy roads."
+  }
+]
