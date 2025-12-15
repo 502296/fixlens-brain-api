@@ -1,0 +1,194 @@
+[
+  {
+    "id": "adas_warning_light_on",
+    "title": "ADAS Warning Light or Message On",
+    "system": "adas",
+    "category": "ADAS — GENERAL",
+    "symptom_short": "ADAS features disabled or warning message displayed",
+    "symptom_patterns": [
+      "adas warning",
+      "driver assist unavailable",
+      "safety systems disabled",
+      "camera radar unavailable"
+    ],
+    "likely_causes": [
+      {
+        "cause": "Camera or radar sensor blocked (dirt, snow, ice)",
+        "probability": "high",
+        "severity": "low",
+        "urgency": "normal",
+        "notes": "Very common after bad weather."
+      },
+      {
+        "cause": "Sensor misalignment after windshield replacement or impact",
+        "probability": "medium",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": ""
+      },
+      {
+        "cause": "ADAS control module fault or calibration required",
+        "probability": "low",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": ""
+      }
+    ],
+    "recommended_checks": [
+      "Clean windshield area in front of camera and front radar emblem.",
+      "Check for recent windshield replacement or front-end repairs.",
+      "Scan ADAS module for calibration or fault codes."
+    ],
+    "safety_warning": "ADAS is an assistance system, not a replacement for attentive driving."
+  },
+  {
+    "id": "lane_keep_not_working",
+    "title": "Lane Keep Assist Not Working",
+    "system": "adas",
+    "category": "ADAS — LANE",
+    "symptom_short": "Lane keeping or lane departure warning not functioning",
+    "symptom_patterns": [
+      "lane assist not working",
+      "lane departure unavailable",
+      "lane keep disabled"
+    ],
+    "likely_causes": [
+      {
+        "cause": "Camera view obstructed or poor lane markings",
+        "probability": "high",
+        "severity": "low",
+        "urgency": "normal",
+        "notes": ""
+      },
+      {
+        "cause": "Vehicle speed below system operating threshold",
+        "probability": "medium",
+        "severity": "low",
+        "urgency": "normal",
+        "notes": ""
+      },
+      {
+        "cause": "Camera calibration required",
+        "probability": "low",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": ""
+      }
+    ],
+    "recommended_checks": [
+      "Verify lane markings are visible and speed is sufficient.",
+      "Clean camera area on windshield.",
+      "Check settings to ensure feature is enabled."
+    ],
+    "safety_warning": "Lane assist may disengage unexpectedly—always maintain steering control."
+  },
+  {
+    "id": "adaptive_cruise_not_available",
+    "title": "Adaptive Cruise Control Not Available",
+    "system": "adas",
+    "category": "ADAS — CRUISE",
+    "symptom_short": "Adaptive cruise control will not engage",
+    "symptom_patterns": [
+      "adaptive cruise not available",
+      "radar cruise disabled",
+      "acc not working"
+    ],
+    "likely_causes": [
+      {
+        "cause": "Radar sensor blocked or misaligned",
+        "probability": "high",
+        "severity": "low",
+        "urgency": "normal",
+        "notes": ""
+      },
+      {
+        "cause": "Front-end damage or grille obstruction",
+        "probability": "medium",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": ""
+      },
+      {
+        "cause": "Fault in ACC control module",
+        "probability": "low",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": ""
+      }
+    ],
+    "recommended_checks": [
+      "Inspect and clean front radar area.",
+      "Check for recent front bumper repairs.",
+      "Scan for ACC-related fault codes."
+    ],
+    "safety_warning": "Adaptive cruise may disengage without warning—be prepared to brake manually."
+  },
+  {
+    "id": "blind_spot_not_working",
+    "title": "Blind Spot Monitoring Not Working",
+    "system": "adas",
+    "category": "ADAS — BLIND SPOT",
+    "symptom_short": "Blind spot indicators do not illuminate",
+    "symptom_patterns": [
+      "blind spot not working",
+      "bsm unavailable",
+      "side assist disabled"
+    ],
+    "likely_causes": [
+      {
+        "cause": "Rear radar sensors blocked or dirty",
+        "probability": "high",
+        "severity": "low",
+        "urgency": "normal",
+        "notes": ""
+      },
+      {
+        "cause": "Rear bumper repair or sensor misalignment",
+        "probability": "medium",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": ""
+      }
+    ],
+    "recommended_checks": [
+      "Clean rear bumper sensor areas.",
+      "Check for trailer hitch or accessories blocking sensors.",
+      "Scan for blind spot module codes."
+    ],
+    "safety_warning": "Blind spot systems assist only—always check mirrors and shoulder."
+  },
+  {
+    "id": "automatic_emergency_braking_disabled",
+    "title": "Automatic Emergency Braking Disabled",
+    "system": "adas",
+    "category": "ADAS — AEB",
+    "symptom_short": "AEB system disabled or warning displayed",
+    "symptom_patterns": [
+      "automatic emergency braking disabled",
+      "aeb unavailable",
+      "forward collision system disabled"
+    ],
+    "likely_causes": [
+      {
+        "cause": "Camera/radar sensor obstruction or calibration issue",
+        "probability": "high",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": ""
+      },
+      {
+        "cause": "Multiple ADAS faults triggering system shutdown",
+        "probability": "medium",
+        "severity": "high",
+        "urgency": "soon",
+        "notes": ""
+      }
+    ],
+    "recommended_checks": [
+      "Clean sensors and restart vehicle.",
+      "Scan for ADAS and braking system codes.",
+      "Perform calibration if required by manufacturer."
+    ],
+    "safety_warning": "Without AEB, collision risk increases—drive with extra caution."
+  }
+]
