@@ -1,11 +1,30 @@
 // api/image-diagnose.js
 import OpenAI from "openai";
-import { readJsonBody } from "./_utils.js";
 import { findRelevantIssues } from "../lib/autoKnowledge.js";
 
 export const config = { runtime: "nodejs18.x" };
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+
+async function readJsonBody(req) {
+  let raw = "";
+  for await (const chunk of req) raw += chunk;
+  if (!raw) return {};
+  return JSON.parse(raw);
+}
+
+function normalizeBase64Image(input) {
+  if (!input) return null;
+  let s = String(input);
+
+  // لو جايك data:image/...;base64,xxx نشيل المقدمة
+  const idx = s.indexOf("base64,");
+  if (idx !== -1) s = s.substring(idx + "base64,".length);
+
+  // تنظيف مسافات
+  s = s.trim();
+  return s || null;
+}
 
 export default async function handler(req, res) {
   try {
@@ -14,65 +33,64 @@ export default async function handler(req, res) {
     }
 
     const body = await readJsonBody(req);
-    if (!body) {
-      return res.status(400).json({ error: "Missing JSON body" });
-    }
 
-    const { image, text, language } = body; // image = base64 (بدون dataURL header)
-    if (!image || typeof image !== "string") {
+    const imageB64 = normalizeBase64Image(body.image);
+    const note = (body.text || body.note || "").toString();
+    const preferredLanguage = (body.language || "auto").toString();
+
+    if (!imageB64) {
       return res.status(400).json({
         error: "Missing image",
-        details: "Send JSON field: image (base64)",
+        details: "Send JSON with field: image (base64).",
       });
     }
 
-    // خليها Data URL لأن هذا مدعوم رسميًا
-    const imageDataUrl = image.startsWith("data:")
-      ? image
-      : `data:image/jpeg;base64,${image}`;
+    const issues = findRelevantIssues(note || "");
 
-    const userNote = (text || "").toString();
-    const issues = findRelevantIssues(userNote);
+    // ✅ نرسل الصورة كـ data URL (ممتاز لـ Vercel + OpenAI)
+    const dataUrl = `data:image/jpeg;base64,${imageB64}`;
 
     const prompt = `
-You are FixLens Auto, a professional vehicle diagnostic assistant.
-User language: ${language || "auto"}.
-If user language is "auto", detect from user's note.
+You are FixLens Auto, an expert vehicle diagnostic AI.
+User language: ${preferredLanguage} (if "auto", reply in the user's language).
+User note (optional): ${note || "(none)"}
 
-User note (optional):
-${userNote}
-
-Relevant automotive issues from internal database:
+Relevant automotive issues from internal database (based on note, may be empty):
 ${JSON.stringify(issues, null, 2)}
 
+Analyze the image. If it's not a vehicle-related image, say so politely.
 Return:
-1) Quick Summary
-2) Most likely causes (ranked)
-3) Recommended next steps (DIY + shop)
+1) What you see (key observations)
+2) Most likely issues (ranked)
+3) Next steps / checks
 4) Safety warnings (if any)
 `;
 
-    const response = await openai.responses.create({
-      model: "gpt-4.1-mini",
-      input: [
+    const resp = await client.chat.completions.create({
+      model: "gpt-4o",
+      temperature: 0.3,
+      messages: [
+        { role: "system", content: "You are FixLens Auto." },
         {
           role: "user",
           content: [
-            { type: "input_text", text: prompt },
-            { type: "input_image", image_url: imageDataUrl },
+            { type: "text", text: prompt },
+            { type: "image_url", image_url: { url: dataUrl } },
           ],
         },
       ],
     });
 
+    const reply = resp?.choices?.[0]?.message?.content || "No reply.";
+
     return res.status(200).json({
-      reply: response.output_text,
-      language: language || "auto",
+      reply,
+      language: preferredLanguage,
     });
-  } catch (err) {
+  } catch (e) {
     return res.status(500).json({
       error: "Image diagnosis failed",
-      details: err?.message || String(err),
+      details: e?.message || String(e),
     });
   }
 }
