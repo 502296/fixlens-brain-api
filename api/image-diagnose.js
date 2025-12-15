@@ -5,8 +5,7 @@ import fs from "fs";
 import { buildFixLensPrompt } from "../lib/promptBuilder.js";
 
 export const config = {
-  runtime: "nodejs18.x",
-  api: { bodyParser: false }, // ✅ ضروري لاستقبال multipart
+  api: { bodyParser: false }, // ✅ مهم لـ multipart
 };
 
 const openai = new OpenAI({
@@ -36,9 +35,9 @@ export default async function handler(req, res) {
     const { fields, files } = await parseForm(req);
 
     const message = (fields.message || "").toString().trim();
-    const preferredLanguage = (fields.preferredLanguage || "").toString().trim() || null;
+    const preferredLanguage =
+      (fields.preferredLanguage || "").toString().trim() || null;
 
-    // ✅ لازم اسم الحقل في Flutter يكون 'image'
     const imageFile = files.image;
     if (!imageFile) {
       return res.status(400).json({
@@ -47,37 +46,34 @@ export default async function handler(req, res) {
       });
     }
 
-    const buf = fs.readFileSync(imageFile.filepath);
-    const base64 = buf.toString("base64");
+    const buffer = fs.readFileSync(imageFile.filepath);
+    const base64 = buffer.toString("base64");
     const mime = imageFile.mimetype || "image/jpeg";
-    const dataUrl = `data:${mime};base64,${base64}`;
+    const imageDataUrl = `data:${mime};base64,${base64}`;
 
     const prompt = buildFixLensPrompt({
       userText: message || "Diagnose the vehicle problem based on the image.",
       preferredLanguage,
       extraContext:
-        "The user provided a vehicle/engine image. Use visual clues. If uncertain, ask targeted questions.",
+        "The user provided a vehicle/engine image. Use visual clues and be precise.",
     });
 
-    // ✅ Responses API multimodal (صورة + نص)
-    const out = await openai.responses.create({
+    const response = await openai.responses.create({
       model: process.env.FIXLENS_IMAGE_MODEL || "gpt-4.1-mini",
       input: [
         {
           role: "user",
           content: [
             { type: "input_text", text: prompt },
-            { type: "input_image", image_url: dataUrl },
+            { type: "input_image", image_url: imageDataUrl },
           ],
         },
       ],
       temperature: 0.3,
     });
 
-    const reply = out.output_text || "";
-
     return res.status(200).json({
-      reply,
+      reply: response.output_text || "",
       language: preferredLanguage,
     });
   } catch (err) {
