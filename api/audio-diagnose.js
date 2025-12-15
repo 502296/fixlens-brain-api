@@ -3,102 +3,123 @@ import OpenAI from "openai";
 import fs from "fs";
 import path from "path";
 import os from "os";
-
-import { readJsonBody, safeBase64ToBuffer, extFromMime } from "./_utils.js";
 import { findRelevantIssues } from "../lib/autoKnowledge.js";
 
 export const config = { runtime: "nodejs18.x" };
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+
+async function readJsonBody(req) {
+  let raw = "";
+  for await (const chunk of req) raw += chunk;
+  if (!raw) return {};
+  return JSON.parse(raw);
+}
+
+function normalizeBase64(input) {
+  if (!input) return null;
+  let s = String(input);
+  const idx = s.indexOf("base64,");
+  if (idx !== -1) s = s.substring(idx + "base64,".length);
+  s = s.trim();
+  return s || null;
+}
+
+function extFromMime(mime = "") {
+  const m = mime.toLowerCase();
+  if (m.includes("wav")) return "wav";
+  if (m.includes("mpeg") || m.includes("mp3")) return "mp3";
+  if (m.includes("m4a")) return "m4a";
+  if (m.includes("mp4")) return "mp4";
+  if (m.includes("aac")) return "aac";
+  return "m4a"; // default
+}
 
 export default async function handler(req, res) {
-  let tmpPath = null;
-
   try {
     if (req.method !== "POST") {
       return res.status(405).json({ error: "Only POST allowed" });
     }
 
     const body = await readJsonBody(req);
-    if (!body) {
-      return res.status(400).json({ error: "Missing JSON body" });
-    }
 
-    const { audioBase64, mimeType, language } = body;
+    const audioB64 = normalizeBase64(body.audioBase64 || body.audio);
+    const mimeType = (body.mimeType || "audio/m4a").toString();
+    const preferredLanguage = (body.language || "auto").toString();
 
-    if (!audioBase64 || typeof audioBase64 !== "string") {
+    if (!audioB64) {
       return res.status(400).json({
-        error: "Missing audio file",
-        details: "Send JSON field: audioBase64",
+        error: "Missing audio file. Send JSON field: audioBase64",
       });
     }
 
-    const buf = safeBase64ToBuffer(audioBase64);
-    if (!buf || !buf.length) {
-      return res.status(400).json({
-        error: "Invalid audioBase64",
-      });
-    }
-
+    // ✅ احفظ الصوت مؤقتاً في /tmp (Vercel يسمح)
     const ext = extFromMime(mimeType);
-    tmpPath = path.join(os.tmpdir(), `fixlens_audio_${Date.now()}.${ext}`);
-    fs.writeFileSync(tmpPath, buf);
+    const tmpPath = path.join(
+      os.tmpdir(),
+      `fixlens_audio_${Date.now()}.${ext}`
+    );
 
-    // 1) Speech → Text
-    const transcript = await openai.audio.transcriptions.create({
+    const buffer = Buffer.from(audioB64, "base64");
+    fs.writeFileSync(tmpPath, buffer);
+
+    // 1) Transcribe
+    // NOTE: التحليل “من waveform فقط” غير مضمون. الأفضل transcription + أسئلة ذكية.
+    const transcription = await client.audio.transcriptions.create({
+      model: "whisper-1",
       file: fs.createReadStream(tmpPath),
-      model: "gpt-4o-mini-transcribe",
     });
 
     const transcriptText =
-      (transcript?.text || "").toString().trim();
-
-    if (!transcriptText) {
-      return res.status(400).json({
-        error: "Audio transcription empty",
-      });
-    }
+      (transcription?.text || "").toString().trim() || "(no speech detected)";
 
     // 2) Diagnose from transcript
     const issues = findRelevantIssues(transcriptText);
 
     const prompt = `
-You are FixLens Auto, the world-class vehicle diagnostic AI.
-User language: ${language || "auto"}.
-If "auto", detect from transcript language.
+You are FixLens Auto, an expert vehicle diagnostic AI.
+User language: ${preferredLanguage} (if "auto", reply in the user's language).
+We transcribed the user's voice note into text:
 
-Audio transcript:
+TRANSCRIPT:
 ${transcriptText}
 
-Relevant automotive issues from internal database:
+Relevant automotive issues from internal database (may be empty):
 ${JSON.stringify(issues, null, 2)}
 
-Respond in user's language.
-Provide:
+Return:
 1) Quick Summary
-2) Most likely causes
+2) Most likely causes (ranked)
 3) Recommended next steps
-4) Safety warnings
+4) Safety warnings (if any)
+If transcript is unclear, ask 2-3 short follow-up questions.
 `;
 
-    const ai = await openai.responses.create({
-      model: "gpt-4.1-mini",
-      input: prompt,
+    const resp = await client.chat.completions.create({
+      model: "gpt-4o",
+      temperature: 0.3,
+      messages: [
+        { role: "system", content: "You are FixLens Auto." },
+        { role: "user", content: prompt },
+      ],
     });
 
+    const reply = resp?.choices?.[0]?.message?.content || "No reply.";
+
+    // تنظيف الملف المؤقت
+    try {
+      fs.unlinkSync(tmpPath);
+    } catch {}
+
     return res.status(200).json({
-      reply: ai.output_text,
-      transcript: transcriptText,
-      language: language || "auto",
+      reply,
+      language: preferredLanguage,
+      transcript: transcriptText, // مفيد للتصحيح
     });
-  } catch (err) {
+  } catch (e) {
     return res.status(500).json({
       error: "Audio diagnosis failed",
-      details: err?.message || String(err),
+      details: e?.message || String(e),
     });
-  } finally {
-    if (tmpPath) {
-      try { fs.unlinkSync(tmpPath); } catch {}
-    }
   }
 }
