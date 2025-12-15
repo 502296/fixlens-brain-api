@@ -1,92 +1,77 @@
 // api/audio-diagnose.js
 import OpenAI from "openai";
-import formidable from "formidable";
-import fs from "fs";
-import { buildFixLensPrompt } from "../lib/promptBuilder.js";
+import { findRelevantIssues } from "../lib/autoKnowledge.js";
+import { buildSystemPrompt } from "../lib/prompt.js";
+import { parseMultipart, config as multipartConfig } from "./_multipart.js";
 
-export const config = {
-  api: { bodyParser: false }, // ✅ مهم
-};
+export const config = { ...multipartConfig, runtime: "nodejs18.x" };
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
-
-function parseForm(req) {
-  const form = formidable({
-    multiples: false,
-    maxFileSize: 15 * 1024 * 1024, // 15MB
-  });
-
-  return new Promise((resolve, reject) => {
-    form.parse(req, (err, fields, files) => {
-      if (err) return reject(err);
-      resolve({ fields, files });
-    });
-  });
-}
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 export default async function handler(req, res) {
   try {
-    if (req.method !== "POST") {
-      return res.status(405).json({ error: "Only POST allowed" });
-    }
+    if (req.method !== "POST") return res.status(405).json({ error: "Only POST allowed" });
 
-    const { fields, files } = await parseForm(req);
+    const { fields, files, readFileBuffer } = await parseMultipart(req);
 
-    const preferredLanguage =
-      (fields.preferredLanguage || "").toString().trim() || null;
+    const preferredLanguage = fields?.preferredLanguage || "auto";
+    const message = (fields?.message || "").toString();
 
-    const userNote = (fields.message || "").toString().trim();
+    const audioFile = files?.audio;
+    if (!audioFile) return res.status(400).json({ error: "Audio file is required (field name: audio)" });
 
-    const audioFile = files.audio;
-    if (!audioFile) {
-      return res.status(400).json({
-        error: "Audio file is required",
-        hint: "Send multipart/form-data with field name: audio",
-      });
-    }
+    const buf = readFileBuffer(audioFile);
 
-    // 🔊 1) Transcription
+    // ✅ تفريغ الصوت إلى نص (Transcription)
     const transcript = await openai.audio.transcriptions.create({
-      model:
-        process.env.FIXLENS_TRANSCRIBE_MODEL || "gpt-4o-mini-transcribe",
-      file: fs.createReadStream(audioFile.filepath),
+      model: "gpt-4o-mini-transcribe",
+      file: new File([buf], audioFile.originalFilename || "audio.m4a", {
+        type: audioFile.mimetype || "audio/mp4",
+      }),
     });
 
-    const text = (transcript.text || "").trim();
-    if (!text) {
-      return res.status(400).json({ error: "Empty transcription result" });
-    }
+    const heardText = (transcript.text || "").trim();
 
-    // 🧠 2) Diagnose using same AutoKnowledge pipeline
-    const prompt = buildFixLensPrompt({
-      userText: `Audio transcript: ${text}\nUser note: ${
-        userNote || "N/A"
-      }`,
-      preferredLanguage,
-      extraContext:
-        "The user provided a vehicle sound recording. Infer likely causes from the described sound.",
-    });
+    const combined = `
+User notes (optional):
+${message || "(none)"}
 
-    const completion = await openai.chat.completions.create({
-      model: process.env.FIXLENS_TEXT_MODEL || "gpt-4o-mini",
-      messages: [
-        { role: "system", content: "You are FixLens Auto." },
-        { role: "user", content: prompt },
+Transcribed audio:
+${heardText || "(no transcript)"}
+`.trim();
+
+    const issues = findRelevantIssues(combined);
+
+    const system = buildSystemPrompt(preferredLanguage);
+
+    const out = await openai.responses.create({
+      model: "gpt-4o-mini",
+      input: [
+        { role: "system", content: system },
+        {
+          role: "user",
+          content: `
+Diagnose based on the audio transcription + notes.
+
+${combined}
+
+Relevant issues DB (if any):
+${JSON.stringify(issues, null, 2)}
+`.trim(),
+        },
       ],
       temperature: 0.4,
     });
 
+    const reply = (out.output_text || "").trim();
     return res.status(200).json({
-      reply: completion.choices?.[0]?.message?.content || "",
-      language: preferredLanguage,
-      transcript: text,
+      reply: reply || "No reply.",
+      transcript: heardText,
     });
-  } catch (err) {
+  } catch (e) {
     return res.status(500).json({
       error: "Audio diagnosis failed",
-      details: String(err?.message || err),
+      details: e?.message || String(e),
     });
   }
 }
