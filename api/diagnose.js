@@ -1,140 +1,132 @@
-// FORCE NEW DEPLOY
 // api/diagnose.js
 import OpenAI from "openai";
-import fs from "fs";
-import path from "path";
+import { findRelevantIssues } from "../lib/autoKnowledge.js";
 
-const client = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+export const config = { runtime: "nodejs18.x" };
 
-// =========================
-// Load all knowledge files
-// =========================
-function loadKnowledge() {
-  const dataDir = path.join(process.cwd(), "data");
-  const files = fs.readdirSync(dataDir).filter(f => f.endsWith(".json"));
+const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-  let knowledge = [];
-  for (const file of files) {
-    try {
-      const content = JSON.parse(
-        fs.readFileSync(path.join(dataDir, file), "utf8")
-      );
-      knowledge.push({ file, content });
-    } catch (e) {
-      console.error(`Failed to load ${file}`, e);
-    }
-  }
-  return knowledge;
-}
+// ===== Language + Greeting =====
+function detectLanguage(text) {
+  if (!text || !text.trim()) return "en";
+  const t = text.trim();
 
-const AUTO_KNOWLEDGE = loadKnowledge();
-
-// =========================
-// Language detection
-// =========================
-function detectLanguage(text = "") {
-  if (/[\u0600-\u06FF]/.test(text)) return "ar";
-  if (/[\u0400-\u04FF]/.test(text)) return "ru";
-  if (/[\u4E00-\u9FFF]/.test(text)) return "zh";
-  if (/[\u3040-\u30FF]/.test(text)) return "ja";
-  if (/[\uAC00-\uD7AF]/.test(text)) return "ko";
+  if (/[\u0600-\u06FF]/.test(t)) return "ar"; // Arabic
+  if (/[\u0400-\u04FF]/.test(t)) return "ru"; // Cyrillic
+  if (/[\u4E00-\u9FFF]/.test(t)) return "zh"; // Chinese
+  if (/[\u3040-\u30FF]/.test(t)) return "ja"; // Japanese
+  if (/[\uAC00-\uD7AF]/.test(t)) return "ko"; // Korean
+  if (/[ñáéíóúü¿¡]/i.test(t)) return "es";   // Spanish hint
+  if (/[àâçéèêëîïôûùüÿœ]/i.test(t)) return "fr"; // French hint
   return "en";
 }
 
-// =========================
-// Greeting detection
-// =========================
-function isGreetingOnly(text = "") {
-  const t = text.trim().toLowerCase();
+function isGreetingOnly(text) {
+  const t = (text || "").trim().toLowerCase();
   if (!t) return false;
 
+  // If it includes obvious car/problem signals -> not greeting only
+  const problemSignals = [
+    "noise","knock","tick","rattle","vibration","shake","leak","smoke","overheat",
+    "misfire","stall","rough","check engine","abs","srs","airbag","p0","u0","c0","b0",
+    "صوت","طقطقة","اهتزاز","رجّة","تسريب","دخان","حرارة","سخونة","تقطيع","لمبة","فحص","كود",
+  ];
+  for (const s of problemSignals) {
+    if (t.includes(s)) return false;
+  }
+
+  // Greetings list
   const greetings = [
-    "hi", "hello", "hey",
-    "مرحبا", "هلا", "السلام", "أهلاً",
-    "hola", "bonjour", "ciao",
-    "привет", "こんにちは", "안녕하세요"
+    "hi","hello","hey","yo","good morning","good evening",
+    "hola","buenas",
+    "salut","bonjour",
+    "hallo",
+    "ciao",
+    "مرحبا","هلا","هلاو","السلام عليكم","سلام","هاي","شلونك",
+    "привет","здравствуйте",
+    "こんにちは",
+    "你好","您好",
+    "안녕하세요",
   ];
 
-  return greetings.some(g => t === g || t.startsWith(g));
+  // must be short-ish
+  if (t.length > 40) return false;
+
+  return greetings.some((g) => t === g || t.startsWith(g + " ") || t.endsWith(" " + g));
 }
 
-// =========================
-// Greeting replies
-// =========================
 function greetingReply(lang) {
-  switch (lang) {
-    case "ar": return "أهلاً 👋 كيف أقدر أساعدك اليوم؟";
-    case "ru": return "Привет 👋 Чем могу помочь?";
-    case "zh": return "你好 👋 我可以帮你什么？";
-    case "ja": return "こんにちは 👋 どんなお手伝いができますか？";
-    case "ko": return "안녕하세요 👋 무엇을 도와드릴까요?";
-    default: return "Hi 👋 How can I help you today?";
-  }
+  const map = {
+    ar: "هلا! شنو المشكلة بسيارتك اليوم؟ اكتب (النوع/السنة/المحرك) + الأعراض، وإذا عندك كود OBD ارسله.",
+    en: "Hi! What’s going on with the vehicle today? Share make/year/engine + symptoms. If you have OBD codes, paste them.",
+    es: "¡Hola! ¿Qué problema tiene el vehículo hoy? Marca/año/motor + síntomas. Si tienes códigos OBD, envíalos.",
+    fr: "Salut ! Quel souci avec le véhicule ? Marque/année/moteur + symptômes. Si tu as des codes OBD, envoie-les.",
+    ru: "Привет! Что происходит с авто? Марка/год/двигатель + симптомы. Если есть OBD-коды — пришлите.",
+    zh: "你好！车辆现在有什么问题？请发品牌/年份/发动机 + 症状；有OBD报码也发我。",
+    ja: "こんにちは！車の症状は？車種/年式/エンジン + 症状、OBDコードがあれば送ってください。",
+    ko: "안녕하세요! 차량 증상이 뭐예요? 차종/연식/엔진 + 증상, OBD 코드가 있으면 보내주세요.",
+  };
+  return map[lang] || map.en;
 }
 
-// =========================
-// Main handler
-// =========================
+// ===== Main handler =====
 export default async function handler(req, res) {
   try {
-    if (req.method !== "POST") {
-      return res.status(405).json({ error: "POST only" });
+    if (req.method !== "POST") return res.status(405).json({ error: "Only POST allowed" });
+
+    const { message, preferredLanguage } = req.body || {};
+    const userMessage = (message || "").toString();
+
+    if (!userMessage.trim()) {
+      return res.status(400).json({ error: "Message is required" });
     }
 
-    const { message } = req.body;
-    if (!message || !message.trim()) {
-      return res.status(400).json({ error: "Empty message" });
+    const lang = (preferredLanguage || detectLanguage(userMessage) || "en").toString();
+
+    // Greeting-only => short reply (no mechanic report)
+    if (isGreetingOnly(userMessage)) {
+      return res.status(200).json({ reply: greetingReply(lang), language: lang });
     }
 
-    const language = detectLanguage(message);
+    // Pull relevant issues from ALL data/*.json
+    const relevant = findRelevantIssues(userMessage, { limit: 12 });
 
-    // 1️⃣ Greeting only
-    if (isGreetingOnly(message)) {
-      return res.json({
-        reply: greetingReply(language),
-        language,
-      });
-    }
+    // Build a mechanic-grade prompt (ChatGPT-like, no headings)
+    const system = `
+You are FixLens Auto: a professional automotive diagnostic assistant for technicians.
+Style rules:
+- Reply in the user's language (${lang}).
+- Write like ChatGPT: natural, practical, concise.
+- Do NOT use section headings like "Quick Summary / Safety / Recommended".
+- Ask 2–5 targeted questions if key info is missing (make/model/year/engine, mileage, DTC codes, when it happens).
+- Give likely causes in ranked bullets, then quick test steps, then suggested fixes.
+- Mention safety only when truly important, as one short sentence (no "Safety warnings" header).
+- Use the internal issues below as hints; don't copy them verbatim.
+`;
 
-    // 2️⃣ Real mechanical problem
-    const systemPrompt = `
-You are FixLens, a professional automotive diagnostic engineer.
-You speak ONLY in the user's language.
-Do NOT use sections, titles, summaries, or safety disclaimers.
-Respond naturally like an experienced mechanic talking to another technician.
-Be precise, realistic, and practical.
+    const context = `
+User message:
+${userMessage}
 
-Use this automotive knowledge as reference:
-${JSON.stringify(AUTO_KNOWLEDGE).slice(0, 12000)}
-
-Your goal:
-- Analyze the problem
-- Suggest likely causes
-- Ask smart follow-up questions (vehicle, engine, fuel, codes)
-- Keep the response concise and professional
+Internal matched issues (from data/*.json):
+${JSON.stringify(relevant, null, 2)}
 `;
 
     const completion = await client.chat.completions.create({
-      model: "gpt-4o",
+      model: process.env.FIXLENS_MODEL || "gpt-4o-mini",
+      temperature: 0.35,
       messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: message },
+        { role: "system", content: system.trim() },
+        { role: "user", content: context.trim() },
       ],
-      temperature: 0.3,
     });
 
-    return res.json({
-      reply: completion.choices[0].message.content,
-      language,
-    });
-
+    const reply = completion.choices?.[0]?.message?.content?.trim() || "Sorry — I couldn't generate a response.";
+    return res.status(200).json({ reply, language: lang });
   } catch (err) {
-    console.error(err);
     return res.status(500).json({
-      error: "FixLens diagnosis failed",
-      details: err.message,
+      error: "Diagnosis failed",
+      details: err?.message || String(err),
     });
   }
 }
