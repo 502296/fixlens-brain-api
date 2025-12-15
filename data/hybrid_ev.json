@@ -1,0 +1,172 @@
+[
+  {
+    "id": "hybrid_no_ready_mode",
+    "title": "Hybrid Will Not Enter READY Mode",
+    "system": "hybrid_ev",
+    "category": "HYBRID — STARTUP",
+    "symptom_short": "Vehicle powers on but will not enter READY mode",
+    "symptom_patterns": [
+      "hybrid not ready",
+      "ready light not on",
+      "hybrid won't start"
+    ],
+    "likely_causes": [
+      {
+        "cause": "Weak or dead 12V auxiliary battery",
+        "probability": "high",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": "Most common hybrid no-start cause."
+      },
+      {
+        "cause": "High-voltage system fault detected",
+        "probability": "medium",
+        "severity": "high",
+        "urgency": "soon",
+        "notes": ""
+      }
+    ],
+    "recommended_checks": [
+      "Test 12V battery condition and voltage.",
+      "Scan hybrid control modules for codes.",
+      "Verify all doors and hood are fully closed."
+    ],
+    "safety_warning": "High-voltage systems are dangerous. Do not touch orange cables."
+  },
+  {
+    "id": "hybrid_poor_fuel_economy",
+    "title": "Poor Fuel Economy in Hybrid Vehicle",
+    "system": "hybrid_ev",
+    "category": "HYBRID — EFFICIENCY",
+    "symptom_short": "Hybrid fuel economy much lower than normal",
+    "symptom_patterns": [
+      "hybrid poor mpg",
+      "hybrid gas mileage low",
+      "battery not assisting"
+    ],
+    "likely_causes": [
+      {
+        "cause": "Degraded hybrid battery capacity",
+        "probability": "medium",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": ""
+      },
+      {
+        "cause": "Cooling fan or battery temperature issue",
+        "probability": "medium",
+        "severity": "medium",
+        "urgency": "soon",
+        "notes": ""
+      }
+    ],
+    "recommended_checks": [
+      "Scan hybrid battery data (state of charge, temps).",
+      "Inspect battery cooling fan and filter.",
+      "Review driving patterns and tire pressure."
+    ],
+    "safety_warning": "Ignoring battery cooling issues can shorten battery life."
+  },
+  {
+    "id": "hybrid_warning_light",
+    "title": "Hybrid System Warning Light On",
+    "system": "hybrid_ev",
+    "category": "HYBRID — WARNING",
+    "symptom_short": "Hybrid or EV warning message displayed",
+    "symptom_patterns": [
+      "hybrid system warning",
+      "check hybrid system",
+      "ev warning light"
+    ],
+    "likely_causes": [
+      {
+        "cause": "Hybrid battery module imbalance",
+        "probability": "medium",
+        "severity": "high",
+        "urgency": "soon",
+        "notes": ""
+      },
+      {
+        "cause": "Inverter or DC-DC converter fault",
+        "probability": "low",
+        "severity": "high",
+        "urgency": "soon",
+        "notes": ""
+      }
+    ],
+    "recommended_checks": [
+      "Scan hybrid ECU for detailed fault codes.",
+      "Check cooling system for inverter/battery.",
+      "Follow manufacturer safety procedures."
+    ],
+    "safety_warning": "High-voltage faults can disable the vehicle suddenly."
+  },
+  {
+    "id": "ev_reduced_power_mode",
+    "title": "EV Reduced Power or Limp Mode",
+    "system": "hybrid_ev",
+    "category": "EV — POWER LIMIT",
+    "symptom_short": "Vehicle limits power or speed unexpectedly",
+    "symptom_patterns": [
+      "ev reduced power",
+      "ev limp mode",
+      "power limited warning"
+    ],
+    "likely_causes": [
+      {
+        "cause": "Battery overheating or temperature imbalance",
+        "probability": "high",
+        "severity": "high",
+        "urgency": "soon",
+        "notes": ""
+      },
+      {
+        "cause": "Motor or inverter protection event",
+        "probability": "medium",
+        "severity": "high",
+        "urgency": "soon",
+        "notes": ""
+      }
+    ],
+    "recommended_checks": [
+      "Allow vehicle to cool down and recheck.",
+      "Scan for inverter/motor temperature data.",
+      "Inspect cooling pumps and coolant levels."
+    ],
+    "safety_warning": "Continuing to drive in reduced power may cause further system shutdown."
+  },
+  {
+    "id": "ev_charging_not_starting",
+    "title": "EV or Plug-in Hybrid Not Charging",
+    "system": "hybrid_ev",
+    "category": "EV — CHARGING",
+    "symptom_short": "Charging cable connected but charging does not start",
+    "symptom_patterns": [
+      "ev not charging",
+      "plug in hybrid not charging",
+      "charging error message"
+    ],
+    "likely_causes": [
+      {
+        "cause": "Faulty charge cable or charging station",
+        "probability": "high",
+        "severity": "medium",
+        "urgency": "normal",
+        "notes": ""
+      },
+      {
+        "cause": "Vehicle charge port or onboard charger fault",
+        "probability": "medium",
+        "severity": "high",
+        "urgency": "soon",
+        "notes": ""
+      }
+    ],
+    "recommended_checks": [
+      "Try a different charging station or cable.",
+      "Inspect charge port for debris or damage.",
+      "Check vehicle charging schedule/settings."
+    ],
+    "safety_warning": "Do not force connectors. Damaged charging equipment can be dangerous."
+  }
+]
