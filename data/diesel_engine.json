@@ -1,0 +1,139 @@
+[
+  {
+    "id": "diesel_hard_start_cold",
+    "title": "Hard Starting When Cold (Diesel)",
+    "system": "diesel_engine",
+    "category": "DIESEL — COLD START",
+    "symptom_short": "Diesel engine hard to start when cold",
+    "symptom_patterns": [
+      "diesel hard start cold",
+      "diesel cranks long cold",
+      "diesel won't start cold morning"
+    ],
+    "likely_causes": [
+      { "cause": "Faulty glow plugs or glow plug control module", "probability": "high", "severity": "high", "urgency": "soon", "notes": "Most common cold-start issue." },
+      { "cause": "Weak battery or insufficient cranking speed", "probability": "medium", "severity": "high", "urgency": "soon", "notes": "" },
+      { "cause": "Air in fuel system / fuel drain-back", "probability": "medium", "severity": "medium", "urgency": "soon", "notes": "" }
+    ],
+    "recommended_checks": [
+      "Scan for glow plug or control module codes.",
+      "Verify battery voltage and cranking RPM.",
+      "Check fuel lines and filter housing for air leaks."
+    ],
+    "safety_warning": "Repeated long cranking can damage starter and batteries."
+  },
+  {
+    "id": "diesel_rough_idle_misfire",
+    "title": "Rough Idle or Diesel Misfire",
+    "system": "diesel_engine",
+    "category": "DIESEL — COMBUSTION",
+    "symptom_short": "Diesel engine shakes or runs rough at idle",
+    "symptom_patterns": [
+      "diesel rough idle",
+      "diesel misfire",
+      "engine shaking diesel"
+    ],
+    "likely_causes": [
+      { "cause": "Faulty or clogged fuel injector", "probability": "high", "severity": "high", "urgency": "soon", "notes": "" },
+      { "cause": "Low fuel rail pressure", "probability": "medium", "severity": "high", "urgency": "soon", "notes": "" },
+      { "cause": "Compression imbalance between cylinders", "probability": "low", "severity": "high", "urgency": "soon", "notes": "" }
+    ],
+    "recommended_checks": [
+      "Check injector balance rates via scan tool.",
+      "Monitor fuel rail pressure at idle.",
+      "Perform compression or relative compression test if needed."
+    ],
+    "safety_warning": "Severe misfire can damage engine internals if ignored."
+  },
+  {
+    "id": "diesel_black_smoke",
+    "title": "Black Smoke From Exhaust",
+    "system": "diesel_engine",
+    "category": "DIESEL — AIR/FUEL",
+    "symptom_short": "Black smoke under acceleration",
+    "symptom_patterns": [
+      "black smoke diesel",
+      "diesel smoke acceleration",
+      "excessive soot exhaust"
+    ],
+    "likely_causes": [
+      { "cause": "Restricted air intake or dirty air filter", "probability": "high", "severity": "medium", "urgency": "soon", "notes": "" },
+      { "cause": "Over-fueling (injector or tuning issue)", "probability": "medium", "severity": "medium", "urgency": "soon", "notes": "" },
+      { "cause": "Turbo boost leak or underboost", "probability": "medium", "severity": "medium", "urgency": "soon", "notes": "" }
+    ],
+    "recommended_checks": [
+      "Inspect air filter and intake piping.",
+      "Check boost pressure vs commanded boost.",
+      "Inspect intercooler hoses for leaks."
+    ],
+    "safety_warning": "Excessive soot accelerates DPF loading and engine wear."
+  },
+  {
+    "id": "diesel_low_power_limp",
+    "title": "Low Power / Limp Mode (Diesel)",
+    "system": "diesel_engine",
+    "category": "DIESEL — POWER LOSS",
+    "symptom_short": "Diesel engine lacks power or enters limp mode",
+    "symptom_patterns": [
+      "diesel limp mode",
+      "diesel low power",
+      "reduced engine power diesel"
+    ],
+    "likely_causes": [
+      { "cause": "Boost control fault (VGT, actuator, vacuum)", "probability": "high", "severity": "high", "urgency": "soon", "notes": "" },
+      { "cause": "Fuel pressure regulation issue", "probability": "medium", "severity": "high", "urgency": "soon", "notes": "" },
+      { "cause": "EGR malfunction affecting airflow", "probability": "medium", "severity": "medium", "urgency": "soon", "notes": "" }
+    ],
+    "recommended_checks": [
+      "Scan for turbo/EGR/fuel pressure codes.",
+      "Compare commanded vs actual boost.",
+      "Inspect vacuum lines and actuators."
+    ],
+    "safety_warning": "Limp mode may limit speed—avoid highway driving until resolved."
+  },
+  {
+    "id": "diesel_engine_knock_noise",
+    "title": "Diesel Engine Knock or Rattle",
+    "system": "diesel_engine",
+    "category": "DIESEL — NOISE",
+    "symptom_short": "Abnormal knocking or rattling noise",
+    "symptom_patterns": [
+      "diesel knock",
+      "diesel rattle",
+      "engine knocking diesel"
+    ],
+    "likely_causes": [
+      { "cause": "Injector timing or injection quantity issue", "probability": "medium", "severity": "high", "urgency": "soon", "notes": "" },
+      { "cause": "Low-quality or contaminated diesel fuel", "probability": "medium", "severity": "medium", "urgency": "soon", "notes": "" },
+      { "cause": "Internal engine wear", "probability": "low", "severity": "critical", "urgency": "soon", "notes": "" }
+    ],
+    "recommended_checks": [
+      "Confirm correct fuel quality and recent fill-up.",
+      "Scan for injection timing deviations.",
+      "If noise persists, stop driving and inspect."
+    ],
+    "safety_warning": "Loud knocking may indicate serious internal damage."
+  },
+  {
+    "id": "diesel_egr_stuck",
+    "title": "EGR Valve Stuck / Flow Fault",
+    "system": "diesel_engine",
+    "category": "DIESEL — EGR",
+    "symptom_short": "Rough idle, smoke, or EGR-related fault codes",
+    "symptom_patterns": [
+      "diesel egr fault",
+      "egr stuck open diesel",
+      "egr flow insufficient diesel"
+    ],
+    "likely_causes": [
+      { "cause": "Carbon buildup in EGR valve or cooler", "probability": "high", "severity": "medium", "urgency": "soon", "notes": "" },
+      { "cause": "EGR actuator or position sensor fault", "probability": "medium", "severity": "medium", "urgency": "soon", "notes": "" }
+    ],
+    "recommended_checks": [
+      "Scan EGR commanded vs actual position.",
+      "Inspect intake/EGR for soot buildup.",
+      "Verify coolant flow through EGR cooler (if equipped)."
+    ],
+    "safety_warning": "EGR faults increase emissions and may trigger limp mode."
+  }
+]
