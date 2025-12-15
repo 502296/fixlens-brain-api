@@ -1,48 +1,18 @@
 // api/audio-diagnose.js
 import OpenAI from "openai";
 import fs from "fs";
-import { promises as fsp } from "fs";
 import path from "path";
 import os from "os";
+
+import { readJsonBody, safeBase64ToBuffer, extFromMime } from "./_utils.js";
 import { findRelevantIssues } from "../lib/autoKnowledge.js";
 
 export const config = { runtime: "nodejs18.x" };
 
-const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-
-async function readJsonBody(req) {
-  if (req.body && typeof req.body === "object") return req.body;
-
-  let raw = "";
-  for await (const chunk of req) raw += chunk;
-
-  if (!raw) return null;
-
-  try {
-    return JSON.parse(raw);
-  } catch {
-    return null;
-  }
-}
-
-function detectLanguage(text = "") {
-  if (/[\u0600-\u06FF]/.test(text)) return "ar";
-  if (/[а-яА-Я]/.test(text)) return "ru";
-  if (/[一-龯]/.test(text)) return "zh";
-  if (/[ぁ-んァ-ン]/.test(text)) return "ja";
-  return "en";
-}
-
-function extFromMime(mime = "") {
-  if (mime.includes("m4a")) return "m4a";
-  if (mime.includes("mp3")) return "mp3";
-  if (mime.includes("wav")) return "wav";
-  if (mime.includes("webm")) return "webm";
-  return "m4a";
-}
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 export default async function handler(req, res) {
-  let tmpFile = null;
+  let tmpPath = null;
 
   try {
     if (req.method !== "POST") {
@@ -51,91 +21,84 @@ export default async function handler(req, res) {
 
     const body = await readJsonBody(req);
     if (!body) {
+      return res.status(400).json({ error: "Missing JSON body" });
+    }
+
+    const { audioBase64, mimeType, language } = body;
+
+    if (!audioBase64 || typeof audioBase64 !== "string") {
       return res.status(400).json({
-        error: "Invalid or missing JSON body",
-        hint: "Send Content-Type: application/json with { audioBase64: <base64>, mimeType?: 'audio/m4a', text?: <string>, language?: <code> }",
+        error: "Missing audio file",
+        details: "Send JSON field: audioBase64",
       });
     }
 
-    const { audioBase64, mimeType, text, language } = body;
-
-    if (!audioBase64 || typeof audioBase64 !== "string" || audioBase64.trim().length < 50) {
+    const buf = safeBase64ToBuffer(audioBase64);
+    if (!buf || !buf.length) {
       return res.status(400).json({
-        error: "Missing audioBase64. Send JSON field: audioBase64",
+        error: "Invalid audioBase64",
       });
     }
 
-    const detected = detectLanguage(text || "");
-    const lang = language && language !== "auto" ? language : detected;
+    const ext = extFromMime(mimeType);
+    tmpPath = path.join(os.tmpdir(), `fixlens_audio_${Date.now()}.${ext}`);
+    fs.writeFileSync(tmpPath, buf);
 
-    const ext = extFromMime(mimeType || "");
-    const buf = Buffer.from(audioBase64, "base64");
-
-    tmpFile = path.join(os.tmpdir(), `fixlens_audio_${Date.now()}.${ext}`);
-    await fsp.writeFile(tmpFile, buf);
-
-    // Transcribe
-    const transcript = await client.audio.transcriptions.create({
-      file: fs.createReadStream(tmpFile),
+    // 1) Speech → Text
+    const transcript = await openai.audio.transcriptions.create({
+      file: fs.createReadStream(tmpPath),
       model: "gpt-4o-mini-transcribe",
     });
 
-    const transcriptText = (transcript.text || "").trim();
+    const transcriptText =
+      (transcript?.text || "").toString().trim();
 
-    const combined = `${text || ""}\n\nAUDIO TRANSCRIPT:\n${transcriptText}`.trim();
-    const matchedIssues = findRelevantIssues(combined);
+    if (!transcriptText) {
+      return res.status(400).json({
+        error: "Audio transcription empty",
+      });
+    }
 
-    const final = await client.responses.create({
-      model: "gpt-4.1",
-      input: [
-        {
-          role: "system",
-          content: `You are FixLens Auto, expert in diagnosing car noises & symptoms.
-Respond in: ${lang}.
-Format:
-🔧 Quick Summary
-⚡ Most Likely Causes (ranked)
-🧪 Quick Tests
-⚠️ Safety Warnings
-❌ What NOT to do
-🧠 Pro Tip`,
-        },
-        {
-          role: "user",
-          content: [
-            {
-              type: "input_text",
-              text: `User notes:\n${text || "(none)"}\n\nAudio transcript:\n${transcriptText || "(no transcript)"}\n\nMatched issues:\n${JSON.stringify(
-                matchedIssues,
-                null,
-                2
-              )}`,
-            },
-          ],
-        },
-      ],
-      temperature: 0.3,
+    // 2) Diagnose from transcript
+    const issues = findRelevantIssues(transcriptText);
+
+    const prompt = `
+You are FixLens Auto, the world-class vehicle diagnostic AI.
+User language: ${language || "auto"}.
+If "auto", detect from transcript language.
+
+Audio transcript:
+${transcriptText}
+
+Relevant automotive issues from internal database:
+${JSON.stringify(issues, null, 2)}
+
+Respond in user's language.
+Provide:
+1) Quick Summary
+2) Most likely causes
+3) Recommended next steps
+4) Safety warnings
+`;
+
+    const ai = await openai.responses.create({
+      model: "gpt-4.1-mini",
+      input: prompt,
     });
-
-    const reply = (final.output_text || "").trim() || "No reply.";
 
     return res.status(200).json({
-      reply,
+      reply: ai.output_text,
       transcript: transcriptText,
-      matched_issues: matchedIssues,
-      language: lang,
+      language: language || "auto",
     });
   } catch (err) {
-    console.error("Audio diagnose error:", err);
     return res.status(500).json({
       error: "Audio diagnosis failed",
       details: err?.message || String(err),
     });
   } finally {
-    if (tmpFile) {
-      try {
-        fs.unlinkSync(tmpFile);
-      } catch {}
+    if (tmpPath) {
+      try { fs.unlinkSync(tmpPath); } catch {}
     }
   }
 }
