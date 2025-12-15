@@ -37,15 +37,20 @@ app.post("/api/diagnose", async (req, res) => {
     res.json(out);
   } catch (err) {
     console.error("TEXT ERROR:", err);
-    res.status(500).json({ error: "Text diagnosis failed", details: err?.message || String(err) });
+    res.status(500).json({
+      error: "Text diagnosis failed",
+      details: err?.message || String(err),
+    });
   }
 });
 
-// IMAGE (Flutter sends field name: image)
+// IMAGE (Flutter field name MUST be: image)
 app.post("/api/image-diagnose", upload.single("image"), async (req, res) => {
   try {
     if (!req.file) {
-      return res.status(400).json({ error: "Image diagnosis failed", details: "No image" });
+      return res
+        .status(400)
+        .json({ error: "Image diagnosis failed", details: "No image" });
     }
 
     const message = (req.body?.message || "").toString();
@@ -53,9 +58,10 @@ app.post("/api/image-diagnose", upload.single("image"), async (req, res) => {
     const vehicleInfo = req.body?.vehicleInfo?.toString();
 
     // ✅ Fix MIME (avoid application/octet-stream)
-    const mime = req.file.mimetype && req.file.mimetype !== "application/octet-stream"
-      ? req.file.mimetype
-      : "image/jpeg";
+    const mime =
+      req.file.mimetype && req.file.mimetype !== "application/octet-stream"
+        ? req.file.mimetype
+        : "image/jpeg";
 
     const imageBase64 = req.file.buffer.toString("base64");
 
@@ -71,15 +77,20 @@ app.post("/api/image-diagnose", upload.single("image"), async (req, res) => {
     res.json(out);
   } catch (err) {
     console.error("IMAGE ERROR:", err);
-    res.status(500).json({ error: "Image diagnosis failed", details: err?.message || String(err) });
+    res.status(500).json({
+      error: "Image diagnosis failed",
+      details: err?.message || String(err),
+    });
   }
 });
 
-// AUDIO (Flutter sends field name: audio)
+// AUDIO (Flutter field name MUST be: audio)
 app.post("/api/audio-diagnose", upload.single("audio"), async (req, res) => {
   try {
     if (!req.file) {
-      return res.status(400).json({ error: "Audio diagnosis failed", details: "No audio" });
+      return res
+        .status(400)
+        .json({ error: "Audio diagnosis failed", details: "No audio" });
     }
 
     const message = (req.body?.message || "").toString();
@@ -105,14 +116,20 @@ app.post("/api/audio-diagnose", upload.single("audio"), async (req, res) => {
     res.json(out);
   } catch (err) {
     console.error("AUDIO ERROR:", err);
-    res.status(500).json({ error: "Audio diagnosis failed", details: err?.message || String(err) });
+    res.status(500).json({
+      error: "Audio diagnosis failed",
+      details: err?.message || String(err),
+    });
   }
 });
 
 // ---------- Global error handler ----------
 app.use((err, req, res, next) => {
   console.error("GLOBAL ERROR:", err);
-  res.status(500).json({ error: "Server error", details: err?.message || String(err) });
+  res.status(500).json({
+    error: "Server error",
+    details: err?.message || String(err),
+  });
 });
 
 // ---------- Listen (Railway) ----------
