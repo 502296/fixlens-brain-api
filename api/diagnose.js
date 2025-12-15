@@ -2,17 +2,12 @@
 import OpenAI from "openai";
 import { findRelevantIssues } from "../lib/autoKnowledge.js";
 
-export const config = {
-  runtime: "nodejs18.x",
-};
+export const config = { runtime: "nodejs18.x" };
 
-const client = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-// كشف لغة بسيط (اختياري) — يساعد لو تحب تفرض لغة الرد
 function guessLanguage(text) {
-  if (!text || !text.trim()) return null;
+  if (!text || !text.trim()) return "en";
   const t = text.trim();
   if (/[\u0600-\u06FF]/.test(t)) return "ar";
   if (/[\u0400-\u04FF]/.test(t)) return "ru";
@@ -22,97 +17,105 @@ function guessLanguage(text) {
   return "en";
 }
 
-function setCors(res) {
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+function isGreetingOnly(text) {
+  const t = (text || "").trim().toLowerCase();
+  if (!t) return false;
+
+  // Very short greetings in many languages
+  const greetings = [
+    "hi","hello","hey","yo","good morning","good evening",
+    "مرحبا","هلا","هلو","السلام","السلام عليكم","شلونك","هَي",
+    "hola","buenas","bonjour","salut","ciao","hallo","привет","здравств",
+  ];
+
+  // if message has any technical words, not a greeting-only
+  const technicalHints = [
+    "noise","leak","check engine","misfire","overheat","vibration","stall",
+    "صوت","تهريب","تسريب","لمبة","حرارة","اهتزاز","تفتفه","ضعف","دخان",
+    "code","p0","p1","rpm","obd","scan"
+  ];
+
+  if (technicalHints.some((k) => t.includes(k))) return false;
+
+  // greeting-only if it matches greeting and is short
+  return greetings.some((g) => t === g || t.startsWith(g + " ")) && t.length <= 30;
 }
 
 export default async function handler(req, res) {
   try {
-    setCors(res);
+    if (req.method !== "POST") return res.status(405).json({ error: "Only POST allowed" });
 
-    if (req.method === "OPTIONS") {
-      return res.status(200).end();
-    }
-
-    if (req.method !== "POST") {
-      return res.status(405).json({ error: "Only POST allowed" });
-    }
-
-    const { message, preferredLanguage, vehicleContext } = req.body || {};
-
-    if (!message || !message.toString().trim()) {
+    const { message, preferredLanguage } = req.body || {};
+    if (!message || !String(message).trim()) {
       return res.status(400).json({ error: "Message is required" });
     }
 
-    const userMessage = message.toString().trim();
-    const lang = preferredLanguage || guessLanguage(userMessage) || "auto";
+    const userText = String(message).trim();
+    const lang = preferredLanguage || guessLanguage(userText);
 
-    // ✅ AutoKnowledge: يرجّع أفضل الأعطال المطابقة من كل ملفات data/*.json
-    const issues = findRelevantIssues(userMessage, {
-      limit: 8,
-      minScore: 6,
-      // systems: ["engine","electrical"] // (اختياري) لو حبيت تقيّد البحث
-    });
-
-    // موديل من ENV حتى تغيّره بسهولة بدون تعديل الكود
-    const model = process.env.OPENAI_MODEL || "gpt-4o-mini";
-
-    const system = `
-You are FixLens Auto — an expert automotive diagnostic assistant.
-You must be accurate, safety-first, and avoid guessing when unsure.
+    // ✅ Short greeting response (no long template)
+    if (isGreetingOnly(userText)) {
+      const greetingPrompt = `
+You are FixLens Auto, a professional mechanic assistant.
+Reply in: ${lang}
+User said: "${userText}"
 
 Rules:
-- Ask 2–5 targeted questions if info is missing.
-- Provide step-by-step checks (simple -> advanced).
-- Clearly label urgent safety risks.
-- If the knowledge-base issues are relevant, use them. If not, rely on general diagnosis.
-- Respond in the user's language: ${lang}.
-`.trim();
+- Keep it 1–2 short lines only.
+- Ask ONE helpful question to start diagnosis (make/model/year/engine OR main symptom).
+- No long lists, no numbered sections.
+`;
+      const g = await client.chat.completions.create({
+        model: "gpt-4o-mini",
+        temperature: 0.2,
+        messages: [{ role: "user", content: greetingPrompt }],
+      });
 
-    const contextBlock = `
-Vehicle context (optional):
-${vehicleContext ? JSON.stringify(vehicleContext, null, 2) : "N/A"}
+      return res.status(200).json({ reply: g.choices?.[0]?.message?.content || "" , language: lang });
+    }
 
-Relevant matches from FixLens knowledge base (top):
-${JSON.stringify(issues, null, 2)}
-`.trim();
+    // ✅ Knowledge matches from ALL data files
+    const issues = findRelevantIssues(userText, { maxResults: 7, minScore: 6 });
 
-    const userPrompt = `
+    const prompt = `
+You are FixLens Auto — a senior diagnostic technician.
+User language: ${lang}
+
 User message:
-${userMessage}
+${userText}
 
-Output format:
-1) Quick Summary (1–2 lines)
-2) Most likely causes (bullets)
-3) Best checks to confirm (step-by-step)
-4) Recommended next steps (bullets)
-5) Safety warnings (only if relevant)
-6) Questions for the user (if needed)
-`.trim();
+Matched issues from FixLens knowledge base (use these!):
+${JSON.stringify(issues, null, 2)}
 
-    const completion = await client.chat.completions.create({
-      model,
-      messages: [
-        { role: "system", content: system },
-        { role: "user", content: contextBlock },
-        { role: "user", content: userPrompt },
-      ],
-      temperature: 0.3,
+Hard Rules:
+- Be realistic and technician-grade. No generic “textbook” fluff.
+- If vehicle details are missing, FIRST ask essential questions (short list), THEN give a preliminary ranked hypothesis.
+- Keep the response concise for pros.
+
+Output format (always):
+A) Quick take (1–2 lines)
+B) 5 key questions to narrow it down (make/model/year/engine, mileage, when it happens, warning lights/codes, recent work)
+C) Likely causes (ranked, 3–6 items) — connect them to the matched knowledge when possible
+D) Next checks (step-by-step, safe, practical)
+E) Safety note (only if relevant)
+
+Important:
+- If the symptom indicates a dangerous condition, clearly warn to stop driving.
+- If no matches found, still behave like a mechanic and ask questions instead of making up specifics.
+`;
+
+    const ai = await client.chat.completions.create({
+      model: "gpt-4o", // قوي للنصوص التشخيصية
+      temperature: 0.2,
+      messages: [{ role: "user", content: prompt }],
     });
 
-    const reply = completion?.choices?.[0]?.message?.content?.trim() || "";
+    const reply = ai.choices?.[0]?.message?.content || "";
+    return res.status(200).json({ reply, language: lang, matchedIssuesCount: issues.length });
 
-    return res.status(200).json({
-      reply,
-      language: lang,
-      matchedIssues: issues, // مفيد للديباغ (تقدر تشيله لاحقاً)
-    });
   } catch (err) {
-    console.error("FixLens diagnose error:", err);
     return res.status(500).json({
-      error: "Diagnosis failed",
+      error: "FixLens text diagnosis failed",
       details: err?.message || String(err),
     });
   }
