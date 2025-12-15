@@ -1,17 +1,14 @@
 // api/diagnose.js
 import OpenAI from "openai";
-import { findRelevantIssues } from "../lib/autoKnowledge.js";
+import { buildFixLensPrompt } from "../lib/promptBuilder.js";
 
-export const config = { runtime: "nodejs18.x" };
+export const config = {
+  api: { bodyParser: true }, // الافتراضي، آمن للنص
+};
 
-const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-
-async function readJsonBody(req) {
-  let raw = "";
-  for await (const chunk of req) raw += chunk;
-  if (!raw) return {};
-  return JSON.parse(raw);
-}
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+});
 
 export default async function handler(req, res) {
   try {
@@ -19,51 +16,36 @@ export default async function handler(req, res) {
       return res.status(405).json({ error: "Only POST allowed" });
     }
 
-    const body = await readJsonBody(req);
-    const message = (body.message || body.text || "").toString();
-    const preferredLanguage = (body.language || "auto").toString();
+    const { message, preferredLanguage } = req.body || {};
 
-    if (!message.trim()) {
+    if (!message || !message.trim()) {
       return res.status(400).json({ error: "Message is required" });
     }
 
-    const issues = findRelevantIssues(message);
+    const prompt = buildFixLensPrompt({
+      userText: message,
+      preferredLanguage,
+    });
 
-    const prompt = `
-You are FixLens Auto, an expert vehicle diagnostic AI.
-User language: ${preferredLanguage} (if "auto", reply in the user's language).
-User message: ${message}
-
-Relevant automotive issues from internal database (may be empty):
-${JSON.stringify(issues, null, 2)}
-
-Return:
-1) Quick Summary
-2) Most likely causes (ranked)
-3) Recommended next steps
-4) Safety warnings (if any)
-Be concise but helpful.
-`;
-
-    const resp = await client.chat.completions.create({
-      model: "gpt-4o",
-      temperature: 0.3,
+    const completion = await openai.chat.completions.create({
+      model: process.env.FIXLENS_TEXT_MODEL || "gpt-4o-mini",
       messages: [
         { role: "system", content: "You are FixLens Auto." },
         { role: "user", content: prompt },
       ],
+      temperature: 0.4,
     });
 
-    const reply = resp?.choices?.[0]?.message?.content || "No reply.";
+    const reply = completion.choices?.[0]?.message?.content || "";
 
     return res.status(200).json({
       reply,
-      language: preferredLanguage,
+      language: preferredLanguage || null,
     });
-  } catch (e) {
+  } catch (err) {
     return res.status(500).json({
       error: "Text diagnosis failed",
-      details: e?.message || String(e),
+      details: String(err?.message || err),
     });
   }
 }
