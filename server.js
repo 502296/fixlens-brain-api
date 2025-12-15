@@ -57,7 +57,6 @@ app.post("/api/image-diagnose", upload.single("image"), async (req, res) => {
     const preferredLanguage = req.body?.preferredLanguage?.toString();
     const vehicleInfo = req.body?.vehicleInfo?.toString();
 
-    // ✅ Fix MIME (avoid application/octet-stream)
     const mime =
       req.file.mimetype && req.file.mimetype !== "application/octet-stream"
         ? req.file.mimetype
@@ -97,7 +96,6 @@ app.post("/api/audio-diagnose", upload.single("audio"), async (req, res) => {
     const preferredLanguage = req.body?.preferredLanguage?.toString();
     const vehicleInfo = req.body?.vehicleInfo?.toString();
 
-    // ✅ Force safe audio mime
     let mime = (req.file.mimetype || "").toLowerCase();
     if (!mime || mime === "application/octet-stream") {
       mime = "audio/webm";
