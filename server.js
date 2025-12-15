@@ -1,3 +1,4 @@
+// server.js
 import express from "express";
 import cors from "cors";
 import multer from "multer";
@@ -6,35 +7,33 @@ import { diagnoseText, diagnoseImage, diagnoseAudio } from "./lib/service.js";
 
 const app = express();
 
-// ---------- Middleware ----------
+// ---------- Middlewares ----------
 app.use(cors());
-app.use(express.json({ limit: "2mb" })); // للنص فقط
+app.use(express.json({ limit: "2mb" })); // للنصوص فقط
 
-// ---------- Health ----------
-app.get("/", (req, res) => {
-  res.send("FixLens Brain API is running ✅");
-});
-
-app.get("/health", (req, res) => {
-  res.json({ ok: true });
-});
-
-// ---------- Multer (memory) ----------
+// Multer (memory) للـ multipart
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: {
-    fileSize: 20 * 1024 * 1024, // 20MB
+    fileSize: 25 * 1024 * 1024, // 25MB
   },
 });
 
-// ---------- Routes ----------
+// ---------- Health ----------
+app.get("/", (req, res) => {
+  res.status(200).send("FixLens Brain API is running ✅");
+});
 
-// TEXT
+app.get("/health", (req, res) => {
+  res.status(200).json({ ok: true });
+});
+
+// ---------- TEXT ----------
 app.post("/api/diagnose", async (req, res) => {
   try {
     const { message, preferredLanguage, vehicleInfo } = req.body || {};
     const out = await diagnoseText({ message, preferredLanguage, vehicleInfo });
-    res.json(out);
+    res.status(200).json(out);
   } catch (err) {
     console.error("TEXT ERROR:", err);
     res.status(500).json({
@@ -44,36 +43,26 @@ app.post("/api/diagnose", async (req, res) => {
   }
 });
 
-// IMAGE (Flutter field name MUST be: image)
+// ---------- IMAGE (multipart field name: image) ----------
 app.post("/api/image-diagnose", upload.single("image"), async (req, res) => {
   try {
-    if (!req.file) {
-      return res
-        .status(400)
-        .json({ error: "Image diagnosis failed", details: "No image" });
+    const file = req.file; // multer
+    const { message, preferredLanguage, vehicleInfo } = req.body || {};
+
+    if (!file || !file.buffer) {
+      return res.status(400).json({ error: "Image diagnosis failed", details: "No image" });
     }
-
-    const message = (req.body?.message || "").toString();
-    const preferredLanguage = req.body?.preferredLanguage?.toString();
-    const vehicleInfo = req.body?.vehicleInfo?.toString();
-
-    const mime =
-      req.file.mimetype && req.file.mimetype !== "application/octet-stream"
-        ? req.file.mimetype
-        : "image/jpeg";
-
-    const imageBase64 = req.file.buffer.toString("base64");
 
     const out = await diagnoseImage({
       message,
       preferredLanguage,
       vehicleInfo,
-      imageBase64,
-      imageMime: mime,
-      imageUrl: null,
+      imageBuffer: file.buffer,
+      imageMime: file.mimetype,
+      imageOriginalName: file.originalname,
     });
 
-    res.json(out);
+    res.status(200).json(out);
   } catch (err) {
     console.error("IMAGE ERROR:", err);
     res.status(500).json({
@@ -83,35 +72,26 @@ app.post("/api/image-diagnose", upload.single("image"), async (req, res) => {
   }
 });
 
-// AUDIO (Flutter field name MUST be: audio)
+// ---------- AUDIO (multipart field name: audio) ----------
 app.post("/api/audio-diagnose", upload.single("audio"), async (req, res) => {
   try {
-    if (!req.file) {
-      return res
-        .status(400)
-        .json({ error: "Audio diagnosis failed", details: "No audio" });
+    const file = req.file;
+    const { message, preferredLanguage, vehicleInfo } = req.body || {};
+
+    if (!file || !file.buffer) {
+      return res.status(400).json({ error: "Audio diagnosis failed", details: "No audio" });
     }
-
-    const message = (req.body?.message || "").toString();
-    const preferredLanguage = req.body?.preferredLanguage?.toString();
-    const vehicleInfo = req.body?.vehicleInfo?.toString();
-
-    let mime = (req.file.mimetype || "").toLowerCase();
-    if (!mime || mime === "application/octet-stream") {
-      mime = "audio/webm";
-    }
-
-    const audioBase64 = req.file.buffer.toString("base64");
 
     const out = await diagnoseAudio({
       message,
       preferredLanguage,
       vehicleInfo,
-      audioBase64,
-      audioMime: mime,
+      audioBuffer: file.buffer,
+      audioMime: file.mimetype,
+      audioOriginalName: file.originalname,
     });
 
-    res.json(out);
+    res.status(200).json(out);
   } catch (err) {
     console.error("AUDIO ERROR:", err);
     res.status(500).json({
@@ -130,7 +110,7 @@ app.use((err, req, res, next) => {
   });
 });
 
-// ---------- Listen (Railway) ----------
+// ---------- Railway listen ----------
 const PORT = Number(process.env.PORT || 8080);
 app.listen(PORT, "0.0.0.0", () => {
   console.log("FixLens Brain running on port", PORT);
