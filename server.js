@@ -3,6 +3,7 @@ import express from "express";
 import cors from "cors";
 import multer from "multer";
 import os from "os";
+import path from "path";
 import fs from "fs";
 
 import { diagnoseText, diagnoseImage, diagnoseAudio } from "./lib/service.js";
@@ -11,15 +12,15 @@ const app = express();
 
 // ---------- Middlewares ----------
 app.use(cors());
-app.use(express.json({ limit: "2mb" })); // للنص فقط
+app.use(express.json({ limit: "2mb" })); // للنصوص فقط
 
-// ✅ Timeouts حتى ما يصير 502 بسهولة
+// ✅ مهم: timeouts حتى ما يصير 502 بسهولة
 app.use((req, res, next) => {
   res.setTimeout(240000); // 4 minutes
   next();
 });
 
-// ✅ Multer: disk storage (أفضل للثبات من memory)
+// ✅ Multer: disk storage بدل memory (يحميك من انهيار RAM)
 const upload = multer({
   storage: multer.diskStorage({
     destination: (req, file, cb) => cb(null, os.tmpdir()),
@@ -45,25 +46,35 @@ app.post("/api/diagnose", async (req, res) => {
     res.status(200).json(out);
   } catch (err) {
     console.error("TEXT ERROR:", err);
-    res.status(500).json({ error: "Text diagnosis failed", details: err?.message || String(err) });
+    res.status(500).json({
+      error: "Text diagnosis failed",
+      details: err?.message || String(err),
+    });
   }
 });
 
-// ---------- IMAGE (file path) ----------
+// ---------- IMAGE ----------
 app.post("/api/image-diagnose", upload.single("image"), async (req, res) => {
   const file = req.file;
+
   try {
     const { message, preferredLanguage, vehicleInfo } = req.body || {};
+
+    // ✅ حماية مهمة: إذا multer ما استلم الملف لا نكمل
     if (!file?.path) {
-      return res.status(400).json({ error: "Image diagnosis failed", details: "No image" });
+      return res.status(400).json({
+        error: "Image diagnosis failed",
+        details: "Image file not received",
+      });
     }
 
-    // ✅ مرّر المسار بدل buffer
+    const imageBuffer = fs.readFileSync(file.path);
+
     const out = await diagnoseImage({
       message,
       preferredLanguage,
       vehicleInfo,
-      imagePath: file.path,
+      imageBuffer,
       imageMime: file.mimetype,
       imageOriginalName: file.originalname,
     });
@@ -71,27 +82,41 @@ app.post("/api/image-diagnose", upload.single("image"), async (req, res) => {
     res.status(200).json(out);
   } catch (err) {
     console.error("IMAGE ERROR:", err);
-    res.status(500).json({ error: "Image diagnosis failed", details: err?.message || String(err) });
+    res.status(500).json({
+      error: "Image diagnosis failed",
+      details: err?.message || String(err),
+    });
   } finally {
-    try { if (file?.path) fs.unlinkSync(file.path); } catch {}
+    // ✅ تنظيف الملف المؤقت
+    try {
+      if (file?.path) fs.unlinkSync(file.path);
+    } catch {}
   }
 });
 
-// ---------- AUDIO (file path) ----------
+// ---------- AUDIO (✅ التعديل الحاسم هنا) ----------
 app.post("/api/audio-diagnose", upload.single("audio"), async (req, res) => {
   const file = req.file;
+
   try {
     const { message, preferredLanguage, vehicleInfo } = req.body || {};
+
+    // ✅ هذا هو التعديل الحاسم:
+    // إذا الملف ما وصل، لا نكمل حتى لا يصير audioBuffer = undefined
     if (!file?.path) {
-      return res.status(400).json({ error: "Audio diagnosis failed", details: "No audio" });
+      return res.status(400).json({
+        error: "Audio diagnosis failed",
+        details: "Audio file not received",
+      });
     }
 
-    // ✅ مرّر المسار بدل buffer
+    const audioBuffer = fs.readFileSync(file.path);
+
     const out = await diagnoseAudio({
       message,
       preferredLanguage,
       vehicleInfo,
-      audioPath: file.path,
+      audioBuffer,
       audioMime: file.mimetype,
       audioOriginalName: file.originalname,
     });
@@ -99,9 +124,15 @@ app.post("/api/audio-diagnose", upload.single("audio"), async (req, res) => {
     res.status(200).json(out);
   } catch (err) {
     console.error("AUDIO ERROR:", err);
-    res.status(500).json({ error: "Audio diagnosis failed", details: err?.message || String(err) });
+    res.status(500).json({
+      error: "Audio diagnosis failed",
+      details: err?.message || String(err),
+    });
   } finally {
-    try { if (file?.path) fs.unlinkSync(file.path); } catch {}
+    // ✅ تنظيف الملف المؤقت
+    try {
+      if (file?.path) fs.unlinkSync(file.path);
+    } catch {}
   }
 });
 
