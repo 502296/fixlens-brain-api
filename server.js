@@ -34,22 +34,12 @@ app.get("/health", (req, res) => res.status(200).json({ ok: true }));
 // ---------- TEXT ----------
 app.post("/api/diagnose", async (req, res) => {
   try {
-    const { message, preferredLanguage, vehicleInfo, doctorMode } = req.body || {};
-
-    const out = await diagnoseText({
-      message,
-      preferredLanguage,
-      vehicleInfo,
-      doctorMode: Boolean(doctorMode), // ✅ new
-    });
-
+    const { message, preferredLanguage, vehicleInfo, mode } = req.body || {};
+    const out = await diagnoseText({ message, preferredLanguage, vehicleInfo, mode });
     res.status(200).json(out);
   } catch (err) {
     console.error("TEXT ERROR:", err);
-    res.status(500).json({
-      error: "Text diagnosis failed",
-      details: err?.message || String(err),
-    });
+    res.status(500).json({ error: "Text diagnosis failed", details: err?.message || String(err) });
   }
 });
 
@@ -58,10 +48,8 @@ app.post("/api/image-diagnose", upload.single("image"), async (req, res) => {
   const file = req.file;
 
   try {
-    const { message, preferredLanguage, vehicleInfo, doctorMode } = req.body || {};
-    if (!file?.path) {
-      return res.status(400).json({ error: "Image diagnosis failed", details: "No image" });
-    }
+    const { message, preferredLanguage, vehicleInfo, mode } = req.body || {};
+    if (!file?.path) return res.status(400).json({ error: "Image diagnosis failed", details: "No image" });
 
     const imageBuffer = fs.readFileSync(file.path);
 
@@ -69,7 +57,7 @@ app.post("/api/image-diagnose", upload.single("image"), async (req, res) => {
       message,
       preferredLanguage,
       vehicleInfo,
-      doctorMode: String(doctorMode).toLowerCase() === "true" || doctorMode === true, // ✅ new
+      mode,
       imageBuffer,
       imageMime: file.mimetype,
       imageOriginalName: file.originalname,
@@ -78,14 +66,9 @@ app.post("/api/image-diagnose", upload.single("image"), async (req, res) => {
     res.status(200).json(out);
   } catch (err) {
     console.error("IMAGE ERROR:", err);
-    res.status(500).json({
-      error: "Image diagnosis failed",
-      details: err?.message || String(err),
-    });
+    res.status(500).json({ error: "Image diagnosis failed", details: err?.message || String(err) });
   } finally {
-    try {
-      if (file?.path) fs.unlinkSync(file.path);
-    } catch {}
+    try { if (file?.path) fs.unlinkSync(file.path); } catch {}
   }
 });
 
@@ -94,10 +77,8 @@ app.post("/api/audio-diagnose", upload.single("audio"), async (req, res) => {
   const file = req.file;
 
   try {
-    const { message, preferredLanguage, vehicleInfo, doctorMode } = req.body || {};
-    if (!file?.path) {
-      return res.status(400).json({ error: "Audio diagnosis failed", details: "No audio file received" });
-    }
+    const { message, preferredLanguage, vehicleInfo, mode } = req.body || {};
+    if (!file?.path) return res.status(400).json({ error: "Audio diagnosis failed", details: "No audio file received" });
 
     const audioBuffer = fs.readFileSync(file.path);
     if (!audioBuffer || audioBuffer.length < 200) {
@@ -108,7 +89,7 @@ app.post("/api/audio-diagnose", upload.single("audio"), async (req, res) => {
       message,
       preferredLanguage,
       vehicleInfo,
-      doctorMode: String(doctorMode).toLowerCase() === "true" || doctorMode === true, // ✅ new
+      mode,
       audioBuffer,
       audioMime: file.mimetype,
       audioOriginalName: file.originalname,
@@ -117,14 +98,9 @@ app.post("/api/audio-diagnose", upload.single("audio"), async (req, res) => {
     res.status(200).json(out);
   } catch (err) {
     console.error("AUDIO ERROR:", err);
-    res.status(500).json({
-      error: "Audio diagnosis failed",
-      details: err?.message || String(err),
-    });
+    res.status(500).json({ error: "Audio diagnosis failed", details: err?.message || String(err) });
   } finally {
-    try {
-      if (file?.path) fs.unlinkSync(file.path);
-    } catch {}
+    try { if (file?.path) fs.unlinkSync(file.path); } catch {}
   }
 });
 
