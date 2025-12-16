@@ -35,7 +35,12 @@ app.get("/health", (req, res) => res.status(200).json({ ok: true }));
 app.post("/api/diagnose", async (req, res) => {
   try {
     const { message, preferredLanguage, vehicleInfo, mode } = req.body || {};
-    const out = await diagnoseText({ message, preferredLanguage, vehicleInfo, mode });
+    const out = await diagnoseText({
+      message,
+      preferredLanguage,
+      vehicleInfo,
+      mode: mode || "doctor", // ✅ Doctor Mode افتراضي
+    });
     res.status(200).json(out);
   } catch (err) {
     console.error("TEXT ERROR:", err);
@@ -57,10 +62,9 @@ app.post("/api/image-diagnose", upload.single("image"), async (req, res) => {
       message,
       preferredLanguage,
       vehicleInfo,
-      mode,
       imageBuffer,
       imageMime: file.mimetype,
-      imageOriginalName: file.originalname,
+      mode: mode || "doctor", // ✅
     });
 
     res.status(200).json(out);
@@ -89,10 +93,10 @@ app.post("/api/audio-diagnose", upload.single("audio"), async (req, res) => {
       message,
       preferredLanguage,
       vehicleInfo,
-      mode,
       audioBuffer,
       audioMime: file.mimetype,
       audioOriginalName: file.originalname,
+      mode: mode || "doctor", // ✅
     });
 
     res.status(200).json(out);
