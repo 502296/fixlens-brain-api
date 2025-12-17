@@ -5,7 +5,12 @@ import multer from "multer";
 import os from "os";
 import fs from "fs";
 
-import { diagnoseText, diagnoseImage, diagnoseAudio } from "./lib/service.js";
+import {
+  diagnoseText,
+  diagnoseImage,
+  diagnoseAudio,
+  getDataHealth,
+} from "./lib/service.js";
 
 const app = express();
 
@@ -31,6 +36,17 @@ const upload = multer({
 app.get("/", (req, res) => res.status(200).send("FixLens Brain API is running ✅"));
 app.get("/health", (req, res) => res.status(200).json({ ok: true }));
 
+// ✅ NEW: Verify Railway can read /data
+app.get("/health/data", (req, res) => {
+  try {
+    const out = getDataHealth();
+    res.status(200).json(out);
+  } catch (err) {
+    console.error("DATA HEALTH ERROR:", err);
+    res.status(500).json({ ok: false, error: "Data health failed", details: err?.message || String(err) });
+  }
+});
+
 // ---------- TEXT ----------
 app.post("/api/diagnose", async (req, res) => {
   try {
@@ -39,7 +55,7 @@ app.post("/api/diagnose", async (req, res) => {
       message,
       preferredLanguage,
       vehicleInfo,
-      mode: mode || "doctor", // ✅ Doctor Mode افتراضي
+      mode: mode || "doctor",
     });
     res.status(200).json(out);
   } catch (err) {
@@ -64,7 +80,7 @@ app.post("/api/image-diagnose", upload.single("image"), async (req, res) => {
       vehicleInfo,
       imageBuffer,
       imageMime: file.mimetype,
-      mode: mode || "doctor", // ✅
+      mode: mode || "doctor",
     });
 
     res.status(200).json(out);
@@ -96,7 +112,7 @@ app.post("/api/audio-diagnose", upload.single("audio"), async (req, res) => {
       audioBuffer,
       audioMime: file.mimetype,
       audioOriginalName: file.originalname,
-      mode: mode || "doctor", // ✅
+      mode: mode || "doctor",
     });
 
     res.status(200).json(out);
