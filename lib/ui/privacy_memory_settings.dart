@@ -1,97 +1,162 @@
+// lib/ui/privacy_memory_settings.dart
 import 'package:flutter/material.dart';
-import '../memory/fixlens_memory.dart';
 
 class PrivacyMemorySettings extends StatefulWidget {
-  const PrivacyMemorySettings({super.key});
+  PrivacyMemorySettings({super.key});
 
   @override
   State<PrivacyMemorySettings> createState() => _PrivacyMemorySettingsState();
 }
 
 class _PrivacyMemorySettingsState extends State<PrivacyMemorySettings> {
-  bool _enabled = false;
-  bool _loading = true;
-
-  @override
-  void initState() {
-    super.initState();
-    _load();
-  }
-
-  Future<void> _load() async {
-    final e = await FixLensMemory.isRememberVehicleEnabled();
-    if (!mounted) return;
-    setState(() {
-      _enabled = e;
-      _loading = false;
-    });
-  }
-
-  Future<void> _toggle(bool v) async {
-    setState(() => _enabled = v);
-    await FixLensMemory.setRememberVehicleEnabled(v);
-
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          v ? "Vehicle memory enabled (5 days)." : "Vehicle memory disabled and cleared.",
-        ),
-      ),
-    );
-  }
-
-  Future<void> _clearNow() async {
-    await FixLensMemory.clearVehicleMemory();
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text("Vehicle memory cleared on this device.")),
-    );
-  }
+  bool _vehicleMemoryEnabled = true;
+  bool _allowImages = true;
+  bool _allowAudio = true;
 
   @override
   Widget build(BuildContext context) {
-    if (_loading) {
-      return const Center(child: CircularProgressIndicator());
-    }
-
     return Scaffold(
+      backgroundColor: const Color(0xFF050712),
       appBar: AppBar(
-        title: const Text("Privacy & Memory"),
+        backgroundColor: Colors.black,
+        title: const Text(
+          'Privacy & Memory',
+          style: TextStyle(color: Colors.white),
+        ),
+        iconTheme: const IconThemeData(color: Colors.white),
       ),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          const Text(
-            "FixLens stores vehicle info only on this device to improve diagnosis. "
-            "No accounts. No cloud storage. No tracking.",
-            style: TextStyle(fontSize: 13),
-          ),
-          const SizedBox(height: 14),
-
-          Card(
+          _sectionTitle('Vehicle Memory'),
+          _card(
             child: Column(
               children: [
                 SwitchListTile(
-                  title: const Text("Remember my vehicle for 5 days"),
-                  subtitle: const Text(
-                    "Helps FixLens provide better diagnosis on this device.",
+                  value: _vehicleMemoryEnabled,
+                  onChanged: (v) => setState(() => _vehicleMemoryEnabled = v),
+                  activeColor: Colors.cyanAccent,
+                  title: const Text(
+                    'Enable vehicle memory (5 days)',
+                    style: TextStyle(color: Colors.white),
                   ),
-                  value: _enabled,
-                  onChanged: _toggle,
+                  subtitle: const Text(
+                    'Stored locally on your device only.',
+                    style: TextStyle(color: Colors.white54),
+                  ),
                 ),
-                const Divider(height: 1),
+                const Divider(color: Colors.white12),
                 ListTile(
-                  title: const Text("Clear memory now"),
-                  subtitle: const Text("Deletes saved vehicle info from this device."),
-                  trailing: const Icon(Icons.delete_outline),
-                  onTap: _clearNow,
+                  leading: const Icon(Icons.delete_outline, color: Colors.cyanAccent),
+                  title: const Text(
+                    'Clear saved memory now',
+                    style: TextStyle(color: Colors.white),
+                  ),
+                  subtitle: const Text(
+                    'This removes local saved context.',
+                    style: TextStyle(color: Colors.white54),
+                  ),
+                  onTap: () => _confirmClear(),
                 ),
               ],
             ),
           ),
+
+          const SizedBox(height: 16),
+          _sectionTitle('Permissions'),
+          _card(
+            child: Column(
+              children: [
+                SwitchListTile(
+                  value: _allowImages,
+                  onChanged: (v) => setState(() => _allowImages = v),
+                  activeColor: Colors.cyanAccent,
+                  title: const Text(
+                    'Allow image diagnosis',
+                    style: TextStyle(color: Colors.white),
+                  ),
+                  subtitle: const Text(
+                    'You can turn this off anytime.',
+                    style: TextStyle(color: Colors.white54),
+                  ),
+                ),
+                SwitchListTile(
+                  value: _allowAudio,
+                  onChanged: (v) => setState(() => _allowAudio = v),
+                  activeColor: Colors.cyanAccent,
+                  title: const Text(
+                    'Allow audio diagnosis',
+                    style: TextStyle(color: Colors.white),
+                  ),
+                  subtitle: const Text(
+                    'You can turn this off anytime.',
+                    style: TextStyle(color: Colors.white54),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 16),
+          _sectionTitle('Notes'),
+          const Text(
+            'FixLens uses your inputs to generate a diagnosis. You control what you share.\n\n(We can later connect these toggles to real storage using SharedPreferences if you want.)',
+            style: TextStyle(color: Colors.white70, fontSize: 14),
+          ),
         ],
       ),
     );
+  }
+
+  Widget _sectionTitle(String t) => Padding(
+        padding: const EdgeInsets.only(bottom: 8),
+        child: Text(
+          t,
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 16,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      );
+
+  Widget _card({required Widget child}) => Container(
+        decoration: BoxDecoration(
+          color: const Color(0xFF0B1022),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: Colors.white12),
+        ),
+        child: child,
+      );
+
+  Future<void> _confirmClear() async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: const Color(0xFF0B1022),
+        title: const Text('Clear memory?', style: TextStyle(color: Colors.white)),
+        content: const Text(
+          'This will remove saved local memory.',
+          style: TextStyle(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel', style: TextStyle(color: Colors.white70)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Clear', style: TextStyle(color: Colors.cyanAccent)),
+          ),
+        ],
+      ),
+    );
+
+    if (ok == true) {
+      // حالياً مجرد واجهة - نربطها لاحقاً بالتخزين الحقيقي
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Local memory cleared.')),
+      );
+    }
   }
 }
