@@ -33,23 +33,6 @@ cb(null, `fixlens_${Date.now()}_${safeName}`);
 limits: { fileSize: 50 * 1024 * 1024 },
 });
 
-// ✅ NEW: language helper (Accept-Language / custom header)
-function pickHeaderLanguage(req) {
-const xLang = (req.headers["x-preferred-language"] || req.headers["x-language"] || "").toString().trim();
-if (xLang) return xLang;
-
-const accept = (req.headers["accept-language"] || "").toString().trim();
-// Example: "es-ES,es;q=0.9,en;q=0.8"
-if (!accept) return null;
-const first = accept.split(",")[0]?.trim();
-if (!first) return null;
-return first; // e.g. "es-ES"
-}
-
-function effectivePreferredLanguage(req, bodyPreferredLanguage) {
-return bodyPreferredLanguage || pickHeaderLanguage(req) || null;
-}
-
 app.get("/", (req, res) => res.status(200).send("FixLens Brain API is running ✅"));
 app.get("/health", (req, res) => res.status(200).json({ ok: true }));
 
@@ -68,14 +51,12 @@ res.status(500).json({ ok: false, error: "Data health failed", details: err?.mes
 app.post("/api/diagnose", async (req, res) => {
 try {
 const { message, preferredLanguage, vehicleInfo, mode } = req.body || {};
-
 const out = await diagnoseText({
 message,
-preferredLanguage: effectivePreferredLanguage(req, preferredLanguage),
+preferredLanguage,
 vehicleInfo,
 mode: mode || "doctor",
 });
-
 res.status(200).json(out);
 } catch (err) {
 console.error("TEXT ERROR:", err);
@@ -95,7 +76,7 @@ const imageBuffer = fs.readFileSync(file.path);
 
 const out = await diagnoseImage({
 message,
-preferredLanguage: effectivePreferredLanguage(req, preferredLanguage),
+preferredLanguage,
 vehicleInfo,
 imageBuffer,
 imageMime: file.mimetype,
@@ -126,7 +107,7 @@ return res.status(400).json({ error: "Audio diagnosis failed", details: "Audio f
 
 const out = await diagnoseAudio({
 message,
-preferredLanguage: effectivePreferredLanguage(req, preferredLanguage), // ✅ IMPORTANT
+preferredLanguage,
 vehicleInfo,
 audioBuffer,
 audioMime: file.mimetype,
