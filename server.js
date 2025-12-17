@@ -33,20 +33,24 @@ const upload = multer({
   limits: { fileSize: 50 * 1024 * 1024 },
 });
 
+function getAcceptLanguage(req) {
+  // e.g. "ar,en-US;q=0.9,en;q=0.8"
+  return req?.headers?.["accept-language"] || "";
+}
+
 app.get("/", (req, res) => res.status(200).send("FixLens Brain API is running ✅"));
 app.get("/health", (req, res) => res.status(200).json({ ok: true }));
 
+// ✅ Verify Railway can read /data
 app.get("/health/data", (req, res) => {
   try {
     const out = getDataHealth();
     res.status(200).json(out);
   } catch (err) {
     console.error("DATA HEALTH ERROR:", err);
-    res.status(500).json({
-      ok: false,
-      error: "Data health failed",
-      details: err?.message || String(err),
-    });
+    res
+      .status(500)
+      .json({ ok: false, error: "Data health failed", details: err?.message || String(err) });
   }
 });
 
@@ -54,19 +58,19 @@ app.get("/health/data", (req, res) => {
 app.post("/api/diagnose", async (req, res) => {
   try {
     const { message, preferredLanguage, vehicleInfo, mode } = req.body || {};
+
     const out = await diagnoseText({
       message,
       preferredLanguage,
+      acceptLanguage: getAcceptLanguage(req), // ✅ NEW
       vehicleInfo,
       mode: mode || "doctor",
     });
+
     res.status(200).json(out);
   } catch (err) {
     console.error("TEXT ERROR:", err);
-    res.status(500).json({
-      error: "Text diagnosis failed",
-      details: err?.message || String(err),
-    });
+    res.status(500).json({ error: "Text diagnosis failed", details: err?.message || String(err) });
   }
 });
 
@@ -85,6 +89,7 @@ app.post("/api/image-diagnose", upload.single("image"), async (req, res) => {
     const out = await diagnoseImage({
       message,
       preferredLanguage,
+      acceptLanguage: getAcceptLanguage(req), // ✅ NEW
       vehicleInfo,
       imageBuffer,
       imageMime: file.mimetype,
@@ -94,12 +99,11 @@ app.post("/api/image-diagnose", upload.single("image"), async (req, res) => {
     res.status(200).json(out);
   } catch (err) {
     console.error("IMAGE ERROR:", err);
-    res.status(500).json({
-      error: "Image diagnosis failed",
-      details: err?.message || String(err),
-    });
+    res.status(500).json({ error: "Image diagnosis failed", details: err?.message || String(err) });
   } finally {
-    try { if (file?.path) fs.unlinkSync(file.path); } catch {}
+    try {
+      if (file?.path) fs.unlinkSync(file.path);
+    } catch {}
   }
 });
 
@@ -110,23 +114,18 @@ app.post("/api/audio-diagnose", upload.single("audio"), async (req, res) => {
   try {
     const { message, preferredLanguage, vehicleInfo, mode } = req.body || {};
     if (!file?.path) {
-      return res.status(400).json({
-        error: "Audio diagnosis failed",
-        details: "No audio file received",
-      });
+      return res.status(400).json({ error: "Audio diagnosis failed", details: "No audio file received" });
     }
 
     const audioBuffer = fs.readFileSync(file.path);
     if (!audioBuffer || audioBuffer.length < 200) {
-      return res.status(400).json({
-        error: "Audio diagnosis failed",
-        details: "Audio file is too small or empty",
-      });
+      return res.status(400).json({ error: "Audio diagnosis failed", details: "Audio file is too small or empty" });
     }
 
     const out = await diagnoseAudio({
       message,
       preferredLanguage,
+      acceptLanguage: getAcceptLanguage(req), // ✅ NEW
       vehicleInfo,
       audioBuffer,
       audioMime: file.mimetype,
@@ -137,12 +136,11 @@ app.post("/api/audio-diagnose", upload.single("audio"), async (req, res) => {
     res.status(200).json(out);
   } catch (err) {
     console.error("AUDIO ERROR:", err);
-    res.status(500).json({
-      error: "Audio diagnosis failed",
-      details: err?.message || String(err),
-    });
+    res.status(500).json({ error: "Audio diagnosis failed", details: err?.message || String(err) });
   } finally {
-    try { if (file?.path) fs.unlinkSync(file.path); } catch {}
+    try {
+      if (file?.path) fs.unlinkSync(file.path);
+    } catch {}
   }
 });
 
