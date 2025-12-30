@@ -1,0 +1,214 @@
+/* legal.css - FixLens Legal Pages (Apple-style dark glass)
+   Keep this file in repo root next to privacy.html/support.html/terms.html/safety.html
+*/
+
+:root{
+  --bg0:#050608;
+  --bg1:#070A0F;
+  --glass: rgba(255,255,255,.06);
+  --glass2: rgba(255,255,255,.08);
+  --border: rgba(255,255,255,.12);
+  --border2: rgba(255,255,255,.18);
+
+  --text:#F2F4FF;
+  --muted: rgba(242,244,255,.68);
+
+  --link:#8EC5FF;
+  --link2:#B7D9FF;
+
+  --radius: 22px;
+  --shadow: 0 30px 90px rgba(0,0,0,.75);
+  --shadow2: 0 14px 44px rgba(0,0,0,.65);
+}
+
+/* Base */
+*{ box-sizing:border-box; }
+html,body{ height:100%; }
+body{
+  margin:0;
+  font-family: system-ui,-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",sans-serif;
+  color: var(--text);
+  background:
+    radial-gradient(900px 540px at 15% 10%, rgba(90,130,255,.18), transparent 62%),
+    radial-gradient(760px 520px at 85% 22%, rgba(120,255,220,.10), transparent 60%),
+    radial-gradient(820px 560px at 50% 115%, rgba(160,120,255,.10), transparent 60%),
+    linear-gradient(180deg, #0A0E14 0%, #050608 65%, #040506 100%);
+}
+
+/* Subtle light lines */
+body::before{
+  content:"";
+  position:fixed;
+  inset:0;
+  pointer-events:none;
+  opacity:.55;
+  background:
+    linear-gradient(120deg, transparent 0%, rgba(255,255,255,.035) 12%, transparent 24%),
+    linear-gradient(70deg, transparent 0%, rgba(255,255,255,.02) 18%, transparent 36%),
+    radial-gradient(circle at 20% 15%, rgba(255,255,255,.06), transparent 35%),
+    radial-gradient(circle at 80% 18%, rgba(255,255,255,.04), transparent 38%);
+  mix-blend-mode: screen;
+  filter: blur(0.2px);
+}
+
+/* Layout */
+.page{
+  min-height:100vh;
+  display:flex;
+  justify-content:center;
+  padding: 18px;
+}
+
+.shell{
+  width: min(980px, 100%);
+}
+
+/* Top bar */
+.topbar{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  padding: 10px 2px 14px;
+}
+
+.brand{
+  font-weight: 700;
+  letter-spacing:.2px;
+  display:flex;
+  align-items:baseline;
+  gap:10px;
+}
+.brand small{
+  font-weight:600;
+  color: var(--muted);
+}
+
+/* Pills nav */
+.nav{
+  display:flex;
+  gap:10px;
+  flex-wrap:wrap;
+  justify-content:flex-end;
+}
+.pill{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  padding: 9px 14px;
+  border-radius: 999px;
+  background: rgba(255,255,255,.05);
+  border: 1px solid rgba(255,255,255,.12);
+  color: var(--text);
+  text-decoration:none;
+  font-weight: 600;
+  font-size: .92rem;
+  transition: transform .15s ease, background .2s ease, border-color .2s ease, box-shadow .2s ease;
+  box-shadow: 0 10px 24px rgba(0,0,0,.45);
+}
+.pill:hover{
+  transform: translateY(-1px);
+  background: rgba(255,255,255,.07);
+  border-color: rgba(255,255,255,.18);
+  box-shadow: 0 14px 34px rgba(0,0,0,.55);
+}
+.pill.active{
+  background: linear-gradient(145deg, rgba(255,255,255,.10), rgba(255,255,255,.06));
+  border-color: rgba(255,255,255,.22);
+}
+
+/* Card */
+.card{
+  background: linear-gradient(180deg, rgba(255,255,255,.07) 0%, rgba(255,255,255,.04) 100%);
+  border: 1px solid rgba(255,255,255,.12);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  overflow:hidden;
+}
+
+.header{
+  padding: 22px 22px 10px;
+}
+.header h1{
+  margin:0 0 6px;
+  font-size: clamp(28px, 4.8vw, 44px);
+  letter-spacing:-.3px;
+}
+.header p{
+  margin:0;
+  color: var(--muted);
+  line-height:1.6;
+}
+
+.meta{
+  padding: 0 22px 18px;
+  color: rgba(242,244,255,.72);
+  font-weight: 600;
+}
+
+.divider{
+  height:1px;
+  background: rgba(255,255,255,.10);
+  margin: 0 22px;
+}
+
+/* Content */
+.content{
+  padding: 18px 22px 24px;
+}
+
+.section{
+  padding: 18px 0;
+  border-bottom: 1px solid rgba(255,255,255,.08);
+}
+.section:last-child{ border-bottom:none; padding-bottom: 6px; }
+
+.section h2{
+  margin: 0 0 10px;
+  font-size: 1.1rem;
+  letter-spacing:.1px;
+}
+.section p{
+  margin: 0 0 10px;
+  color: rgba(242,244,255,.78);
+  line-height:1.7;
+}
+.section ul{
+  margin: 10px 0 0 18px;
+  color: rgba(242,244,255,.78);
+  line-height:1.7;
+}
+.section li{ margin: 6px 0; }
+
+.note{
+  margin-top:12px;
+  padding: 14px 14px;
+  border-radius: 14px;
+  background: rgba(0,0,0,.24);
+  border: 1px solid rgba(255,255,255,.10);
+  color: rgba(242,244,255,.72);
+  box-shadow: var(--shadow2);
+}
+
+/* Links */
+a{
+  color: var(--link);
+  text-decoration:none;
+}
+a:hover{ color: var(--link2); text-decoration: underline; }
+
+/* Footer */
+.footer{
+  padding: 16px 22px 20px;
+  color: rgba(242,244,255,.60);
+  font-size: .9rem;
+}
+
+/* Mobile tweaks */
+@media (max-width: 520px){
+  .header{ padding: 18px 16px 10px; }
+  .meta{ padding: 0 16px 16px; }
+  .content{ padding: 16px 16px 20px; }
+  .divider{ margin: 0 16px; }
+  .footer{ padding: 14px 16px 18px; }
+}
