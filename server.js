@@ -41,29 +41,23 @@ function normalizeLang(code) {
   const c = String(code).trim();
   if (!c) return null;
 
-  // take first token only if user accidentally sent "ar-IQ,ar;q=0.9"
   const first = c.split(",")[0].trim();
   if (!first) return null;
 
   const lower = first.toLowerCase();
   if (lower === "auto") return "auto";
 
-  // BCP-47-ish simple validation: "en" / "ar-IQ" / "pt-BR"
   if (!/^[a-z]{2,3}(-[a-z0-9]{2,8})*$/i.test(first)) return null;
   return first;
 }
 
-// ✅ helper: get preferred language from body/fields/header
 function resolvePreferredLanguage(req, bodyPreferred) {
-  // 1) body / form field (Flutter sends this)
   const bodyLang = normalizeLang(bodyPreferred);
   if (bodyLang) return bodyLang;
 
-  // 2) custom header (optional future)
   const xLang = normalizeLang(req.headers["x-fixlens-lang"]);
   if (xLang) return xLang;
 
-  // 3) accept-language
   const hdr = (req.headers["accept-language"] || "").toString().trim();
   if (hdr) {
     const first = hdr.split(",")[0].trim();
@@ -71,7 +65,6 @@ function resolvePreferredLanguage(req, bodyPreferred) {
     if (h) return h;
   }
 
-  // 4) last fallback
   return "en";
 }
 
@@ -132,7 +125,6 @@ app.post("/api/image-diagnose", upload.single("image"), async (req, res) => {
     }
 
     const resolvedLang = resolvePreferredLanguage(req, preferredLanguage);
-
     const imageBuffer = fs.readFileSync(file.path);
 
     const out = await diagnoseImage({
