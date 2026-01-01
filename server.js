@@ -17,6 +17,7 @@ const app = express();
 app.use(cors());
 app.use(express.json({ limit: "2mb" }));
 
+// ✅ Safety: always have a server-side timeout for responses
 app.use((req, res, next) => {
   res.setTimeout(240000);
   next();
@@ -73,6 +74,19 @@ function setContentLanguage(res, lang) {
   res.setHeader("Content-Language", L);
 }
 
+// --------------------
+// Timeout wrapper (prevents hanging => 502)
+// --------------------
+function withTimeout(promise, ms, label = "TIMEOUT") {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => setTimeout(() => reject(new Error(label)), ms)),
+  ]);
+}
+
+// --------------------
+// Basic routes
+// --------------------
 app.get("/", (req, res) => res.status(200).send("FixLens Brain API is running ✅"));
 app.get("/health", (req, res) => res.status(200).json({ ok: true }));
 
@@ -82,7 +96,8 @@ app.get("/health/data", (req, res) => {
     res.status(200).json(out);
   } catch (err) {
     console.error("DATA HEALTH ERROR:", err);
-    res.status(500).json({
+    // ✅ return 200 to avoid client exceptions
+    res.status(200).json({
       ok: false,
       error: "Data health failed",
       details: err?.message || String(err),
@@ -92,22 +107,38 @@ app.get("/health/data", (req, res) => {
 
 // ---------- TEXT ----------
 app.post("/api/diagnose", async (req, res) => {
+  const started = Date.now();
   try {
-    const { message, preferredLanguage, vehicleInfo, mode } = req.body || {};
+    const { message, preferredLanguage, vehicleInfo, mode, history } = req.body || {};
     const resolvedLang = resolvePreferredLanguage(req, preferredLanguage);
 
-    const out = await diagnoseText({
-      message,
-      preferredLanguage: resolvedLang,
-      vehicleInfo,
-      mode: mode || "doctor",
-    });
+    const out = await withTimeout(
+      diagnoseText({
+        message,
+        preferredLanguage: resolvedLang,
+        vehicleInfo,
+        history: Array.isArray(history) ? history : [],
+        mode: mode || "doctor",
+      }),
+      25000,
+      "TEXT_UPSTREAM_TIMEOUT"
+    );
 
     setContentLanguage(res, out?.language || resolvedLang);
     res.status(200).json(out);
   } catch (err) {
-    console.error("TEXT ERROR:", err);
-    res.status(500).json({
+    console.error("TEXT ERROR:", { err: err?.message || String(err), ms: Date.now() - started });
+
+    const resolvedLang = resolvePreferredLanguage(req, req?.body?.preferredLanguage);
+    setContentLanguage(res, resolvedLang);
+
+    // ✅ return 200 to avoid FixLens Flutter throwing exceptions
+    res.status(200).json({
+      ok: false,
+      reply: resolvedLang.startsWith("ar")
+        ? "FixLens Brain مشغول الآن أو لم يستطع الرد. جرّب مرة ثانية بعد دقيقة."
+        : "FixLens Brain is busy or unavailable right now. Please try again in a moment.",
+      language: resolvedLang,
       error: "Text diagnosis failed",
       details: err?.message || String(err),
     });
@@ -116,31 +147,48 @@ app.post("/api/diagnose", async (req, res) => {
 
 // ---------- IMAGE ----------
 app.post("/api/image-diagnose", upload.single("image"), async (req, res) => {
+  const started = Date.now();
   const file = req.file;
 
   try {
-    const { message, preferredLanguage, vehicleInfo, mode } = req.body || {};
+    const { message, preferredLanguage, vehicleInfo, mode, history } = req.body || {};
     if (!file?.path) {
-      return res.status(400).json({ error: "Image diagnosis failed", details: "No image" });
+      const resolvedLang = resolvePreferredLanguage(req, preferredLanguage);
+      setContentLanguage(res, resolvedLang);
+      return res.status(200).json({ ok: false, error: "Image diagnosis failed", details: "No image", language: resolvedLang });
     }
 
     const resolvedLang = resolvePreferredLanguage(req, preferredLanguage);
     const imageBuffer = fs.readFileSync(file.path);
 
-    const out = await diagnoseImage({
-      message,
-      preferredLanguage: resolvedLang,
-      vehicleInfo,
-      imageBuffer,
-      imageMime: file.mimetype,
-      mode: mode || "doctor",
-    });
+    const out = await withTimeout(
+      diagnoseImage({
+        message,
+        preferredLanguage: resolvedLang,
+        vehicleInfo,
+        history: Array.isArray(history) ? history : [],
+        imageBuffer,
+        imageMime: file.mimetype,
+        mode: mode || "doctor",
+      }),
+      30000,
+      "IMAGE_UPSTREAM_TIMEOUT"
+    );
 
     setContentLanguage(res, out?.language || resolvedLang);
     res.status(200).json(out);
   } catch (err) {
-    console.error("IMAGE ERROR:", err);
-    res.status(500).json({
+    console.error("IMAGE ERROR:", { err: err?.message || String(err), ms: Date.now() - started });
+
+    const resolvedLang = resolvePreferredLanguage(req, req?.body?.preferredLanguage);
+    setContentLanguage(res, resolvedLang);
+
+    res.status(200).json({
+      ok: false,
+      reply: resolvedLang.startsWith("ar")
+        ? "FixLens Brain تعذر عليه تحليل الصورة الآن. جرّب مرة ثانية بعد دقيقة."
+        : "FixLens Brain couldn’t analyze the image right now. Please retry in a moment.",
+      language: resolvedLang,
       error: "Image diagnosis failed",
       details: err?.message || String(err),
     });
@@ -151,36 +199,54 @@ app.post("/api/image-diagnose", upload.single("image"), async (req, res) => {
 
 // ---------- AUDIO ----------
 app.post("/api/audio-diagnose", upload.single("audio"), async (req, res) => {
+  const started = Date.now();
   const file = req.file;
 
   try {
-    const { message, preferredLanguage, vehicleInfo, mode } = req.body || {};
+    const { message, preferredLanguage, vehicleInfo, mode, history } = req.body || {};
     if (!file?.path) {
-      return res.status(400).json({ error: "Audio diagnosis failed", details: "No audio file received" });
+      const resolvedLang = resolvePreferredLanguage(req, preferredLanguage);
+      setContentLanguage(res, resolvedLang);
+      return res.status(200).json({ ok: false, error: "Audio diagnosis failed", details: "No audio file received", language: resolvedLang });
     }
 
     const resolvedLang = resolvePreferredLanguage(req, preferredLanguage);
 
     const audioBuffer = fs.readFileSync(file.path);
     if (!audioBuffer || audioBuffer.length < 200) {
-      return res.status(400).json({ error: "Audio diagnosis failed", details: "Audio file is too small or empty" });
+      setContentLanguage(res, resolvedLang);
+      return res.status(200).json({ ok: false, error: "Audio diagnosis failed", details: "Audio too small or empty", language: resolvedLang });
     }
 
-    const out = await diagnoseAudio({
-      message,
-      preferredLanguage: resolvedLang,
-      vehicleInfo,
-      audioBuffer,
-      audioMime: file.mimetype,
-      audioOriginalName: file.originalname,
-      mode: mode || "doctor",
-    });
+    const out = await withTimeout(
+      diagnoseAudio({
+        message,
+        preferredLanguage: resolvedLang,
+        vehicleInfo,
+        history: Array.isArray(history) ? history : [],
+        audioBuffer,
+        audioMime: file.mimetype,
+        audioOriginalName: file.originalname,
+        mode: mode || "doctor",
+      }),
+      45000,
+      "AUDIO_UPSTREAM_TIMEOUT"
+    );
 
     setContentLanguage(res, out?.language || resolvedLang);
     res.status(200).json(out);
   } catch (err) {
-    console.error("AUDIO ERROR:", err);
-    res.status(500).json({
+    console.error("AUDIO ERROR:", { err: err?.message || String(err), ms: Date.now() - started });
+
+    const resolvedLang = resolvePreferredLanguage(req, req?.body?.preferredLanguage);
+    setContentLanguage(res, resolvedLang);
+
+    res.status(200).json({
+      ok: false,
+      reply: resolvedLang.startsWith("ar")
+        ? "FixLens Brain تعذر عليه تحليل الصوت الآن. جرّب مرة ثانية بعد دقيقة."
+        : "FixLens Brain couldn’t analyze the audio right now. Please retry in a moment.",
+      language: resolvedLang,
       error: "Audio diagnosis failed",
       details: err?.message || String(err),
     });
@@ -188,6 +254,21 @@ app.post("/api/audio-diagnose", upload.single("audio"), async (req, res) => {
     try { if (file?.path) fs.unlinkSync(file.path); } catch {}
   }
 });
+
+// ✅ Global Express error handler (last middleware)
+app.use((err, req, res, next) => {
+  console.error("GLOBAL_EXPRESS_ERROR:", err);
+  if (res.headersSent) return next(err);
+  res.status(200).json({
+    ok: false,
+    error: "FixLens Brain error",
+    details: err?.message || String(err),
+  });
+});
+
+// ✅ Process safety net (prevents full crash logs without response)
+process.on("uncaughtException", (err) => console.error("UNCAUGHT_EXCEPTION:", err));
+process.on("unhandledRejection", (reason) => console.error("UNHANDLED_REJECTION:", reason));
 
 // ---------- Railway listen ----------
 const PORT = Number(process.env.PORT || 8080);
