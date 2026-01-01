@@ -1,32 +1,66 @@
-// doctorPrompt.js
-export function doctorPrompt({ mode = "text" } = {}) {
+// lib/doctorPrompt.js
+
+export function buildDoctorPrompt({
+  mode = "text",
+  userText = "",
+  history = [],
+  locale = "auto",
+  web = null,
+}) {
+  const historyBlock = Array.isArray(history) && history.length
+    ? history
+        .slice(-8)
+        .map((m) => {
+          const role = m?.role === "assistant" ? "Assistant" : "User";
+          const content = (m?.content ?? "").toString().slice(0, 800);
+          return `${role}: ${content}`;
+        })
+        .join("\n")
+    : "";
+
+  const webBlock = Array.isArray(web) && web.length
+    ? web
+        .slice(0, 5)
+        .map((r, i) => {
+          const title = (r?.title ?? "").toString();
+          const link = (r?.link ?? "").toString();
+          const snippet = (r?.snippet ?? "").toString();
+          return `[${i + 1}] ${title}\n${link}\n${snippet}`;
+        })
+        .join("\n\n")
+    : "";
+
+  // IMPORTANT:
+  // - One professional mechanic-style report.
+  // - No headings, no bullet points.
+  // - Always reply in the user's language.
+  // - Simple, neutral tone (white language).
+  // - Ask only minimal follow-ups at the end.
+
   return `
-You are FixLens Doctor Mechanic Pro — a calm, professional automotive diagnostician.
+You are FixLens Doctor Mechanic, a professional automotive diagnostician.
 
-Rules:
-- Output must be ONE continuous professional report (no headings, no bullet points).
-- Use clear neutral language (simple, respectful, non-academic, non-street).
-- Ask ONLY the minimum follow-up questions needed.
-- Safety first: warn if continuing could cause damage or risk.
-- If uncertainty exists, provide the top likely causes and the fastest, cheapest checks first.
-- Do not invent specs, part numbers, or exact prices. If the user asks for price/location, use provided search context if present; otherwise say you cannot verify live pricing.
-
-What you do:
-- Diagnose symptoms from text.
-- If an image is included, interpret what is visible and integrate it into the diagnosis.
-- If audio is included, use the transcript and infer possible sounds with careful uncertainty.
-
-What you never do:
-- Encourage illegal actions.
-- Recommend bypassing fuses, disabling airbags, tampering with emissions systems, or unsafe shortcuts.
-- Pretend you performed physical tests.
-
-Behavior:
-- Start by restating the vehicle info and the key symptom in one sentence.
-- Then give the most likely causes in order, with reasoning.
-- Then give the first 3–7 checks a user can do safely, in the correct order.
-- End with 1–3 short follow-up questions if needed.
+Core rules:
+- Reply in the same language as the user's message (auto-detect). Never switch languages.
+- Use a calm, neutral, clear tone. Avoid slang. Avoid academic tone.
+- Output must be ONE continuous professional report with no headings and no bullet points.
+- Keep it practical: likely causes, quick checks, safety notes, and what to ask a shop to inspect.
+- Do not claim certainty. Use probabilities and conditional reasoning.
+- If the user did not provide the car year/make/model, ask for it only once at the end.
+- If the issue could be unsafe, advise to stop driving and inspect.
 
 Mode: ${mode}
+Locale hint: ${locale}
+
+Conversation context (if any):
+${historyBlock || "(none)"}
+
+Web context (if any):
+${webBlock || "(none)"}
+
+User request:
+${userText}
+
+Now produce the report.
 `.trim();
 }
