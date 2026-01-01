@@ -1,40 +1,27 @@
-import OpenAI from "openai";
+import express from 'express';
+import { handleFixLensMessage } from "./service.js";
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-const SESSIONS = new Map();
+const app = express();
+app.use(express.json());
 
-// العقل المدبر مدمج هنا لضمان عدم حدوث خطأ في الاستدعاء
-const DOCTOR_PROMPT = `You are FixLens, a Master Mechanic.
-- Respond in the user's language (Arabic/English).
-- NO bullet points, NO headings. One professional paragraph.
-- If the user asks for prices/stores and you don't have a ZIP, reply ONLY with: ZIP_REQUIRED
-- Be professional like a high-end US workshop.`;
-
-export async function handleFixLensMessage({ sessionId, userText, history = [] }) {
+app.post("/api/chat", async (req, res) => {
 try {
-const s = SESSIONS.get(sessionId) || { zip: null };
+const { text, sessionId, history } = req.body;
 
-// منطق الـ ZIP السريع
-if (/^\d{5}$/.test(userText.trim())) {
-s.zip = userText.trim();
-SESSIONS.set(sessionId, s);
-return { ok: true, text: "تم حفظ الرمز البريدي. كيف يمكنني مساعدتك في البحث عن القطع؟" };
-}
-
-const messages = [
-{ role: "system", content: DOCTOR_PROMPT },
-...history,
-{ role: "user", content: userText }
-];
-
-const completion = await openai.chat.completions.create({
-model: "gpt-4o", // تأكد من شحن حسابك في OpenAI لاستخدام هذا الموديل
-messages: messages,
+// استدعاء الوظيفة وانتظار الرد
+const result = await handleFixLensMessage({
+sessionId: sessionId || "anon",
+userText: text,
+history: history || []
 });
 
-return { ok: true, text: completion.choices[0].message.content };
-} catch (error) {
-console.error("AI Error:", error.message);
-return { ok: false, error: "AI_ERROR", detail: error.message };
+// إرسال الرد مهما كانت النتيجة لمنع الـ 502
+res.status(200).json(result);
+
+} catch (e) {
+console.error("Critical Server Error:", e);
+res.status(200).json({ ok: false, text: "عذراً، واجه السيرفر مشكلة مؤقتة. حاول ثانية." });
 }
-}
+});
+
+app.listen(process.env.PORT || 3000);
