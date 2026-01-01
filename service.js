@@ -1,128 +1,179 @@
 // service.js
-import { buildDoctorSystemPrompt, buildUserInput, shouldWebSearch } from "./doctorPrompt.js";
+import OpenAI from "openai";
+import { doctorPrompt } from "./doctorPrompt.js";
 import { webSearchSerper } from "./lib/search.js";
 
-const OPENAI_KEY = process.env.OPENAI_API_KEY;
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 
-// Use your Railway variable if present, otherwise default
-const TEXT_MODEL = process.env.OPENAI_MODEL_TEXT || process.env.FIXLENS_TEXT_MODEL || "gpt-5.1";
+const MODEL_TEXT = process.env.OPENAI_MODEL_TEXT || "gpt-5.1";
+const MODEL_VISION = process.env.OPENAI_MODEL_VISION || "gpt-5.1";
+const MODEL_TRANSCRIBE = process.env.OPENAI_MODEL_TRANSCRIBE || "gpt-4o-mini-transcribe"; // safe default
+const MODEL_LANG = process.env.OPENAI_MODEL_LANG || "gpt-4o-mini"; // optional, not required
 
-// Hard timeout to prevent hanging requests -> 502
-const HARD_TIMEOUT_MS = Number(process.env.FIXLENS_TIMEOUT_MS || 20000);
-
-function withTimeout(promise, ms, label = "TIMEOUT") {
-  return new Promise((resolve, reject) => {
-    const t = setTimeout(() => reject(new Error(label)), ms);
-    promise
-      .then((v) => {
-        clearTimeout(t);
-        resolve(v);
-      })
-      .catch((e) => {
-        clearTimeout(t);
-        reject(e);
-      });
-  });
+if (!OPENAI_API_KEY) {
+  console.error("Missing OPENAI_API_KEY");
 }
 
-function trimHistory(history, max = 8) {
-  if (!Array.isArray(history)) return [];
-  return history
-    .filter((m) => m && typeof m.text === "string" && (m.role === "user" || m.role === "assistant"))
-    .slice(-max);
+const client = new OpenAI({ apiKey: OPENAI_API_KEY });
+
+function asDataUrl(imageBuffer, mimeType) {
+  const b64 = Buffer.from(imageBuffer).toString("base64");
+  return `data:${mimeType};base64,${b64}`;
 }
 
-async function callOpenAIResponses({ system, input, temperature = 0.2 }) {
-  if (!OPENAI_KEY) {
-    return { ok: false, error: "NO_OPENAI_API_KEY", text: "" };
-  }
+function safeString(v) {
+  return String(v || "").trim();
+}
 
-  // ✅ FIX: Responses API expects `input_text` not `text`
-  const body = {
-    model: TEXT_MODEL,
-    temperature,
-    input: [
-      {
-        role: "system",
-        content: [{ type: "input_text", text: system }],
-      },
-      {
-        role: "user",
-        content: [{ type: "input_text", text: input }],
-      },
-    ],
-  };
+/**
+ * Decide whether to web search. Keep it conservative.
+ * You can tune this anytime.
+ */
+function shouldSearch(text) {
+  const t = text.toLowerCase();
+  return (
+    t.includes("price") ||
+    t.includes("cost") ||
+    t.includes("near me") ||
+    t.includes("location") ||
+    t.includes("where can i") ||
+    t.includes("shop") ||
+    t.includes("buy") ||
+    t.includes("part number") ||
+    t.includes("recall") ||
+    t.includes("tsb")
+  );
+}
 
-  const r = await fetch("https://api.openai.com/v1/responses", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${OPENAI_KEY}`,
-      "Content-Type": "application/json",
+async function buildSearchContext(userText) {
+  const key = process.env.SERPER_API_KEY;
+  if (!key) return "";
+
+  if (!shouldSearch(userText)) return "";
+
+  const q = userText.slice(0, 300);
+  const r = await webSearchSerper(q, { gl: "us", hl: "en", num: 5 });
+
+  if (!r?.ok || !Array.isArray(r.results) || r.results.length === 0) return "";
+
+  const lines = r.results
+    .slice(0, 5)
+    .map((x, i) => {
+      const title = safeString(x.title);
+      const snippet = safeString(x.snippet);
+      const link = safeString(x.link);
+      return `${i + 1}) ${title}\n${snippet}\n${link}`;
+    })
+    .join("\n\n");
+
+  return `WEB SEARCH RESULTS (for context only):\n${lines}`;
+}
+
+export async function runTextDiagnosis({ text }) {
+  const userText = safeString(text);
+  const searchContext = await buildSearchContext(userText);
+
+  const system = doctorPrompt({ mode: "text" });
+
+  const input = [
+    {
+      role: "system",
+      content: [{ type: "input_text", text: system }],
     },
-    body: JSON.stringify(body),
+    {
+      role: "user",
+      content: [
+        ...(searchContext
+          ? [{ type: "input_text", text: searchContext }]
+          : []),
+        { type: "input_text", text: userText },
+      ],
+    },
+  ];
+
+  const resp = await client.responses.create({
+    model: MODEL_TEXT,
+    input,
   });
 
-  const data = await r.json().catch(() => ({}));
-
-  if (!r.ok) {
-    const message = data?.error?.message || `OPENAI_HTTP_${r.status}`;
-    return { ok: false, error: "OPENAI_ERROR", detail: message, http: r.status, text: "" };
-  }
-
-  const text =
-    data?.output_text ||
-    (Array.isArray(data?.output)
-      ? data.output
-          .flatMap((o) => o?.content || [])
-          .filter((c) => c?.type === "output_text" || c?.type === "text")
-          .map((c) => c?.text)
-          .join("\n")
-      : "");
-
-  return { ok: true, text: (text || "").trim() };
+  return resp.output_text || "No response generated.";
 }
 
-export async function textBrain({ message, history = [], meta = {} }) {
-  const safeHistory = trimHistory(history, 8);
-  const system = buildDoctorSystemPrompt();
+export async function runImageDiagnosis({ text, imageBuffer, mimeType }) {
+  const userText = safeString(text);
+  const imageUrl = asDataUrl(imageBuffer, mimeType);
 
-  // Web search (optional)
-  let web = { ok: false, results: [], error: null };
-  try {
-    if (shouldWebSearch(message)) {
-      web = await webSearchSerper(message, { gl: "us", hl: "en", num: 5 });
-    }
-  } catch (e) {
-    web = { ok: false, results: [], error: "WEB_SEARCH_FAILED" };
-  }
+  const system = doctorPrompt({ mode: "image" });
 
-  const userInput = buildUserInput({ message, history: safeHistory, web });
+  const input = [
+    {
+      role: "system",
+      content: [{ type: "input_text", text: system }],
+    },
+    {
+      role: "user",
+      content: [
+        ...(userText ? [{ type: "input_text", text: userText }] : []),
+        {
+          type: "input_image",
+          image_url: imageUrl,
+        },
+      ],
+    },
+  ];
 
-  let ai;
-  try {
-    ai = await withTimeout(
-      callOpenAIResponses({ system, input: userInput, temperature: 0.2 }),
-      HARD_TIMEOUT_MS
-    );
-  } catch (e) {
-    return {
-      reply:
-        "I couldn't generate a response right now. Please try again in a moment. If it keeps happening, check the server logs and try again.",
-      debug: { ok: false, reason: String(e?.message || e), web: web?.ok ? "used" : "not_used" },
-    };
-  }
+  const resp = await client.responses.create({
+    model: MODEL_VISION,
+    input,
+  });
 
-  if (!ai.ok || !ai.text) {
-    const detail = ai?.detail || ai?.error || "UNKNOWN";
-    return {
-      reply:
-        "I couldn't generate a response right now. Please try again in a moment. If it keeps happening, check the server logs and try again.",
-      debug: { ok: false, reason: detail, web: web?.ok ? "used" : "not_used" },
-    };
-  }
+  return resp.output_text || "No response generated.";
+}
 
-  return {
-    reply: ai.text,
-    debug: { ok: true, web: web?.ok ? "used" : "not_used" },
-  };
+export async function runAudioDiagnosis({ audioBuffer }) {
+  // 1) Transcribe
+  const transcript = await transcribeAudio(audioBuffer);
+
+  // 2) Diagnose using transcript
+  const system = doctorPrompt({ mode: "audio" });
+
+  const input = [
+    {
+      role: "system",
+      content: [{ type: "input_text", text: system }],
+    },
+    {
+      role: "user",
+      content: [{ type: "input_text", text: transcript }],
+    },
+  ];
+
+  const resp = await client.responses.create({
+    model: MODEL_TEXT,
+    input,
+  });
+
+  return resp.output_text || "No response generated.";
+}
+
+async function transcribeAudio(audioBuffer) {
+  // Use OpenAI audio transcription
+  // NOTE: OpenAI SDK supports file-like objects. We'll create a Blob-like using File via undici.
+  // Railway Node typically supports this fine.
+
+  // If your environment has issues with transcription,
+  // we can switch to a different approach.
+
+  const { File } = await import("node:buffer");
+
+  const file = new File([audioBuffer], "audio.m4a", { type: "audio/m4a" });
+
+  const tr = await client.audio.transcriptions.create({
+    model: MODEL_TRANSCRIBE,
+    file,
+  });
+
+  const text = safeString(tr.text);
+  if (!text) return "No speech detected in the audio.";
+  return text;
 }
