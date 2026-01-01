@@ -2,312 +2,86 @@
 import express from "express";
 import cors from "cors";
 import multer from "multer";
-import os from "os";
-import fs from "fs";
-
-import {
-  diagnoseText,
-  diagnoseImage,
-  diagnoseAudio,
-  getDataHealth,
-} from "./lib/service.js";
+import { handleChat } from "./lib/service.js";
 
 const app = express();
+const upload = multer({ storage: multer.memoryStorage() });
 
+// --------------------
+// Middleware
+// --------------------
 app.use(cors());
-app.use(express.json({ limit: "10mb" })); // ⬅️ زيدناه لأن history ممكن يكبر
+app.use(express.json({ limit: "4mb" })); // زِدناها شوي حتى ما يصير fail مع meta
 
-// ✅ Safety: always have a server-side timeout for responses
-app.use((req, res, next) => {
-  res.setTimeout(240000);
-  next();
-});
-
-const upload = multer({
-  storage: multer.diskStorage({
-    destination: (req, file, cb) => cb(null, os.tmpdir()),
-    filename: (req, file, cb) => {
-      const safeName = (file.originalname || "upload").replace(/[^\w.\-]+/g, "_");
-      cb(null, `fixlens_${Date.now()}_${safeName}`);
-    },
-  }),
-  limits: { fileSize: 50 * 1024 * 1024 },
+// --------------------
+// Health check
+// --------------------
+app.get("/health", (_req, res) => {
+  res.json({ ok: true, service: "fixlens-brain-api", ts: Date.now() });
 });
 
 // --------------------
-// Language helpers
+// Main Chat Routes
 // --------------------
-function normalizeLang(code) {
-  if (!code) return null;
-  const c = String(code).trim();
-  if (!c) return null;
-
-  const first = c.split(",")[0].trim();
-  if (!first) return null;
-
-  const lower = first.toLowerCase();
-  if (lower === "auto") return "auto";
-
-  if (!/^[a-z]{2,3}(-[a-z0-9]{2,8})*$/i.test(first)) return null;
-  return first;
-}
-
-function resolvePreferredLanguage(req, bodyPreferred) {
-  const bodyLang = normalizeLang(bodyPreferred);
-  if (bodyLang) return bodyLang;
-
-  const xLang = normalizeLang(req.headers["x-fixlens-lang"]);
-  if (xLang) return xLang;
-
-  const hdr = (req.headers["accept-language"] || "").toString().trim();
-  if (hdr) {
-    const first = hdr.split(",")[0].trim();
-    const h = normalizeLang(first);
-    if (h) return h;
-  }
-
-  return "en";
-}
-
-function setContentLanguage(res, lang) {
-  const L = normalizeLang(lang) || "en";
-  res.setHeader("Content-Language", L);
-}
-
-// --------------------
-// ✅ History parser (THE FIX)
-// --------------------
-function parseHistoryAny(history) {
+// ✅ route الأساسي
+app.post("/chat", async (req, res) => {
   try {
-    if (!history) return [];
-    if (Array.isArray(history)) return history;
-
-    // multer multipart => strings
-    if (typeof history === "string") {
-      const t = history.trim();
-      if (!t) return [];
-      const parsed = JSON.parse(t);
-      return Array.isArray(parsed) ? parsed : [];
-    }
-
-    return [];
-  } catch {
-    return [];
-  }
-}
-
-// --------------------
-// Timeout wrapper (prevents hanging => 502)
-// --------------------
-function withTimeout(promise, ms, label = "TIMEOUT") {
-  return Promise.race([
-    promise,
-    new Promise((_, reject) => setTimeout(() => reject(new Error(label)), ms)),
-  ]);
-}
-
-// --------------------
-// Basic routes
-// --------------------
-app.get("/", (req, res) => res.status(200).send("FixLens Brain API is running ✅"));
-app.get("/health", (req, res) => res.status(200).json({ ok: true }));
-
-app.get("/health/data", (req, res) => {
-  try {
-    const out = getDataHealth();
-    res.status(200).json(out);
+    const result = await handleChat(req.body || {});
+    res.json(result);
   } catch (err) {
-    console.error("DATA HEALTH ERROR:", err);
-    res.status(200).json({
+    console.error("CHAT_ERROR:", err?.message || err);
+    res.status(500).json({
       ok: false,
-      error: "Data health failed",
-      details: err?.message || String(err),
+      error:
+        "FixLens Brain is busy or unavailable right now. Please try again in a moment.",
     });
   }
 });
 
-// ---------- TEXT ----------
+// ✅ alias مهم جدًا: كثير من التطبيقات تتوقع /api/diagnose
+// هذا يمنع: Cannot POST /api/diagnose
 app.post("/api/diagnose", async (req, res) => {
-  const started = Date.now();
   try {
-    const { message, preferredLanguage, vehicleInfo, mode, history } = req.body || {};
-    const resolvedLang = resolvePreferredLanguage(req, preferredLanguage);
-
-    const out = await withTimeout(
-      diagnoseText({
-        message,
-        preferredLanguage: resolvedLang,
-        vehicleInfo,
-        history: parseHistoryAny(history), // ✅ FIX
-        mode: mode || "doctor",
-      }),
-      60000, // ⬅️ كان 25s وهذا يقطع الردود (خصوصاً deep)
-      "TEXT_UPSTREAM_TIMEOUT"
-    );
-
-    setContentLanguage(res, out?.language || resolvedLang);
-    res.status(200).json(out);
+    const result = await handleChat(req.body || {});
+    res.json(result);
   } catch (err) {
-    console.error("TEXT ERROR:", { err: err?.message || String(err), ms: Date.now() - started });
-
-    const resolvedLang = resolvePreferredLanguage(req, req?.body?.preferredLanguage);
-    setContentLanguage(res, resolvedLang);
-
-    res.status(200).json({
+    console.error("DIAGNOSE_ERROR:", err?.message || err);
+    res.status(500).json({
       ok: false,
-      reply: resolvedLang.startsWith("ar")
-        ? "FixLens Brain مشغول الآن أو لم يستطع الرد. جرّب مرة ثانية بعد دقيقة."
-        : "FixLens Brain is busy or unavailable right now. Please try again in a moment.",
-      language: resolvedLang,
-      error: "Text diagnosis failed",
-      details: err?.message || String(err),
+      error:
+        "FixLens Brain is busy or unavailable right now. Please try again in a moment.",
     });
   }
 });
 
-// ---------- IMAGE ----------
-app.post("/api/image-diagnose", upload.single("image"), async (req, res) => {
-  const started = Date.now();
-  const file = req.file;
-
-  try {
-    const { message, preferredLanguage, vehicleInfo, mode, history } = req.body || {};
-    if (!file?.path) {
-      const resolvedLang = resolvePreferredLanguage(req, preferredLanguage);
-      setContentLanguage(res, resolvedLang);
-      return res.status(200).json({
-        ok: false,
-        error: "Image diagnosis failed",
-        details: "No image",
-        language: resolvedLang,
-      });
-    }
-
-    const resolvedLang = resolvePreferredLanguage(req, preferredLanguage);
-    const imageBuffer = fs.readFileSync(file.path);
-
-    const out = await withTimeout(
-      diagnoseImage({
-        message,
-        preferredLanguage: resolvedLang,
-        vehicleInfo,
-        history: parseHistoryAny(history), // ✅ FIX
-        imageBuffer,
-        imageMime: file.mimetype,
-        mode: mode || "doctor",
-      }),
-      60000,
-      "IMAGE_UPSTREAM_TIMEOUT"
-    );
-
-    setContentLanguage(res, out?.language || resolvedLang);
-    res.status(200).json(out);
-  } catch (err) {
-    console.error("IMAGE ERROR:", { err: err?.message || String(err), ms: Date.now() - started });
-
-    const resolvedLang = resolvePreferredLanguage(req, req?.body?.preferredLanguage);
-    setContentLanguage(res, resolvedLang);
-
-    res.status(200).json({
-      ok: false,
-      reply: resolvedLang.startsWith("ar")
-        ? "FixLens Brain تعذر عليه تحليل الصورة الآن. جرّب مرة ثانية بعد دقيقة."
-        : "FixLens Brain couldn’t analyze the image right now. Please retry in a moment.",
-      language: resolvedLang,
-      error: "Image diagnosis failed",
-      details: err?.message || String(err),
-    });
-  } finally {
-    try { if (file?.path) fs.unlinkSync(file.path); } catch {}
-  }
+// --------------------
+// Optional: simple ping route for quick testing from browser
+// --------------------
+app.get("/api/ping", (_req, res) => {
+  res.json({ ok: true, pong: true, ts: Date.now() });
 });
 
-// ---------- AUDIO ----------
-app.post("/api/audio-diagnose", upload.single("audio"), async (req, res) => {
-  const started = Date.now();
-  const file = req.file;
+// --------------------
+// Optional: If you later add audio/image multipart endpoints,
+// keep this template ready.
+// --------------------
+// app.post("/api/audio", upload.single("audio"), async (req, res) => { ... });
+// app.post("/api/vision", upload.single("image"), async (req, res) => { ... });
 
-  try {
-    const { message, preferredLanguage, vehicleInfo, mode, history } = req.body || {};
-    if (!file?.path) {
-      const resolvedLang = resolvePreferredLanguage(req, preferredLanguage);
-      setContentLanguage(res, resolvedLang);
-      return res.status(200).json({
-        ok: false,
-        error: "Audio diagnosis failed",
-        details: "No audio file received",
-        language: resolvedLang,
-      });
-    }
-
-    const resolvedLang = resolvePreferredLanguage(req, preferredLanguage);
-
-    const audioBuffer = fs.readFileSync(file.path);
-    if (!audioBuffer || audioBuffer.length < 200) {
-      setContentLanguage(res, resolvedLang);
-      return res.status(200).json({
-        ok: false,
-        error: "Audio diagnosis failed",
-        details: "Audio too small or empty",
-        language: resolvedLang,
-      });
-    }
-
-    const out = await withTimeout(
-      diagnoseAudio({
-        message,
-        preferredLanguage: resolvedLang,
-        vehicleInfo,
-        history: parseHistoryAny(history), // ✅ FIX
-        audioBuffer,
-        audioMime: file.mimetype,
-        audioOriginalName: file.originalname,
-        mode: mode || "doctor",
-      }),
-      90000,
-      "AUDIO_UPSTREAM_TIMEOUT"
-    );
-
-    setContentLanguage(res, out?.language || resolvedLang);
-    res.status(200).json(out);
-  } catch (err) {
-    console.error("AUDIO ERROR:", { err: err?.message || String(err), ms: Date.now() - started });
-
-    const resolvedLang = resolvePreferredLanguage(req, req?.body?.preferredLanguage);
-    setContentLanguage(res, resolvedLang);
-
-    res.status(200).json({
-      ok: false,
-      reply: resolvedLang.startsWith("ar")
-        ? "FixLens Brain تعذر عليه تحليل الصوت الآن. جرّب مرة ثانية بعد دقيقة."
-        : "FixLens Brain couldn’t analyze the audio right now. Please retry in a moment.",
-      language: resolvedLang,
-      error: "Audio diagnosis failed",
-      details: err?.message || String(err),
-    });
-  } finally {
-    try { if (file?.path) fs.unlinkSync(file.path); } catch {}
-  }
-});
-
-// ✅ Global Express error handler (last middleware)
-app.use((err, req, res, next) => {
-  console.error("GLOBAL_EXPRESS_ERROR:", err);
-  if (res.headersSent) return next(err);
-  res.status(200).json({
+// --------------------
+// Not found handler (returns JSON بدل HTML 404)
+// --------------------
+app.use((_req, res) => {
+  res.status(404).json({
     ok: false,
-    error: "FixLens Brain error",
-    details: err?.message || String(err),
+    error: "Route not found. Use POST /chat or POST /api/diagnose",
   });
 });
 
-process.on("uncaughtException", (err) => console.error("UNCAUGHT_EXCEPTION:", err));
-process.on("unhandledRejection", (reason) => console.error("UNHANDLED_REJECTION:", reason));
-
-// ---------- Railway listen ----------
-const PORT = Number(process.env.PORT || 8080);
-const server = app.listen(PORT, "0.0.0.0", () =>
-  console.log("FixLens Brain running on port", PORT)
-);
-
-server.setTimeout(240000);
+// --------------------
+// Start server
+// --------------------
+const port = process.env.PORT || 8080;
+app.listen(port, () => {
+  console.log(`FixLens Brain running on port ${port}`);
+});
