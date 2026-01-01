@@ -1,4 +1,4 @@
-// server.js
+// server.js (ESM)
 import express from "express";
 import cors from "cors";
 import multer from "multer";
@@ -7,38 +7,40 @@ import { handleChat } from "./lib/service.js";
 const app = express();
 const upload = multer({ storage: multer.memoryStorage() });
 
-// Railway/Cloud friendly
 app.use(cors());
-app.use(express.json({ limit: "2mb" }));
-
-app.get("/", (_req, res) => {
-  res.json({ ok: true, service: "fixlens-brain-api", ts: Date.now() });
-});
+app.use(express.json({ limit: "3mb" }));
 
 app.get("/health", (_req, res) => {
   res.json({ ok: true, service: "fixlens-brain-api", ts: Date.now() });
 });
 
 /**
- * Compat routes:
- * - POST /chat
- * - POST /api/diagnose   (older Flutter calls)
- * - POST /diagnose
+ * Unified handler:
+ * Accepts:
+ *  - POST /chat
+ *  - POST /api/chat
+ *  - POST /api/diagnose   (to match your Flutter screenshots)
  *
- * We accept any of these shapes:
- * 1) { messages: [{role, content}], meta?: {...} }
- * 2) { message: "text", meta?: {...} }
- * 3) { text: "text", zip?: "40218", cityState?: "Louisville, KY" }
+ * Body:
+ * {
+ *   "messages": [{ "role": "user|assistant|system", "content": "..." }],
+ *   "meta": {
+ *     "zip": "40218",
+ *     "cityState": "Louisville, KY",
+ *     "preferredStore": "AutoZone",
+ *     "consent": { "accepted": true, "acceptedAt": "ISO" }
+ *   }
+ * }
  */
-async function unifiedHandler(req, res) {
+async function unified(req, res) {
   try {
-    const body = req.body || {};
-    const result = await handleChat(body);
+    const payload = req.body || {};
+    const result = await handleChat(payload);
     res.json(result);
   } catch (err) {
-    console.error("API_ERROR:", err?.message || err);
+    console.error("FIXLENS_SERVER_ERROR:", err?.stack || err?.message || err);
 
-    // ✅ ONLY fallback message allowed (server/OpenAI down)
+    // Only "fallback" message when server is down / exception
     res.status(500).json({
       ok: false,
       error:
@@ -47,16 +49,12 @@ async function unifiedHandler(req, res) {
   }
 }
 
-app.post("/chat", unifiedHandler);
-app.post("/api/diagnose", unifiedHandler);
-app.post("/diagnose", unifiedHandler);
+app.post("/chat", unified);
+app.post("/api/chat", unified);
+app.post("/api/diagnose", unified);
 
-// (Optional) future: audio/image endpoints
-app.post("/upload", upload.single("file"), async (_req, res) => {
-  res.status(501).json({ ok: false, error: "Not implemented" });
-});
+// (Optional) If later you add image/audio routes, keep them separate.
+// app.post("/api/image", upload.single("image"), async (req, res) => { ... })
 
 const port = process.env.PORT || 8080;
-app.listen(port, () => {
-  console.log(`FixLens Brain running on port ${port}`);
-});
+app.listen(port, () => console.log(`FixLens Brain running on port ${port}`));
