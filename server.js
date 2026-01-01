@@ -1,47 +1,42 @@
-// service.js
-import OpenAI from "openai";
-import { DOCTOR_PROMPT } from "./doctorPrompt.js";
+// server.js
+import express from "express";
+import cors from "cors";
+import { textBrain } from "./service.js";
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+const app = express();
 
-export async function handleFixLensMessage({ sessionId, userText, imageBase64, history = [] }) {
-try {
-if (!process.env.OPENAI_API_KEY) throw new Error("OpenAI API Key is missing");
+app.use(cors());
+app.use(express.json({ limit: "2mb" }));
 
-// Construct the payload for text and vision
-const content = [{ type: "text", text: userText || "Analyze this vehicle issue." }];
-
-if (imageBase64) {
-content.push({
-type: "image_url",
-image_url: { url: `data:image/jpeg;base64,${imageBase64}` }
-});
-}
-
-const response = await openai.chat.completions.create({
-model: "gpt-4o",
-messages: [
-{ role: "system", content: DOCTOR_PROMPT },
-...history,
-{ role: "user", content: content }
-],
-temperature: 0.5,
+app.get("/health", (req, res) => {
+  res.status(200).json({ ok: true, service: "fixlens-brain" });
 });
 
-const aiReply = response.choices[0].message.content;
+// Text-only endpoint
+app.post("/v1/text", async (req, res) => {
+  const started = Date.now();
+  try {
+    const { message, history = [], meta = {} } = req.body || {};
+    if (!message || typeof message !== "string") {
+      return res.status(400).json({ ok: false, error: "BAD_REQUEST", detail: "Missing 'message'." });
+    }
 
-if (aiReply.trim() === "ZIP_REQUIRED") {
-return {
-ok: true,
-mode: "need_zip",
-text: "Please provide your 5-digit ZIP code to get local parts prices and store locations."
-};
-}
+    const out = await textBrain({ message, history, meta });
+    return res.status(200).json({ ok: true, ms: Date.now() - started, ...out });
+  } catch (err) {
+    const msg = err?.message || "UNKNOWN_ERROR";
+    // Never crash the server route. Return a safe error payload.
+    return res.status(500).json({ ok: false, error: "BRAIN_ERROR", detail: msg });
+  }
+});
 
-return { ok: true, text: aiReply, mode: "doctor" };
+// Global fallback (Express error middleware)
+app.use((err, req, res, next) => {
+  const msg = err?.message || "UNHANDLED_ERROR";
+  res.status(500).json({ ok: false, error: "UNHANDLED_ERROR", detail: msg });
+});
 
-} catch (error) {
-console.error("Service Error:", error.message);
-return { ok: false, text: "The Doctor Mechanic is currently unavailable. Please try again later." };
-}
-}
+const port = process.env.PORT || 3000;
+app.listen(port, () => {
+  console.log(`FixLens Brain listening on ${port}`);
+});
