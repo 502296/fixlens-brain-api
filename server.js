@@ -1,149 +1,118 @@
+// server.js
 import express from "express";
 import cors from "cors";
-import fetch from "node-fetch";
+import morgan from "morgan";
 import multer from "multer";
-import fs from "fs";
+
+import { runTextDiagnosis, runImageDiagnosis, runAudioDiagnosis } from "./service.js";
 
 const app = express();
-const upload = multer({ dest: "uploads/" });
 
+// --- Middleware
 app.use(cors());
-app.use(express.json({ limit: "20mb" }));
+app.use(morgan("dev"));
+app.use(express.json({ limit: "2mb" })); // for text + small payloads
+app.use(express.urlencoded({ extended: true }));
 
-const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
-const MODEL_TEXT = process.env.OPENAI_MODEL_TEXT || "gpt-5.1";
-const MODEL_VISION = process.env.OPENAI_MODEL_VISION || "gpt-5.1";
-const MODEL_TRANSCRIBE = process.env.OPENAI_MODEL_TRANSCRIBE || "gpt-4o-transcribe";
-
-/* =========================
-   HEALTH CHECK
-========================= */
-app.get("/health", (_, res) => {
-  res.json({ ok: true, status: "FixLens Brain online" });
+// --- Multer (for file uploads)
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 25 * 1024 * 1024 }, // 25MB
 });
 
-/* =========================
-   TEXT DIAGNOSIS
-========================= */
+// --- Root + health
+app.get("/", (req, res) => {
+  res.status(200).send("FixLens Brain API is running.");
+});
+
+app.get("/health", (req, res) => {
+  res.status(200).json({ ok: true, status: "healthy" });
+});
+
+// --- Text diagnose
 app.post("/api/diagnose", async (req, res) => {
   try {
-    const { text } = req.body;
-    if (!text) {
-      return res.status(400).json({ ok: false, error: "NO_TEXT" });
+    // Accept multiple client formats
+    const text =
+      req.body?.text ||
+      req.body?.message ||
+      req.body?.prompt ||
+      req.body?.input ||
+      req.body?.query ||
+      "";
+
+    if (!String(text).trim()) {
+      return res.status(400).json({
+        ok: false,
+        error: "NO_TEXT",
+        hint: "Send JSON like { text: '...' } (or message/prompt/input).",
+        receivedKeys: Object.keys(req.body || {}),
+      });
     }
 
-    const r = await fetch("https://api.openai.com/v1/responses", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${OPENAI_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: MODEL_TEXT,
-        input: [
-          {
-            role: "user",
-            content: [
-              { type: "input_text", text }
-            ],
-          },
-        ],
-      }),
-    });
-
-    const data = await r.json();
-
-    const output =
-      data.output_text ||
-      data.output?.[0]?.content?.[0]?.text ||
-      "No response generated.";
-
-    res.json({ ok: true, text: output });
+    const out = await runTextDiagnosis({ text });
+    return res.json({ ok: true, text: out });
   } catch (err) {
-    console.error("TEXT ERROR:", err);
-    res.status(500).json({ ok: false, error: "TEXT_FAILED" });
+    console.error("TEXT_DIAGNOSE_ERROR:", err);
+    return res.status(500).json({ ok: false, error: "TEXT_FAILED" });
   }
 });
 
-/* =========================
-   IMAGE DIAGNOSIS
-========================= */
+// --- Image diagnose (multipart/form-data)
 app.post("/api/image-diagnose", upload.single("image"), async (req, res) => {
   try {
-    const imageBuffer = fs.readFileSync(req.file.path);
-    const base64Image = imageBuffer.toString("base64");
+    const text =
+      req.body?.text ||
+      req.body?.message ||
+      req.body?.prompt ||
+      req.body?.input ||
+      "";
 
-    const r = await fetch("https://api.openai.com/v1/responses", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${OPENAI_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: MODEL_VISION,
-        input: [
-          {
-            role: "user",
-            content: [
-              {
-                type: "input_image",
-                image_base64: base64Image,
-              },
-              {
-                type: "input_text",
-                text: "Analyze this car issue like a professional mechanic.",
-              },
-            ],
-          },
-        ],
-      }),
+    if (!req.file?.buffer) {
+      return res.status(400).json({
+        ok: false,
+        error: "NO_IMAGE",
+        hint: "Send multipart/form-data with field name 'image'. Optional text field: 'text'.",
+      });
+    }
+
+    const out = await runImageDiagnosis({
+      text,
+      imageBuffer: req.file.buffer,
+      mimeType: req.file.mimetype || "image/jpeg",
     });
 
-    const data = await r.json();
-
-    const output =
-      data.output_text ||
-      data.output?.[0]?.content?.[0]?.text ||
-      "No image analysis generated.";
-
-    res.json({ ok: true, text: output });
+    return res.json({ ok: true, text: out });
   } catch (err) {
-    console.error("IMAGE ERROR:", err);
-    res.status(500).json({ ok: false, error: "IMAGE_FAILED" });
+    console.error("IMAGE_DIAGNOSE_ERROR:", err);
+    return res.status(500).json({ ok: false, error: "IMAGE_FAILED" });
   }
 });
 
-/* =========================
-   AUDIO DIAGNOSIS
-========================= */
+// --- Audio diagnose (multipart/form-data)
 app.post("/api/audio-diagnose", upload.single("audio"), async (req, res) => {
   try {
-    const audioStream = fs.createReadStream(req.file.path);
+    if (!req.file?.buffer) {
+      return res.status(400).json({
+        ok: false,
+        error: "NO_AUDIO",
+        hint: "Send multipart/form-data with field name 'audio'.",
+      });
+    }
 
-    const formData = new FormData();
-    formData.append("file", audioStream);
-    formData.append("model", MODEL_TRANSCRIBE);
-
-    const r = await fetch("https://api.openai.com/v1/audio/transcriptions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${OPENAI_API_KEY}`,
-      },
-      body: formData,
+    const out = await runAudioDiagnosis({
+      audioBuffer: req.file.buffer,
+      mimeType: req.file.mimetype || "audio/m4a",
     });
 
-    const data = await r.json();
-
-    res.json({ ok: true, text: data.text });
+    return res.json({ ok: true, text: out });
   } catch (err) {
-    console.error("AUDIO ERROR:", err);
-    res.status(500).json({ ok: false, error: "AUDIO_FAILED" });
+    console.error("AUDIO_DIAGNOSE_ERROR:", err);
+    return res.status(500).json({ ok: false, error: "AUDIO_FAILED" });
   }
 });
 
-/* =========================
-   START SERVER
-========================= */
+// --- Listen
 const PORT = process.env.PORT || 8080;
 app.listen(PORT, () => {
   console.log(`FixLens Brain API listening on port ${PORT}`);
