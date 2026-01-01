@@ -1,29 +1,47 @@
-// server.js
-import express from 'express';
-import { handleFixLensMessage } from "./lib/service.js"; // Ensure path is correct
+// service.js
+import OpenAI from "openai";
+import { DOCTOR_PROMPT } from "./doctorPrompt.js";
 
-const app = express();
-// Increased limit for Base64 images
-app.use(express.json({ limit: '10mb' }));
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-app.post("/api/chat", async (req, res) => {
+export async function handleFixLensMessage({ sessionId, userText, imageBase64, history = [] }) {
 try {
-const { text, image, sessionId, history } = req.body;
+if (!process.env.OPENAI_API_KEY) throw new Error("API Key Missing");
 
-const result = await handleFixLensMessage({
-sessionId: sessionId || "session_123",
-userText: text,
-imageBase64: image, // iOS should send this as a Base64 string
-history: history || []
+// Constructing the payload for GPT-4o
+const content = [{ type: "text", text: userText || "Analyze this vehicle issue." }];
+
+if (imageBase64) {
+content.push({
+type: "image_url",
+image_url: { url: `data:image/jpeg;base64,${imageBase64}` }
 });
-
-res.status(200).json(result);
-
-} catch (e) {
-console.error("Server Route Error:", e);
-res.status(500).json({ ok: false, error: "CRITICAL_SERVER_ERROR" });
 }
+
+const response = await openai.chat.completions.create({
+model: "gpt-4o",
+messages: [
+{ role: "system", content: DOCTOR_PROMPT },
+...history,
+{ role: "user", content: content }
+],
+temperature: 0.5,
 });
 
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`FixLens Engine active on port ${PORT}`));
+const aiReply = response.choices[0].message.content;
+
+if (aiReply.trim() === "ZIP_REQUIRED") {
+return {
+ok: true,
+mode: "need_zip",
+text: "Please provide your 5-digit ZIP code to get local parts prices and store locations."
+};
+}
+
+return { ok: true, text: aiReply, mode: "doctor" };
+
+} catch (error) {
+console.error("Service Error:", error.message);
+return { ok: false, text: "The Doctor Mechanic is currently unavailable. Please try again." };
+}
+}
