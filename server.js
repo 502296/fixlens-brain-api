@@ -1,118 +1,117 @@
 // server.js
 import express from "express";
 import cors from "cors";
-import morgan from "morgan";
 import multer from "multer";
+import fs from "fs";
 
-import { runTextDiagnosis, runImageDiagnosis, runAudioDiagnosis } from "./service.js";
+import { textBrain } from "./service.js";
+import { imageBrain } from "./service_image.js";
+import { audioBrain } from "./service_audio.js";
 
 const app = express();
+const upload = multer({ dest: "/tmp" });
 
-// --- Middleware
 app.use(cors());
-app.use(morgan("dev"));
-app.use(express.json({ limit: "2mb" })); // for text + small payloads
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: "10mb" }));
 
-// --- Multer (for file uploads)
-const upload = multer({
-  storage: multer.memoryStorage(),
-  limits: { fileSize: 25 * 1024 * 1024 }, // 25MB
-});
-
-// --- Root + health
+// --------------------
+// Health check
+// --------------------
 app.get("/", (req, res) => {
-  res.status(200).send("FixLens Brain API is running.");
+  res.send("FixLens Brain API is running.");
 });
 
-app.get("/health", (req, res) => {
-  res.status(200).json({ ok: true, status: "healthy" });
-});
-
-// --- Text diagnose
+// --------------------
+// TEXT DIAGNOSE
+// Flutter -> POST /api/diagnose
+// --------------------
 app.post("/api/diagnose", async (req, res) => {
   try {
-    // Accept multiple client formats
-    const text =
-      req.body?.text ||
-      req.body?.message ||
-      req.body?.prompt ||
-      req.body?.input ||
-      req.body?.query ||
-      "";
+    const { message, history, meta } = req.body || {};
 
-    if (!String(text).trim()) {
-      return res.status(400).json({
-        ok: false,
-        error: "NO_TEXT",
-        hint: "Send JSON like { text: '...' } (or message/prompt/input).",
-        receivedKeys: Object.keys(req.body || {}),
-      });
+    if (!message || typeof message !== "string") {
+      return res.status(400).json({ ok: false, error: "NO_TEXT" });
     }
 
-    const out = await runTextDiagnosis({ text });
-    return res.json({ ok: true, text: out });
-  } catch (err) {
-    console.error("TEXT_DIAGNOSE_ERROR:", err);
-    return res.status(500).json({ ok: false, error: "TEXT_FAILED" });
-  }
-});
-
-// --- Image diagnose (multipart/form-data)
-app.post("/api/image-diagnose", upload.single("image"), async (req, res) => {
-  try {
-    const text =
-      req.body?.text ||
-      req.body?.message ||
-      req.body?.prompt ||
-      req.body?.input ||
-      "";
-
-    if (!req.file?.buffer) {
-      return res.status(400).json({
-        ok: false,
-        error: "NO_IMAGE",
-        hint: "Send multipart/form-data with field name 'image'. Optional text field: 'text'.",
-      });
-    }
-
-    const out = await runImageDiagnosis({
-      text,
-      imageBuffer: req.file.buffer,
-      mimeType: req.file.mimetype || "image/jpeg",
+    const result = await textBrain({
+      message,
+      history: Array.isArray(history) ? history : [],
+      meta: meta || {},
     });
 
-    return res.json({ ok: true, text: out });
+    res.json({ ok: true, reply: result.reply });
   } catch (err) {
-    console.error("IMAGE_DIAGNOSE_ERROR:", err);
-    return res.status(500).json({ ok: false, error: "IMAGE_FAILED" });
+    console.error("TEXT ERROR:", err);
+    res.status(500).json({
+      ok: false,
+      error: "TEXT_FAILURE",
+      detail: err.message,
+    });
   }
 });
 
-// --- Audio diagnose (multipart/form-data)
-app.post("/api/audio-diagnose", upload.single("audio"), async (req, res) => {
-  try {
-    if (!req.file?.buffer) {
-      return res.status(400).json({
+// --------------------
+// IMAGE DIAGNOSE
+// Flutter -> POST /api/image-diagnose
+// --------------------
+app.post(
+  "/api/image-diagnose",
+  upload.single("image"),
+  async (req, res) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ ok: false, error: "NO_IMAGE" });
+      }
+
+      const result = await imageBrain({
+        imagePath: req.file.path,
+        message: req.body?.message || "",
+      });
+
+      fs.unlink(req.file.path, () => {});
+      res.json({ ok: true, reply: result.reply });
+    } catch (err) {
+      console.error("IMAGE ERROR:", err);
+      res.status(500).json({
         ok: false,
-        error: "NO_AUDIO",
-        hint: "Send multipart/form-data with field name 'audio'.",
+        error: "IMAGE_FAILURE",
+        detail: err.message,
       });
     }
-
-    const out = await runAudioDiagnosis({
-      audioBuffer: req.file.buffer,
-      mimeType: req.file.mimetype || "audio/m4a",
-    });
-
-    return res.json({ ok: true, text: out });
-  } catch (err) {
-    console.error("AUDIO_DIAGNOSE_ERROR:", err);
-    return res.status(500).json({ ok: false, error: "AUDIO_FAILED" });
   }
-});
+);
 
-// --- Listen
+// --------------------
+// AUDIO DIAGNOSE
+// Flutter -> POST /api/audio-diagnose
+// --------------------
+app.post(
+  "/api/audio-diagnose",
+  upload.single("audio"),
+  async (req, res) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ ok: false, error: "NO_AUDIO" });
+      }
+
+      const result = await audioBrain({
+        audioPath: req.file.path,
+      });
+
+      fs.unlink(req.file.path, () => {});
+      res.json({ ok: true, reply: result.reply });
+    } catch (err) {
+      console.error("AUDIO ERROR:", err);
+      res.status(500).json({
+        ok: false,
+        error: "AUDIO_FAILURE",
+        detail: err.message,
+      });
+    }
+  }
+);
+
+// --------------------
 const PORT = process.env.PORT || 8080;
 app.listen(PORT, () => {
   console.log(`FixLens Brain API listening on port ${PORT}`);
