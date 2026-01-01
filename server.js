@@ -1,29 +1,40 @@
-import express from 'express';
-import { handleFixLensMessage } from "./service.js";
+import OpenAI from "openai";
 
-const app = express();
-app.use(express.json());
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+const SESSIONS = new Map();
 
-app.post("/api/chat", async (req, res) => {
+// العقل المدبر مدمج هنا لضمان عدم حدوث خطأ في الاستدعاء
+const DOCTOR_PROMPT = `You are FixLens, a Master Mechanic.
+- Respond in the user's language (Arabic/English).
+- NO bullet points, NO headings. One professional paragraph.
+- If the user asks for prices/stores and you don't have a ZIP, reply ONLY with: ZIP_REQUIRED
+- Be professional like a high-end US workshop.`;
+
+export async function handleFixLensMessage({ sessionId, userText, history = [] }) {
 try {
-const { text, sessionId, history } = req.body;
+const s = SESSIONS.get(sessionId) || { zip: null };
 
-if (!text) return res.status(400).json({ ok: false, error: "Text is required" });
-
-// نرسل الطلب للـ Service وننتظر النتيجة
-const result = await handleFixLensMessage({
-sessionId: sessionId || "anon",
-userText: text,
-history: history || []
-});
-
-res.json(result);
-
-} catch (error) {
-console.error("Server Crash:", error);
-// إرسال JSON بدلاً من انهيار السيرفر يمنع ظهور خطأ 502 للمستخدم
-res.status(500).json({ ok: false, error: "Internal Server Error" });
+// منطق الـ ZIP السريع
+if (/^\d{5}$/.test(userText.trim())) {
+s.zip = userText.trim();
+SESSIONS.set(sessionId, s);
+return { ok: true, text: "تم حفظ الرمز البريدي. كيف يمكنني مساعدتك في البحث عن القطع؟" };
 }
+
+const messages = [
+{ role: "system", content: DOCTOR_PROMPT },
+...history,
+{ role: "user", content: userText }
+];
+
+const completion = await openai.chat.completions.create({
+model: "gpt-4o", // تأكد من شحن حسابك في OpenAI لاستخدام هذا الموديل
+messages: messages,
 });
 
-app.listen(3000, () => console.log("FixLens Engine Running on port 3000"));
+return { ok: true, text: completion.choices[0].message.content };
+} catch (error) {
+console.error("AI Error:", error.message);
+return { ok: false, error: "AI_ERROR", detail: error.message };
+}
+}
