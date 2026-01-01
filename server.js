@@ -1,69 +1,108 @@
-// server.js
 import express from "express";
+import fetch from "node-fetch";
 import cors from "cors";
-import multer from "multer";
-import { handleChat } from "./lib/service.js";
+import { buildDoctorSystemPrompt } from "./doctorPrompt.js";
 
 const app = express();
-const upload = multer({ storage: multer.memoryStorage() });
-
 app.use(cors());
-app.use(express.json({ limit: "2mb" }));
+app.use(express.json());
 
-// Health
-app.get("/health", (_req, res) => {
-  res.json({ ok: true, service: "fixlens-brain-api", ts: Date.now() });
+const OPENAI_KEY = process.env.OPENAI_API_KEY;
+if (!OPENAI_KEY) {
+  throw new Error("Missing OPENAI_API_KEY");
+}
+
+/* =========================
+   HEALTH CHECK
+========================= */
+app.get("/", (req, res) => {
+  res.json({ ok: true, service: "FixLens Brain Online" });
 });
 
-/**
- * POST /chat
- * body: {
- *   messages: [{ role: "user"|"assistant"|"system", content: string }],
- *   meta?: {
- *     zip?: string,
- *     cityState?: string,
- *     preferredStore?: string,
- *     consent?: { accepted?: boolean, acceptedAt?: string }
- *   }
- * }
- */
-app.post("/chat", async (req, res) => {
-  try {
-    const result = await handleChat(req.body || {});
-    res.json(result);
-  } catch (err) {
-    console.error("CHAT_ERROR:", err?.message || err);
-    res.status(500).json({
-      ok: false,
-      reply: "FixLens Brain is busy or unavailable right now. Please try again in a moment.",
-    });
-  }
-});
-
-/**
- * ✅ Alias route for older Flutter builds:
- * Some clients still call POST /api/diagnose
- * We route it to the same handler to avoid 404
- */
+/* =========================
+   MAIN DIAGNOSE ROUTE
+========================= */
 app.post("/api/diagnose", async (req, res) => {
   try {
-    const result = await handleChat(req.body || {});
-    res.json(result);
+    const {
+      message,
+      outputLanguage = "en",
+      zip = null,
+      showSources = false
+    } = req.body;
+
+    if (!message) {
+      return res.status(400).json({ ok: false, error: "Missing message" });
+    }
+
+    /* -------- Intent Detection -------- */
+    const lower = message.toLowerCase();
+
+    const wantsPrice =
+      lower.includes("price") ||
+      lower.includes("cost") ||
+      lower.includes("كم") ||
+      lower.includes("السعر");
+
+    const wantsNearby =
+      lower.includes("near") ||
+      lower.includes("قريب") ||
+      lower.includes("zip");
+
+    const needsSearch = wantsPrice || wantsNearby;
+
+    const needsZip = needsSearch && !zip;
+
+    /* -------- Build Prompt -------- */
+    const systemPrompt = buildDoctorSystemPrompt({ outputLanguage });
+
+    const messages = [
+      { role: "system", content: systemPrompt },
+      { role: "user", content: message }
+    ];
+
+    const aiResponse = await fetch(
+      "https://api.openai.com/v1/chat/completions",
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${OPENAI_KEY}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          model: "gpt-5.1",
+          temperature: 0.35,
+          messages
+        })
+      }
+    );
+
+    const data = await aiResponse.json();
+    const reply = data.choices?.[0]?.message?.content || "";
+
+    return res.json({
+      ok: true,
+      language: outputLanguage,
+      reply,
+      needsSearch,
+      needsZip,
+      needsConsent: false,
+      searchQuery: needsSearch ? message : null
+    });
+
   } catch (err) {
-    console.error("DIAGNOSE_ERROR:", err?.message || err);
+    console.error(err);
     res.status(500).json({
       ok: false,
-      reply: "FixLens Brain is busy or unavailable right now. Please try again in a moment.",
+      error: "FixLens Brain internal error"
     });
   }
 });
 
-// Optional: accept multipart image/audio later (you can keep it ready)
-app.post("/api/ping-upload", upload.single("file"), (req, res) => {
-  res.json({ ok: true, received: !!req.file, size: req.file?.size || 0 });
-});
-
-const port = process.env.PORT || 8080;
-app.listen(port, () => {
-  console.log(`FixLens Brain running on port ${port}`);
-});
+/* =========================
+   START SERVER
+========================= */
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () =>
+  console.log(`🧠 FixLens Brain running on port ${PORT}`)
+);
