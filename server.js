@@ -15,7 +15,7 @@ import {
 const app = express();
 
 app.use(cors());
-app.use(express.json({ limit: "2mb" }));
+app.use(express.json({ limit: "10mb" })); // ⬅️ زيدناه لأن history ممكن يكبر
 
 // ✅ Safety: always have a server-side timeout for responses
 app.use((req, res, next) => {
@@ -75,6 +75,28 @@ function setContentLanguage(res, lang) {
 }
 
 // --------------------
+// ✅ History parser (THE FIX)
+// --------------------
+function parseHistoryAny(history) {
+  try {
+    if (!history) return [];
+    if (Array.isArray(history)) return history;
+
+    // multer multipart => strings
+    if (typeof history === "string") {
+      const t = history.trim();
+      if (!t) return [];
+      const parsed = JSON.parse(t);
+      return Array.isArray(parsed) ? parsed : [];
+    }
+
+    return [];
+  } catch {
+    return [];
+  }
+}
+
+// --------------------
 // Timeout wrapper (prevents hanging => 502)
 // --------------------
 function withTimeout(promise, ms, label = "TIMEOUT") {
@@ -96,7 +118,6 @@ app.get("/health/data", (req, res) => {
     res.status(200).json(out);
   } catch (err) {
     console.error("DATA HEALTH ERROR:", err);
-    // ✅ return 200 to avoid client exceptions
     res.status(200).json({
       ok: false,
       error: "Data health failed",
@@ -117,10 +138,10 @@ app.post("/api/diagnose", async (req, res) => {
         message,
         preferredLanguage: resolvedLang,
         vehicleInfo,
-        history: Array.isArray(history) ? history : [],
+        history: parseHistoryAny(history), // ✅ FIX
         mode: mode || "doctor",
       }),
-      25000,
+      60000, // ⬅️ كان 25s وهذا يقطع الردود (خصوصاً deep)
       "TEXT_UPSTREAM_TIMEOUT"
     );
 
@@ -132,7 +153,6 @@ app.post("/api/diagnose", async (req, res) => {
     const resolvedLang = resolvePreferredLanguage(req, req?.body?.preferredLanguage);
     setContentLanguage(res, resolvedLang);
 
-    // ✅ return 200 to avoid FixLens Flutter throwing exceptions
     res.status(200).json({
       ok: false,
       reply: resolvedLang.startsWith("ar")
@@ -155,7 +175,12 @@ app.post("/api/image-diagnose", upload.single("image"), async (req, res) => {
     if (!file?.path) {
       const resolvedLang = resolvePreferredLanguage(req, preferredLanguage);
       setContentLanguage(res, resolvedLang);
-      return res.status(200).json({ ok: false, error: "Image diagnosis failed", details: "No image", language: resolvedLang });
+      return res.status(200).json({
+        ok: false,
+        error: "Image diagnosis failed",
+        details: "No image",
+        language: resolvedLang,
+      });
     }
 
     const resolvedLang = resolvePreferredLanguage(req, preferredLanguage);
@@ -166,12 +191,12 @@ app.post("/api/image-diagnose", upload.single("image"), async (req, res) => {
         message,
         preferredLanguage: resolvedLang,
         vehicleInfo,
-        history: Array.isArray(history) ? history : [],
+        history: parseHistoryAny(history), // ✅ FIX
         imageBuffer,
         imageMime: file.mimetype,
         mode: mode || "doctor",
       }),
-      30000,
+      60000,
       "IMAGE_UPSTREAM_TIMEOUT"
     );
 
@@ -207,7 +232,12 @@ app.post("/api/audio-diagnose", upload.single("audio"), async (req, res) => {
     if (!file?.path) {
       const resolvedLang = resolvePreferredLanguage(req, preferredLanguage);
       setContentLanguage(res, resolvedLang);
-      return res.status(200).json({ ok: false, error: "Audio diagnosis failed", details: "No audio file received", language: resolvedLang });
+      return res.status(200).json({
+        ok: false,
+        error: "Audio diagnosis failed",
+        details: "No audio file received",
+        language: resolvedLang,
+      });
     }
 
     const resolvedLang = resolvePreferredLanguage(req, preferredLanguage);
@@ -215,7 +245,12 @@ app.post("/api/audio-diagnose", upload.single("audio"), async (req, res) => {
     const audioBuffer = fs.readFileSync(file.path);
     if (!audioBuffer || audioBuffer.length < 200) {
       setContentLanguage(res, resolvedLang);
-      return res.status(200).json({ ok: false, error: "Audio diagnosis failed", details: "Audio too small or empty", language: resolvedLang });
+      return res.status(200).json({
+        ok: false,
+        error: "Audio diagnosis failed",
+        details: "Audio too small or empty",
+        language: resolvedLang,
+      });
     }
 
     const out = await withTimeout(
@@ -223,13 +258,13 @@ app.post("/api/audio-diagnose", upload.single("audio"), async (req, res) => {
         message,
         preferredLanguage: resolvedLang,
         vehicleInfo,
-        history: Array.isArray(history) ? history : [],
+        history: parseHistoryAny(history), // ✅ FIX
         audioBuffer,
         audioMime: file.mimetype,
         audioOriginalName: file.originalname,
         mode: mode || "doctor",
       }),
-      45000,
+      90000,
       "AUDIO_UPSTREAM_TIMEOUT"
     );
 
@@ -266,7 +301,6 @@ app.use((err, req, res, next) => {
   });
 });
 
-// ✅ Process safety net (prevents full crash logs without response)
 process.on("uncaughtException", (err) => console.error("UNCAUGHT_EXCEPTION:", err));
 process.on("unhandledRejection", (reason) => console.error("UNHANDLED_REJECTION:", reason));
 
