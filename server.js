@@ -1,132 +1,101 @@
-// server.js
+import "dotenv/config";
 import express from "express";
 import cors from "cors";
+import morgan from "morgan";
 import multer from "multer";
 
 import {
   diagnoseText,
   diagnoseImage,
-  diagnoseAudio,
+  diagnoseAudio
 } from "./lib/service.js";
 
 const app = express();
+
+app.use(cors());
+app.use(morgan("dev"));
+app.use(express.json({ limit: "1mb" }));
+
+// Multer for multipart (image/audio)
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: {
-    fileSize: 15 * 1024 * 1024, // 15MB
-  },
+    fileSize: 20 * 1024 * 1024 // 20MB
+  }
 });
 
-app.use(cors({ origin: "*", methods: ["GET", "POST", "OPTIONS"] }));
-app.use(express.json({ limit: "2mb" }));
-app.use(express.urlencoded({ extended: true }));
-
-// ---- Health ----
 app.get("/health", (req, res) => {
-  res.json({ ok: true, service: "fixlens-brain-api", status: "up" });
+  res.json({ ok: true, service: "FixLens Brain API", ts: new Date().toISOString() });
 });
 
-// ---- Text ----
-// Expects: { text: string, history?: array, locale?: string }
-app.post("/api/text-diagnose", async (req, res) => {
+// TEXT
+app.post("/api/diagnose", async (req, res) => {
   try {
-    const text =
-      (req.body?.text ?? req.body?.message ?? "").toString().trim();
-    const history = Array.isArray(req.body?.history) ? req.body.history : [];
-    const locale = (req.body?.locale ?? "auto").toString();
+    const text = (req.body?.text ?? "").toString().trim();
+    const lang = (req.body?.lang ?? "auto").toString().trim();
 
     if (!text) {
       return res.status(400).json({ ok: false, error: "NO_TEXT" });
     }
 
-    const out = await diagnoseText({ text, history, locale });
-    res.json({ ok: true, reply: out.reply, meta: out.meta ?? {} });
-  } catch (e) {
-    console.error("TEXT_DIAGNOSE_ERROR:", e);
-    res.status(500).json({
-      ok: false,
-      error: "SERVER_ERROR",
-      detail: String(e?.message ?? e),
-    });
+    const out = await diagnoseText({ text, lang });
+    return res.json({ ok: true, ...out });
+  } catch (err) {
+    console.error("TEXT_ROUTE_ERROR:", err);
+    return res.status(500).json({ ok: false, error: "SERVER_ERROR" });
   }
 });
 
-// ---- Image ----
-// multipart/form-data: field name MUST be "image"
-// Also accepts text fields: text, locale
-app.post(
-  "/api/image-diagnose",
-  upload.single("image"),
-  async (req, res) => {
-    try {
-      const file = req.file; // multer puts it here
-      const text = (req.body?.text ?? "").toString().trim();
-      const locale = (req.body?.locale ?? "auto").toString();
+// IMAGE (multipart form-data: field name "image")
+app.post("/api/image-diagnose", upload.single("image"), async (req, res) => {
+  try {
+    const file = req.file;
+    const lang = (req.body?.lang ?? "auto").toString().trim();
+    const hint = (req.body?.hint ?? "").toString().trim(); // optional text hint
 
-      if (!file || !file.buffer) {
-        return res.status(400).json({ ok: false, error: "NO_IMAGE" });
-      }
-
-      const out = await diagnoseImage({
-        imageBuffer: file.buffer,
-        mimeType: file.mimetype || "image/jpeg",
-        text,
-        locale,
-      });
-
-      res.json({ ok: true, reply: out.reply, meta: out.meta ?? {} });
-    } catch (e) {
-      console.error("IMAGE_DIAGNOSE_ERROR:", e);
-      res.status(500).json({
-        ok: false,
-        error: "SERVER_ERROR",
-        detail: String(e?.message ?? e),
-      });
+    if (!file || !file.buffer) {
+      return res.status(400).json({ ok: false, error: "NO_IMAGE" });
     }
+
+    const out = await diagnoseImage({
+      imageBuffer: file.buffer,
+      mimeType: file.mimetype || "image/jpeg",
+      lang,
+      hint
+    });
+
+    return res.json({ ok: true, ...out });
+  } catch (err) {
+    console.error("IMAGE_ROUTE_ERROR:", err);
+    return res.status(500).json({ ok: false, error: "SERVER_ERROR" });
   }
-);
+});
 
-// ---- Audio ----
-// multipart/form-data: field name MUST be "audio"
-// Also accepts text fields: text, locale
-app.post(
-  "/api/audio-diagnose",
-  upload.single("audio"),
-  async (req, res) => {
-    try {
-      const file = req.file;
-      const text = (req.body?.text ?? "").toString().trim();
-      const locale = (req.body?.locale ?? "auto").toString();
+// AUDIO (multipart form-data: field name "audio")
+app.post("/api/audio-diagnose", upload.single("audio"), async (req, res) => {
+  try {
+    const file = req.file;
+    const lang = (req.body?.lang ?? "auto").toString().trim();
 
-      if (!file || !file.buffer) {
-        return res.status(400).json({ ok: false, error: "NO_AUDIO" });
-      }
-
-      const out = await diagnoseAudio({
-        audioBuffer: file.buffer,
-        mimeType: file.mimetype || "audio/m4a",
-        text,
-        locale,
-      });
-
-      res.json({
-        ok: true,
-        reply: out.reply,
-        transcript: out.transcript ?? "",
-        meta: out.meta ?? {},
-      });
-    } catch (e) {
-      console.error("AUDIO_DIAGNOSE_ERROR:", e);
-      res.status(500).json({
-        ok: false,
-        error: "SERVER_ERROR",
-        detail: String(e?.message ?? e),
-      });
+    if (!file || !file.buffer) {
+      return res.status(400).json({ ok: false, error: "NO_AUDIO" });
     }
-  }
-);
 
-const port = Number(process.env.PORT || 8080);
-app.listen(port, () => {
-  console.log(`FixLens Brain API listening on port ${port}`);
+    const out = await diagnoseAudio({
+      audioBuffer: file.buffer,
+      mimeType: file.mimetype || "audio/m4a",
+      lang
+    });
+
+    return res.json({ ok: true, ...out });
+  } catch (err) {
+    console.error("AUDIO_ROUTE_ERROR:", err);
+    return res.status(500).json({ ok: false, error: "SERVER_ERROR" });
+  }
+});
+
+const PORT = process.env.PORT || 8080;
+
+app.listen(PORT, () => {
+  console.log(`FixLens Brain API listening on port ${PORT}`);
 });
