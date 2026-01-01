@@ -2,22 +2,26 @@
 import { buildDoctorSystemPrompt, buildUserInput, shouldWebSearch } from "./doctorPrompt.js";
 import { webSearchSerper } from "./lib/search.js";
 
-// Read your Railway variables (current names)
-const OPENAI_KEY = process.env.OPENAI_API_KEY || "";
-const TEXT_MODEL =
-  process.env.OPENAI_MODEL_TEXT ||         // your current variable
-  process.env.FIXLENS_TEXT_MODEL ||        // optional alt variable
-  "gpt-4o-mini";                           // safe default
+const OPENAI_KEY = process.env.OPENAI_API_KEY;
 
-const HARD_TIMEOUT_MS = Number(process.env.FIXLENS_TIMEOUT_MS || 60000);
-const DEBUG = String(process.env.FIXLENS_DEBUG || "").trim() === "1";
+// Use your Railway variable if present, otherwise default
+const TEXT_MODEL = process.env.OPENAI_MODEL_TEXT || process.env.FIXLENS_TEXT_MODEL || "gpt-5.1";
+
+// Hard timeout to prevent hanging requests -> 502
+const HARD_TIMEOUT_MS = Number(process.env.FIXLENS_TIMEOUT_MS || 20000);
 
 function withTimeout(promise, ms, label = "TIMEOUT") {
   return new Promise((resolve, reject) => {
     const t = setTimeout(() => reject(new Error(label)), ms);
     promise
-      .then((v) => { clearTimeout(t); resolve(v); })
-      .catch((e) => { clearTimeout(t); reject(e); });
+      .then((v) => {
+        clearTimeout(t);
+        resolve(v);
+      })
+      .catch((e) => {
+        clearTimeout(t);
+        reject(e);
+      });
   });
 }
 
@@ -28,32 +32,24 @@ function trimHistory(history, max = 8) {
     .slice(-max);
 }
 
-function extractOutputText(data) {
-  if (!data) return "";
-  if (typeof data.output_text === "string") return data.output_text;
-
-  if (Array.isArray(data.output)) {
-    const parts = data.output
-      .flatMap((o) => Array.isArray(o?.content) ? o.content : [])
-      .filter((c) => c?.type === "output_text" || c?.type === "text")
-      .map((c) => c?.text)
-      .filter(Boolean);
-    return parts.join("\n");
-  }
-  return "";
-}
-
 async function callOpenAIResponses({ system, input, temperature = 0.2 }) {
   if (!OPENAI_KEY) {
-    return { ok: false, error: "NO_OPENAI_API_KEY", http: 0, detail: "Missing OPENAI_API_KEY", text: "" };
+    return { ok: false, error: "NO_OPENAI_API_KEY", text: "" };
   }
 
+  // ✅ FIX: Responses API expects `input_text` not `text`
   const body = {
     model: TEXT_MODEL,
     temperature,
     input: [
-      { role: "system", content: [{ type: "text", text: system }] },
-      { role: "user", content: [{ type: "text", text: input }] }
+      {
+        role: "system",
+        content: [{ type: "input_text", text: system }],
+      },
+      {
+        role: "user",
+        content: [{ type: "input_text", text: input }],
+      },
     ],
   };
 
@@ -70,24 +66,34 @@ async function callOpenAIResponses({ system, input, temperature = 0.2 }) {
 
   if (!r.ok) {
     const message = data?.error?.message || `OPENAI_HTTP_${r.status}`;
-    return { ok: false, error: "OPENAI_ERROR", http: r.status, detail: message, text: "" };
+    return { ok: false, error: "OPENAI_ERROR", detail: message, http: r.status, text: "" };
   }
 
-  const text = extractOutputText(data).trim();
-  return { ok: true, http: 200, text };
+  const text =
+    data?.output_text ||
+    (Array.isArray(data?.output)
+      ? data.output
+          .flatMap((o) => o?.content || [])
+          .filter((c) => c?.type === "output_text" || c?.type === "text")
+          .map((c) => c?.text)
+          .join("\n")
+      : "");
+
+  return { ok: true, text: (text || "").trim() };
 }
 
 export async function textBrain({ message, history = [], meta = {} }) {
   const safeHistory = trimHistory(history, 8);
   const system = buildDoctorSystemPrompt();
 
+  // Web search (optional)
   let web = { ok: false, results: [], error: null };
   try {
     if (shouldWebSearch(message)) {
       web = await webSearchSerper(message, { gl: "us", hl: "en", num: 5 });
     }
   } catch (e) {
-    web = { ok: false, results: [], error: e?.message || "WEB_SEARCH_FAILED" };
+    web = { ok: false, results: [], error: "WEB_SEARCH_FAILED" };
   }
 
   const userInput = buildUserInput({ message, history: safeHistory, web });
@@ -99,37 +105,24 @@ export async function textBrain({ message, history = [], meta = {} }) {
       HARD_TIMEOUT_MS
     );
   } catch (e) {
-    const reason = e?.message || "OPENAI_CALL_FAILED";
-    console.error("OPENAI_CALL_EXCEPTION:", reason, e?.stack || "");
     return {
       reply:
-        "I couldn’t generate a response right now. Please try again in a moment. " +
-        "If it keeps happening, check the server logs for the OpenAI error and try again.",
-      debug: DEBUG ? { ok: false, reason, model: TEXT_MODEL } : { ok: false },
+        "I couldn't generate a response right now. Please try again in a moment. If it keeps happening, check the server logs and try again.",
+      debug: { ok: false, reason: String(e?.message || e), web: web?.ok ? "used" : "not_used" },
     };
   }
 
   if (!ai.ok || !ai.text) {
-    console.error("OPENAI_CALL_BAD:", {
-      ok: ai?.ok,
-      http: ai?.http,
-      error: ai?.error,
-      detail: ai?.detail,
-      model: TEXT_MODEL,
-    });
-
+    const detail = ai?.detail || ai?.error || "UNKNOWN";
     return {
       reply:
-        "I couldn’t generate a response right now. Please try again in a moment. " +
-        "If it keeps happening, check the server logs for the OpenAI error and try again.",
-      debug: DEBUG
-        ? { ok: false, reason: ai?.detail || ai?.error || "UNKNOWN", http: ai?.http || 0, model: TEXT_MODEL }
-        : { ok: false },
+        "I couldn't generate a response right now. Please try again in a moment. If it keeps happening, check the server logs and try again.",
+      debug: { ok: false, reason: detail, web: web?.ok ? "used" : "not_used" },
     };
   }
 
   return {
     reply: ai.text,
-    debug: DEBUG ? { ok: true, model: TEXT_MODEL, web: web?.ok ? "used" : "not_used" } : { ok: true },
+    debug: { ok: true, web: web?.ok ? "used" : "not_used" },
   };
 }
