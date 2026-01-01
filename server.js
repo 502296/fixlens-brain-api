@@ -1,60 +1,64 @@
-// server.js (ESM)
+// server.js
 import express from "express";
 import cors from "cors";
-import multer from "multer";
-import { handleChat } from "./lib/service.js";
+import { handleText } from "./lib/service.js";
 
 const app = express();
-const upload = multer({ storage: multer.memoryStorage() });
 
 app.use(cors());
-app.use(express.json({ limit: "3mb" }));
+app.use(express.json({ limit: "2mb" }));
 
-app.get("/health", (_req, res) => {
-  res.json({ ok: true, service: "fixlens-brain-api", ts: Date.now() });
+// Health check
+app.get("/", (req, res) => {
+  res.json({ ok: true, service: "FixLens Brain API" });
 });
 
-/**
- * Unified handler:
- * Accepts:
- *  - POST /chat
- *  - POST /api/chat
- *  - POST /api/diagnose   (to match your Flutter screenshots)
- *
- * Body:
- * {
- *   "messages": [{ "role": "user|assistant|system", "content": "..." }],
- *   "meta": {
- *     "zip": "40218",
- *     "cityState": "Louisville, KY",
- *     "preferredStore": "AutoZone",
- *     "consent": { "accepted": true, "acceptedAt": "ISO" }
- *   }
- * }
- */
-async function unified(req, res) {
+// MAIN AI ENDPOINT
+app.post("/api/text", async (req, res) => {
   try {
-    const payload = req.body || {};
-    const result = await handleChat(payload);
-    res.json(result);
-  } catch (err) {
-    console.error("FIXLENS_SERVER_ERROR:", err?.stack || err?.message || err);
+    const {
+      text,
+      zip = null,
+      outputLanguage = null,
+      showSources = false,
+    } = req.body || {};
 
-    // Only "fallback" message when server is down / exception
-    res.status(500).json({
+    if (!text || typeof text !== "string") {
+      return res.status(400).json({
+        ok: false,
+        error: "Missing or invalid 'text' field",
+      });
+    }
+
+    const result = await handleText({
+      text,
+      zip,
+      outputLanguage,
+      showSources,
+    });
+
+    // Always return JSON
+    return res.json(result);
+  } catch (err) {
+    console.error("FixLens Brain crash:", err);
+
+    return res.status(500).json({
       ok: false,
-      error:
-        "FixLens Brain is busy or unavailable right now. Please try again in a moment.",
+      error: "FixLens Brain is busy or unavailable right now. Please try again.",
     });
   }
-}
+});
 
-app.post("/chat", unified);
-app.post("/api/chat", unified);
-app.post("/api/diagnose", unified);
+// 404 fallback (important to avoid HTML errors)
+app.use((req, res) => {
+  res.status(404).json({
+    ok: false,
+    error: "Endpoint not found",
+  });
+});
 
-// (Optional) If later you add image/audio routes, keep them separate.
-// app.post("/api/image", upload.single("image"), async (req, res) => { ... })
-
-const port = process.env.PORT || 8080;
-app.listen(port, () => console.log(`FixLens Brain running on port ${port}`));
+// Server start
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+  console.log(`FixLens Brain API running on port ${PORT}`);
+});
