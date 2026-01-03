@@ -2,7 +2,7 @@
 
 import { buildKnowledgeSnippets } from "./lib/autoKnowledge.js";
 
-import { buildDoctorSystemPrompt, buildDoctorUserMessage } from "./doctorPrompt.js";
+import { buildDoctorSystemPrompt } from "./doctorPrompt.js";
 
 
 
