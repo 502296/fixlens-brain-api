@@ -1,6 +1,6 @@
 // lib/service.js
 
-import { buildKnowledgeSnippets } from "./autoKnowledge.js";
+import { buildKnowledgeSnippets } from "./lib/autoKnowledge.js";
 
 import { buildDoctorSystemPrompt, buildDoctorUserMessage } from "./doctorPrompt.js";
 
