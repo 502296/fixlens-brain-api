@@ -24,10 +24,6 @@ async function processRequest(req, res) {
   try {
     const { text, image, sessionId, history, locale, audio } = req.body || {};
 
-    if (!text || typeof text !== "string" || text.trim().length === 0) {
-      return res.status(200).json({ ok: false, text: "Missing text input." });
-    }
-
     // image can be: base64 string OR {base64, mime}
     const imageObj =
       typeof image === "string"
@@ -42,9 +38,29 @@ async function processRequest(req, res) {
         ? { base64: audio.base64, mime: audio.mime || "audio/m4a" }
         : null;
 
+    // ✅ Make server robust: if no text but media exists, create a safe text
+    const safeText =
+      (typeof text === "string" && text.trim().length > 0)
+        ? text.trim()
+        : imageObj
+        ? "Photo attached."
+        : audioObj
+        ? "Voice note attached."
+        : "";
+
+    if (!safeText) {
+      return res.status(200).json({
+        ok: false,
+        text: "Missing text input.",
+        language: (locale || "en").toString(),
+        error: "MISSING_TEXT",
+        meta: {},
+      });
+    }
+
     const result = await doctorReply({
-      text: text.trim(),
-      locale: locale || "en",
+      text: safeText,
+      locale: (locale || "en").toString(),
       history: Array.isArray(history) ? history : [],
       image: imageObj,
       audio: audioObj,
@@ -55,6 +71,8 @@ async function processRequest(req, res) {
       return res.status(200).json({
         ok: false,
         text: result.reply || "AI service is not reachable right now.",
+        language: result.language || (locale || "en").toString(), // ✅ return language
+        transcript: result.transcript || null,                     // ✅ return transcript if exists
         error: result.error || "UNKNOWN",
         meta: result.meta || {},
       });
@@ -63,6 +81,8 @@ async function processRequest(req, res) {
     return res.status(200).json({
       ok: true,
       text: result.reply,
+      language: result.language || (locale || "en").toString(), // ✅ IMPORTANT
+      transcript: result.transcript || null,                     // ✅ IMPORTANT (audio)
       meta: result.meta || {},
     });
   } catch (e) {
@@ -70,6 +90,7 @@ async function processRequest(req, res) {
     return res.status(200).json({
       ok: false,
       text: "Internal Server Error. Please try again.",
+      language: "en",
       error: "SERVER_ERROR",
       message: e?.message || "Unknown",
     });
