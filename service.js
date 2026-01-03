@@ -1,7 +1,7 @@
-// lib/service.js
+// service.js
 
 import { buildKnowledgeSnippets } from "./lib/autoKnowledge.js";
-import { buildDoctorSystemPrompt } from "./doctorPrompt.js";
+import { buildDoctorSystemPrompt, buildDoctorUserMessage } from "./doctorPrompt.js";
 
 const OPENAI_KEY = process.env.OPENAI_API_KEY;
 
@@ -42,68 +42,30 @@ function normalizeHistory(history) {
     if (!c.trim()) continue;
     out.push({ role: m.role, content: c.trim() });
   }
-  return out.slice(-6);
-}
-
-/**
- * Build the user message sent to the model.
- * NOTE: This is intentionally "neutral / white language" and keeps the model focused.
- */
-function buildDoctorUserMessage({
-  locale = "en",
-  text = "",
-  knowledgeSnippets = [],
-  hasImage = false,
-  hasAudio = false,
-} = {}) {
-  const cleanText = String(text || "").trim();
-
-  const kb =
-    Array.isArray(knowledgeSnippets) && knowledgeSnippets.length
-      ? knowledgeSnippets
-          .map((s, i) => `(${i + 1}) ${String(s).trim()}`)
-          .filter(Boolean)
-          .join("\n")
-      : "";
-
-  const attachments = [
-    hasImage ? "image: yes" : "image: no",
-    hasAudio ? "audio: yes" : "audio: no",
-  ].join(", ");
-
-  // Keep it simple and deterministic.
-  // The system prompt already defines the style and rules.
-  return [
-    `User locale: ${locale}`,
-    `Attachments: ${attachments}`,
-    ``,
-    `User message:`,
-    cleanText,
-    ``,
-    kb
-      ? `Relevant knowledge snippets (may be partial / not always accurate):\n${kb}`
-      : `Relevant knowledge snippets: none`,
-    ``,
-    `Return ONLY the assistant reply text. No JSON. No markdown fences.`,
-  ].join("\n");
+  // Keep last 8 turns max
+  return out.slice(-8);
 }
 
 async function callOpenAIChat({
   system,
   user,
+  history = [],
   temperature = 0.35,
   max_tokens = 900,
 }) {
   if (!OPENAI_KEY) return { ok: false, error: "NO_OPENAI_API_KEY", text: "" };
 
+  const messages = [
+    { role: "system", content: system },
+    ...normalizeHistory(history),
+    { role: "user", content: user },
+  ];
+
   const body = {
     model: TEXT_MODEL,
     temperature,
     max_tokens,
-    messages: [
-      { role: "system", content: system },
-      { role: "user", content: user },
-    ],
+    messages,
   };
 
   const r = await fetch("https://api.openai.com/v1/chat/completions", {
@@ -116,8 +78,7 @@ async function callOpenAIChat({
   });
 
   const raw = await r.text().catch(() => "");
-  if (!r.ok)
-    return { ok: false, error: `OPENAI_${r.status}`, detail: raw, text: "" };
+  if (!r.ok) return { ok: false, error: `OPENAI_${r.status}`, detail: raw, text: "" };
 
   let data = null;
   try {
@@ -140,11 +101,9 @@ export async function doctorReply({
   const message = String(text || "").trim();
   if (!message) return { ok: false, error: "MISSING_TEXT", reply: "" };
 
-  // Local KB snippets from /data (cheap)
   const snippets = buildKnowledgeSnippets(message, { limit: 7, maxCharsEach: 260 });
 
   const system = buildDoctorSystemPrompt({ locale });
-
   const user = buildDoctorUserMessage({
     locale,
     text: message,
@@ -153,12 +112,10 @@ export async function doctorReply({
     hasAudio: !!(audio && audio.base64),
   });
 
-  // We keep history out of OpenAI call for cost stability.
-  // If you want it later, we can merge it safely.
   const ai = await withTimeout(
-    callOpenAIChat({ system, user, temperature: 0.35, max_tokens: 900 }),
+    callOpenAIChat({ system, user, history, temperature: 0.35, max_tokens: 900 }),
     HARD_TIMEOUT_MS
-  ).catch((e) => ({ ok: false, error: e?.message || "TIMEOUT", text: "" }));
+  );
 
   if (!ai.ok || !ai.text) {
     const fallback =
@@ -173,28 +130,4 @@ export async function doctorReply({
   }
 
   return { ok: true, reply: ai.text, meta: { model: TEXT_MODEL, kb_used: snippets.length } };
-}
-
-/**
- * Backward-compatible function name for your existing server.js:
- * handleFixLensMessage({ sessionId, userText, imageBase64, history })
- * returns: { ok, text }
- */
-export async function handleFixLensMessage({
-  sessionId = "anon",
-  userText,
-  imageBase64 = null,
-  history = [],
-  locale = "en",
-}) {
-  const result = await doctorReply({
-    text: userText,
-    locale,
-    history: normalizeHistory(history),
-    image: imageBase64 ? { base64: imageBase64, mime: "image/jpeg" } : null,
-    audio: null,
-  });
-
-  if (!result.ok) return { ok: false, text: result.reply, meta: result.meta || {} };
-  return { ok: true, text: result.reply, meta: result.meta || {} };
 }
