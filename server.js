@@ -4,7 +4,7 @@ import express from "express";
 
 import cors from "cors";
 
-import { doctorReply } from "./lib/service.js";
+import { doctorReply } from "./service.js";
 
 
 
