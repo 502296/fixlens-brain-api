@@ -41,7 +41,6 @@ function normalizeHistory(history) {
     if (!c.trim()) continue;
     out.push({ role: m.role, content: c.trim() });
   }
-  // Keep more context for continuity, still bounded
   return out.slice(-24);
 }
 
@@ -55,9 +54,6 @@ async function transcribeAudio({ base64, mime }) {
   if (!base64) return { ok: false, error: "NO_AUDIO", text: "" };
 
   const buf = base64ToBuffer(base64);
-
-  // Node 18+ has Blob/FormData globally (Railway usually OK).
-  // If your runtime is older, you must upgrade Node or add a polyfill.
   const blob = new Blob([buf], { type: mime || "audio/m4a" });
 
   const form = new FormData();
@@ -74,29 +70,17 @@ async function transcribeAudio({ base64, mime }) {
   if (!r.ok) return { ok: false, error: `TRANSCRIBE_${r.status}`, detail: raw, text: "" };
 
   let data = null;
-  try {
-    data = JSON.parse(raw);
-  } catch {
-    data = null;
-  }
+  try { data = JSON.parse(raw); } catch { data = null; }
 
   const text = (data?.text || "").trim();
   return { ok: true, text };
 }
 
-async function callOpenAIChat({
-  system,
-  user,
-  history = [],
-  image = null,
-  temperature = 0.45,
-  max_tokens = 1100,
-}) {
+async function callOpenAIChat({ system, user, history = [], image = null, temperature = 0.45, max_tokens = 1100 }) {
   if (!OPENAI_KEY) return { ok: false, error: "NO_OPENAI_API_KEY", text: "" };
 
   const messages = [{ role: "system", content: system }, ...normalizeHistory(history)];
 
-  // Vision: attach image when present
   if (image && image.base64) {
     const mime = image.mime || "image/jpeg";
     const url = `data:${mime};base64,${String(image.base64).replace(/^data:.*;base64,/, "")}`;
@@ -127,50 +111,26 @@ async function callOpenAIChat({
   if (!r.ok) return { ok: false, error: `OPENAI_${r.status}`, detail: raw, text: "" };
 
   let data = null;
-  try {
-    data = JSON.parse(raw);
-  } catch {
-    data = null;
-  }
+  try { data = JSON.parse(raw); } catch { data = null; }
 
   const text = data?.choices?.[0]?.message?.content?.trim() || "";
   return { ok: true, text };
 }
 
-export async function doctorReply({
-  text,
-  locale = "en",
-  history = [],
-  image = null,
-  audio = null,
-  sessionId = null,
-}) {
+export async function doctorReply({ text, locale = "en", history = [], image = null, audio = null, sessionId = null }) {
   const message = String(text || "").trim();
   if (!message) return { ok: false, error: "MISSING_TEXT", reply: "" };
 
   const snippets = buildKnowledgeSnippets(message, { limit: 7, maxCharsEach: 260 });
 
-  const system = buildDoctorSystemPrompt({ locale });
-
-  // If audio exists: transcribe, then inject into user message (so the model stops saying "I can't listen")
+  // ✅ If audio exists: transcribe
   let audioTranscript = "";
-  let audioUsed = false;
-
   if (audio && audio.base64) {
-    try {
-      const tr = await withTimeout(
-        transcribeAudio({ base64: audio.base64, mime: audio.mime || "audio/m4a" }),
-        HARD_TIMEOUT_MS,
-        "TRANSCRIBE_TIMEOUT"
-      );
-      if (tr.ok && tr.text) {
-        audioTranscript = tr.text;
-        audioUsed = true;
-      }
-    } catch (_) {
-      // silent fail; model will proceed without transcript
-    }
+    const tr = await withTimeout(transcribeAudio(audio), HARD_TIMEOUT_MS, "TRANSCRIBE_TIMEOUT");
+    if (tr.ok && tr.text) audioTranscript = tr.text;
   }
+
+  const system = buildDoctorSystemPrompt({ locale });
 
   const user = buildDoctorUserMessage({
     locale,
@@ -178,7 +138,7 @@ export async function doctorReply({
     knowledgeSnippets: snippets,
     hasImage: !!(image && image.base64),
     hasAudio: !!(audio && audio.base64),
-    audioTranscript,
+    audioTranscript, // ✅ important
   });
 
   const ai = await withTimeout(
@@ -201,24 +161,22 @@ export async function doctorReply({
       ok: false,
       error: ai?.error || "AI_FAIL",
       reply: fallback,
-      meta: {
-        model: TEXT_MODEL,
-        kb_used: snippets.length,
-        sessionId: sessionId || null,
-        audio_used: audioUsed,
-        vision_used: !!(image && image.base64),
-      },
+      language: locale,
+      transcript: audioTranscript || null,
+      meta: { model: TEXT_MODEL, kb_used: snippets.length, sessionId: sessionId || null },
     };
   }
 
   return {
     ok: true,
     reply: ai.text,
+    language: locale,                 // ✅ so Flutter can lock language
+    transcript: audioTranscript || null,
     meta: {
       model: TEXT_MODEL,
       kb_used: snippets.length,
       sessionId: sessionId || null,
-      audio_used: audioUsed,
+      audio_used: !!audioTranscript,
       vision_used: !!(image && image.base64),
     },
   };
