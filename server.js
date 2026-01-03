@@ -38,22 +38,31 @@ async function processRequest(req, res) {
         ? { base64: audio.base64, mime: audio.mime || "audio/m4a" }
         : null;
 
-    // ✅ Make server robust: if no text but media exists, create a safe text
-    const safeText =
-      (typeof text === "string" && text.trim().length > 0)
-        ? text.trim()
-        : imageObj
-        ? "Photo attached."
-        : audioObj
-        ? "Voice note attached."
-        : "";
+    const hasText = typeof text === "string" && text.trim().length > 0;
+
+    // ✅ Provide a strong default instruction if text is empty but media exists
+    let safeText = hasText ? text.trim() : "";
+
+    if (!safeText && audioObj) {
+      safeText =
+        "Analyze the attached car audio recording. " +
+        "Return max 3 likely causes, say whether it's safe to keep driving, " +
+        "and ask at most ONE follow-up question. " +
+        "Reply in the user's language.";
+    } else if (!safeText && imageObj) {
+      safeText =
+        "Analyze the attached car photo. " +
+        "Return max 3 likely causes, say whether it's safe to keep driving, " +
+        "and ask at most ONE follow-up question. " +
+        "Reply in the user's language.";
+    }
 
     if (!safeText) {
       return res.status(200).json({
         ok: false,
-        text: "Missing text input.",
+        text: "Missing input (text/image/audio).",
         language: (locale || "en").toString(),
-        error: "MISSING_TEXT",
+        error: "MISSING_INPUT",
         meta: {},
       });
     }
@@ -71,8 +80,8 @@ async function processRequest(req, res) {
       return res.status(200).json({
         ok: false,
         text: result.reply || "AI service is not reachable right now.",
-        language: result.language || (locale || "en").toString(), // ✅ return language
-        transcript: result.transcript || null,                     // ✅ return transcript if exists
+        language: result.language || (locale || "en").toString(),
+        transcript: result.transcript || null,
         error: result.error || "UNKNOWN",
         meta: result.meta || {},
       });
@@ -81,8 +90,8 @@ async function processRequest(req, res) {
     return res.status(200).json({
       ok: true,
       text: result.reply,
-      language: result.language || (locale || "en").toString(), // ✅ IMPORTANT
-      transcript: result.transcript || null,                     // ✅ IMPORTANT (audio)
+      language: result.language || (locale || "en").toString(),
+      transcript: result.transcript || null,
       meta: result.meta || {},
     });
   } catch (e) {
