@@ -1,11 +1,9 @@
 // server.js
-
 import express from "express";
 import cors from "cors";
 import { doctorReply } from "./service.js";
 
 const app = express();
-
 app.use(cors());
 app.use(express.json({ limit: "25mb" }));
 
@@ -39,6 +37,7 @@ async function processRequest(req, res) {
       history: Array.isArray(history) ? history : [],
       image: image ? { base64: image, mime: "image/jpeg" } : null,
       audio: audio || null,
+      sessionId, // accepted (stateless usage only)
     });
 
     if (!result.ok) {
