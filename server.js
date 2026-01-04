@@ -60,7 +60,7 @@ async function processRequest(req, res) {
   try {
     const body = req.body || {};
 
-    // ✅ We only support JSON payloads with base64 for image/audio (simpler & stable)
+    // ✅ Contract: JSON payload w/ base64 for image/audio
     const {
       text = "",
       image = null, // { base64, mime } OR string base64
@@ -86,13 +86,9 @@ async function processRequest(req, res) {
     const userText = typeof text === "string" ? text.trim() : "";
     let safeTextFinal = userText;
 
-    // Minimal fallback prompt if user sent only image/audio without text
-    if (!safeTextFinal && audioObj) {
-      safeTextFinal = "Analyze the attached car audio recording.";
-    }
-    if (!safeTextFinal && imageObj) {
-      safeTextFinal = "Analyze the attached car photo.";
-    }
+    // Minimal fallback text if user sent only image/audio without text
+    if (!safeTextFinal && audioObj) safeTextFinal = "Analyze the attached car audio recording.";
+    if (!safeTextFinal && imageObj) safeTextFinal = "Analyze the attached car photo.";
     if (!safeTextFinal) {
       safeTextFinal =
         "Describe the problem briefly: symptoms, any warning lights, and when it happens.";
@@ -123,12 +119,14 @@ async function processRequest(req, res) {
         ok: false,
         error: result?.error || "SERVER_ERROR",
         reply: "",
+        meta: result?.meta || {},
       });
     }
 
     return res.json({
       ok: true,
       reply: safeStr(result.reply),
+      language: normalizeLocale(locale), // ✅ always echo locale as language
       meta: result.meta || {},
     });
   } catch (err) {
