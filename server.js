@@ -5,7 +5,6 @@ import { handleFixLensRequest } from "./service.js";
 
 const app = express();
 
-// Middleware
 app.use(cors());
 app.use(express.json({ limit: "25mb" }));
 
@@ -14,8 +13,23 @@ function safeStr(x) {
   return typeof x === "string" ? x : "";
 }
 
+function normalizeLocale(locale = "en") {
+  const l = String(locale || "en").trim();
+  if (!l) return "en";
+  return l.split("-")[0].toLowerCase();
+}
+
+function isArabicText(s) {
+  const t = safeStr(s);
+  return /[\u0600-\u06FF]/.test(t);
+}
+
+function shouldArabic(locale, userText) {
+  const l = normalizeLocale(locale);
+  return l === "ar" || isArabicText(userText);
+}
+
 function stripDataUrl(b64) {
-  // supports: "data:image/jpeg;base64,AAAA" or raw base64 "AAAA"
   const s = safeStr(b64).trim();
   const idx = s.indexOf("base64,");
   return idx >= 0 ? s.slice(idx + "base64,".length) : s;
@@ -46,11 +60,7 @@ app.get("/", (req, res) => {
 });
 
 app.get("/health", (req, res) => {
-  res.json({
-    ok: true,
-    service: "fixlens-brain-api",
-    time: nowISO(),
-  });
+  res.json({ ok: true, service: "fixlens-brain-api", time: nowISO() });
 });
 
 app.post("/api/chat", (req, res) => processRequest(req, res));
@@ -64,11 +74,12 @@ async function processRequest(req, res) {
     const body = req.body || {};
     const {
       text,
-      image, // base64 string OR { base64, mime }
-      audio, // { base64, mime } OR null
+      image,        // base64 string OR { base64, mime }
+      audio,        // { base64, mime } OR null
       locale = "en",
-      history = [],
+      history = [], // expected array: [{role:'user'|'assistant', content:'...'}]
       sessionId = "",
+      audioTranscript = "",
     } = body;
 
     // 1) Build image object FIRST
@@ -85,49 +96,53 @@ async function processRequest(req, res) {
         ? { base64: audio.base64, mime: audio.mime || "audio/m4a" }
         : null;
 
-    // 3) Build safe text (if empty but media exists)
+    // 3) Build safe text (if empty but media exists) — IN USER LANGUAGE
     const hasText = typeof text === "string" && text.trim().length > 0;
-    let safeText = hasText ? text.trim() : "";
+    const userText = hasText ? text.trim() : "";
+    const useArabic = shouldArabic(locale, userText);
+
+    let safeText = userText;
 
     if (!safeText && audioObj) {
-      safeText =
-        "Analyze the attached car audio recording. Return max 3 likely causes, say whether it's safe to keep driving, and ask at most ONE follow-up question if needed.";
+      safeText = useArabic
+        ? "حلّل تسجيل صوت السيارة المرفق. أعطني بحد أقصى 3 أسباب محتملة، وقل هل القيادة آمنة الآن، واسأل سؤالاً واحداً فقط إذا احتجت."
+        : "Analyze the attached car audio recording. Return max 3 likely causes, say whether it's safe to keep driving, and ask at most ONE follow-up question if needed.";
     }
 
     if (!safeText && imageObj) {
-      safeText =
-        "Analyze the attached car photo. Return max 3 likely causes, say whether it's safe to keep driving, and ask at most ONE follow-up question if needed.";
+      safeText = useArabic
+        ? "حلّل صورة السيارة المرفقة. أعطني بحد أقصى 3 أسباب محتملة، وقل هل القيادة آمنة الآن، واسأل سؤالاً واحداً فقط إذا احتجت."
+        : "Analyze the attached car photo. Return max 3 likely causes, say whether it's safe to keep driving, and ask at most ONE follow-up question if needed.";
     }
 
     if (!safeText) {
-      safeText =
-        "Describe the car problem briefly. Include symptoms, warnings on the dashboard, and whether the issue is worse when accelerating, braking, or idling.";
+      safeText = useArabic
+        ? "صف المشكلة باختصار: الأعراض، أي لمبة تحذير، ومتى تظهر المشكلة (عند التسارع، الفرملة، أو الوقوف)."
+        : "Describe the car problem briefly: symptoms, any warning lights, and when it happens (acceleration, braking, or idling).";
     }
 
     // 4) Convert base64 to buffers
     const imageBuffer = imageObj ? b64ToBuffer(imageObj.base64) : null;
     const audioBuffer = audioObj ? b64ToBuffer(audioObj.base64) : null;
 
-    // 5) Call your Pro brain
+    // 5) Call FixLens Pro brain (search stays inside service.js)
     const result = await handleFixLensRequest({
       text: safeText,
-      locale,
-      history,
-      sessionId,
+      locale: normalizeLocale(locale),
+      history: Array.isArray(history) ? history : [],
+      sessionId: safeStr(sessionId),
 
       hasImage: Boolean(imageBuffer),
-      imageBuffer: imageBuffer,
+      imageBuffer,
       imageMime: imageObj?.mime || "image/jpeg",
 
       hasAudio: Boolean(audioBuffer),
-      audioBuffer: audioBuffer,
+      audioBuffer,
       audioMime: audioObj?.mime || "audio/m4a",
 
-      // if your flutter sends a transcript sometimes, it can pass it too:
-      audioTranscript: safeStr(body.audioTranscript || ""),
+      audioTranscript: safeStr(audioTranscript),
     });
 
-    // 6) Standard response
     if (!result?.ok) {
       return res.status(500).json({
         ok: false,
