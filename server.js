@@ -1,30 +1,77 @@
 // server.js
 import express from "express";
 import cors from "cors";
-import { doctorReply } from "./service.js";
+import { handleFixLensRequest } from "./service.js";
 
 const app = express();
+
+// Middleware
 app.use(cors());
 app.use(express.json({ limit: "25mb" }));
 
+// ---------- Helpers ----------
+function safeStr(x) {
+  return typeof x === "string" ? x : "";
+}
+
+function stripDataUrl(b64) {
+  // supports: "data:image/jpeg;base64,AAAA" or raw base64 "AAAA"
+  const s = safeStr(b64).trim();
+  const idx = s.indexOf("base64,");
+  return idx >= 0 ? s.slice(idx + "base64,".length) : s;
+}
+
+function b64ToBuffer(b64) {
+  const cleaned = stripDataUrl(b64);
+  if (!cleaned) return null;
+  try {
+    return Buffer.from(cleaned, "base64");
+  } catch {
+    return null;
+  }
+}
+
+function nowISO() {
+  return new Date().toISOString();
+}
+
+// ---------- Routes ----------
 app.get("/", (req, res) => {
-  res.json({ ok: true, service: "fixlens-brain-api", hint: "Use /health or POST /api/chat" });
+  res.json({
+    ok: true,
+    service: "fixlens-brain-api",
+    hint: "Use /health or POST /api/chat",
+    time: nowISO(),
+  });
 });
 
 app.get("/health", (req, res) => {
-  res.json({ ok: true, service: "fixlens-brain-api", time: new Date().toISOString() });
+  res.json({
+    ok: true,
+    service: "fixlens-brain-api",
+    time: nowISO(),
+  });
 });
 
-app.post("/api/chat", async (req, res) => processRequest(req, res));
-app.post("/api/diagnose", async (req, res) => processRequest(req, res));
-app.post("/api/dia", async (req, res) => processRequest(req, res));
-app.post("/v1/doctor", async (req, res) => processRequest(req, res));
+app.post("/api/chat", (req, res) => processRequest(req, res));
+app.post("/api/diagnose", (req, res) => processRequest(req, res));
+app.post("/api/dial", (req, res) => processRequest(req, res));
+app.post("/v1/doctor", (req, res) => processRequest(req, res));
 
+// ---------- Main handler ----------
 async function processRequest(req, res) {
   try {
-    const { text, image, sessionId, history, locale, audio } = req.body || {};
+    const body = req.body || {};
+    const {
+      text,
+      image, // base64 string OR { base64, mime }
+      audio, // { base64, mime } OR null
+      locale = "en",
+      history = [],
+      sessionId = "",
+    } = body;
 
-    // image can be: base64 string OR {base64, mime}
+    // 1) Build image object FIRST
     const imageObj =
       typeof image === "string"
         ? { base64: image, mime: "image/jpeg" }
@@ -32,79 +79,80 @@ async function processRequest(req, res) {
         ? { base64: image.base64, mime: image.mime || "image/jpeg" }
         : null;
 
-    // audio can be: {base64, mime} OR null
+    // 2) Build audio object FIRST
     const audioObj =
       audio && typeof audio.base64 === "string"
         ? { base64: audio.base64, mime: audio.mime || "audio/m4a" }
         : null;
 
+    // 3) Build safe text (if empty but media exists)
     const hasText = typeof text === "string" && text.trim().length > 0;
-
-    // ✅ Provide a strong default instruction if text is empty but media exists
     let safeText = hasText ? text.trim() : "";
 
     if (!safeText && audioObj) {
       safeText =
-        "Analyze the attached car audio recording. " +
-        "Return max 3 likely causes, say whether it's safe to keep driving, " +
-        "and ask at most ONE follow-up question. " +
-        "Reply in the user's language.";
-    } else if (!safeText && imageObj) {
+        "Analyze the attached car audio recording. Return max 3 likely causes, say whether it's safe to keep driving, and ask at most ONE follow-up question if needed.";
+    }
+
+    if (!safeText && imageObj) {
       safeText =
-        "Analyze the attached car photo. " +
-        "Return max 3 likely causes, say whether it's safe to keep driving, " +
-        "and ask at most ONE follow-up question. " +
-        "Reply in the user's language.";
+        "Analyze the attached car photo. Return max 3 likely causes, say whether it's safe to keep driving, and ask at most ONE follow-up question if needed.";
     }
 
     if (!safeText) {
-      return res.status(200).json({
-        ok: false,
-        text: "Missing input (text/image/audio).",
-        language: (locale || "en").toString(),
-        error: "MISSING_INPUT",
-        meta: {},
-      });
+      safeText =
+        "Describe the car problem briefly. Include symptoms, warnings on the dashboard, and whether the issue is worse when accelerating, braking, or idling.";
     }
 
-    const result = await doctorReply({
+    // 4) Convert base64 to buffers
+    const imageBuffer = imageObj ? b64ToBuffer(imageObj.base64) : null;
+    const audioBuffer = audioObj ? b64ToBuffer(audioObj.base64) : null;
+
+    // 5) Call your Pro brain
+    const result = await handleFixLensRequest({
       text: safeText,
-      locale: (locale || "en").toString(),
-      history: Array.isArray(history) ? history : [],
-      image: imageObj,
-      audio: audioObj,
+      locale,
+      history,
       sessionId,
+
+      hasImage: Boolean(imageBuffer),
+      imageBuffer: imageBuffer,
+      imageMime: imageObj?.mime || "image/jpeg",
+
+      hasAudio: Boolean(audioBuffer),
+      audioBuffer: audioBuffer,
+      audioMime: audioObj?.mime || "audio/m4a",
+
+      // if your flutter sends a transcript sometimes, it can pass it too:
+      audioTranscript: safeStr(body.audioTranscript || ""),
     });
 
-    if (!result.ok) {
-      return res.status(200).json({
+    // 6) Standard response
+    if (!result?.ok) {
+      return res.status(500).json({
         ok: false,
-        text: result.reply || "AI service is not reachable right now.",
-        language: result.language || (locale || "en").toString(),
-        transcript: result.transcript || null,
-        error: result.error || "UNKNOWN",
-        meta: result.meta || {},
+        error: result?.error || "SERVER_ERROR",
+        reply: "",
       });
     }
 
-    return res.status(200).json({
+    return res.json({
       ok: true,
-      text: result.reply,
-      language: result.language || (locale || "en").toString(),
-      transcript: result.transcript || null,
+      reply: safeStr(result.reply),
       meta: result.meta || {},
     });
-  } catch (e) {
-    console.error("Critical Server Error:", e);
-    return res.status(200).json({
+  } catch (err) {
+    console.error("processRequest error:", err?.message || err);
+    return res.status(500).json({
       ok: false,
-      text: "Internal Server Error. Please try again.",
-      language: "en",
-      error: "SERVER_ERROR",
-      message: e?.message || "Unknown",
+      error: "PROCESS_REQUEST_FAILED",
+      reply: "",
     });
   }
 }
 
+// ---------- Start ----------
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`FixLens Brain running on port ${PORT}`));
+app.listen(PORT, () => {
+  console.log(`FixLens Brain API running on port ${PORT}`);
+});
