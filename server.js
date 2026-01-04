@@ -20,8 +20,7 @@ function normalizeLocale(locale = "en") {
 }
 
 function isArabicText(s) {
-  const t = safeStr(s);
-  return /[\u0600-\u06FF]/.test(t);
+  return /[\u0600-\u06FF]/.test(safeStr(s));
 }
 
 function shouldArabic(locale, userText) {
@@ -74,10 +73,10 @@ async function processRequest(req, res) {
     const body = req.body || {};
     const {
       text,
-      image,        // base64 string OR { base64, mime }
-      audio,        // { base64, mime } OR null
+      image, // base64 string OR { base64, mime }
+      audio, // { base64, mime } OR null
       locale = "en",
-      history = [], // expected array: [{role:'user'|'assistant', content:'...'}]
+      history = [],
       sessionId = "",
       audioTranscript = "",
     } = body;
@@ -96,27 +95,27 @@ async function processRequest(req, res) {
         ? { base64: audio.base64, mime: audio.mime || "audio/m4a" }
         : null;
 
-    // 3) Build safe text (if empty but media exists) — IN USER LANGUAGE
+    // 3) Safe text (fallback) must match user's language
     const hasText = typeof text === "string" && text.trim().length > 0;
     const userText = hasText ? text.trim() : "";
     const useArabic = shouldArabic(locale, userText);
 
-    let safeText = userText;
+    let safeTextFinal = userText;
 
-    if (!safeText && audioObj) {
-      safeText = useArabic
+    if (!safeTextFinal && audioObj) {
+      safeTextFinal = useArabic
         ? "حلّل تسجيل صوت السيارة المرفق. أعطني بحد أقصى 3 أسباب محتملة، وقل هل القيادة آمنة الآن، واسأل سؤالاً واحداً فقط إذا احتجت."
         : "Analyze the attached car audio recording. Return max 3 likely causes, say whether it's safe to keep driving, and ask at most ONE follow-up question if needed.";
     }
 
-    if (!safeText && imageObj) {
-      safeText = useArabic
+    if (!safeTextFinal && imageObj) {
+      safeTextFinal = useArabic
         ? "حلّل صورة السيارة المرفقة. أعطني بحد أقصى 3 أسباب محتملة، وقل هل القيادة آمنة الآن، واسأل سؤالاً واحداً فقط إذا احتجت."
         : "Analyze the attached car photo. Return max 3 likely causes, say whether it's safe to keep driving, and ask at most ONE follow-up question if needed.";
     }
 
-    if (!safeText) {
-      safeText = useArabic
+    if (!safeTextFinal) {
+      safeTextFinal = useArabic
         ? "صف المشكلة باختصار: الأعراض، أي لمبة تحذير، ومتى تظهر المشكلة (عند التسارع، الفرملة، أو الوقوف)."
         : "Describe the car problem briefly: symptoms, any warning lights, and when it happens (acceleration, braking, or idling).";
     }
@@ -125,9 +124,9 @@ async function processRequest(req, res) {
     const imageBuffer = imageObj ? b64ToBuffer(imageObj.base64) : null;
     const audioBuffer = audioObj ? b64ToBuffer(audioObj.base64) : null;
 
-    // 5) Call FixLens Pro brain (search stays inside service.js)
+    // 5) Call Pro brain (search remains in service.js)
     const result = await handleFixLensRequest({
-      text: safeText,
+      text: safeTextFinal,
       locale: normalizeLocale(locale),
       history: Array.isArray(history) ? history : [],
       sessionId: safeStr(sessionId),
