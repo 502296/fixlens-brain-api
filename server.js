@@ -60,7 +60,7 @@ async function processRequest(req, res) {
   try {
     const body = req.body || {};
 
-    // ✅ Contract: JSON payload w/ base64 for image/audio
+    // ✅ JSON payload with base64 for image/audio
     const {
       text = "",
       image = null, // { base64, mime } OR string base64
@@ -86,9 +86,13 @@ async function processRequest(req, res) {
     const userText = typeof text === "string" ? text.trim() : "";
     let safeTextFinal = userText;
 
-    // Minimal fallback text if user sent only image/audio without text
-    if (!safeTextFinal && audioObj) safeTextFinal = "Analyze the attached car audio recording.";
-    if (!safeTextFinal && imageObj) safeTextFinal = "Analyze the attached car photo.";
+    // Minimal fallback prompt if user sent only image/audio without text
+    if (!safeTextFinal && audioObj) {
+      safeTextFinal = "Analyze the attached car audio recording.";
+    }
+    if (!safeTextFinal && imageObj) {
+      safeTextFinal = "Analyze the attached car photo.";
+    }
     if (!safeTextFinal) {
       safeTextFinal =
         "Describe the problem briefly: symptoms, any warning lights, and when it happens.";
@@ -96,6 +100,11 @@ async function processRequest(req, res) {
 
     const imageBuffer = imageObj ? b64ToBuffer(imageObj.base64) : null;
     const audioBuffer = audioObj ? b64ToBuffer(audioObj.base64) : null;
+
+    // ✅ IMPORTANT: avoid treating tiny/empty buffers as real audio
+    const hasAudioReal = Boolean(
+      audioBuffer && Buffer.isBuffer(audioBuffer) && audioBuffer.length > 2000
+    );
 
     const result = await handleFixLensRequest({
       text: safeTextFinal,
@@ -107,7 +116,7 @@ async function processRequest(req, res) {
       imageBuffer,
       imageMime: imageObj?.mime || "image/jpeg",
 
-      hasAudio: Boolean(audioBuffer),
+      hasAudio: hasAudioReal,
       audioBuffer,
       audioMime: audioObj?.mime || "audio/mp4",
 
@@ -119,14 +128,12 @@ async function processRequest(req, res) {
         ok: false,
         error: result?.error || "SERVER_ERROR",
         reply: "",
-        meta: result?.meta || {},
       });
     }
 
     return res.json({
       ok: true,
       reply: safeStr(result.reply),
-      language: normalizeLocale(locale), // ✅ always echo locale as language
       meta: result.meta || {},
     });
   } catch (err) {
