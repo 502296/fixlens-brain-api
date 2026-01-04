@@ -60,10 +60,6 @@ Audio rule (CRITICAL):
 - Always give best-effort interpretation based on common sound patterns.
 - If audio quality is limited, say so gently and still provide guidance.
 
-Image rule:
-- If an image is provided, analyze it and still follow the same format and rules.
-- Never switch languages due to image.
-
 Search capability (IMPORTANT):
 - If a web search tool is available, you MAY use it when the user asks for:
   nearby places (junk yards, repair shops, parts stores), prices, part numbers, recalls, service bulletins, specifications, or “where can I buy/find”.
@@ -98,18 +94,21 @@ export function buildDoctorUserMessage({
   parts.push(`User message:`);
   parts.push(msg || "No clear user text was provided.");
 
-  // Conversation history (keep short; server should send last 10-20 messages)
+  // Conversation history (client-side memory, not stored on server)
   if (Array.isArray(history) && history.length) {
-    const trimmed = history.slice(-16).map((m) => {
-      const role = safeText(m?.role);
-      const content = safeText(m?.content);
-      if (!role || !content) return null;
-      return `${role.toUpperCase()}: ${content}`;
-    }).filter(Boolean);
+    const trimmed = history
+      .slice(-16)
+      .map((m) => {
+        const role = safeText(m?.role);
+        const content = safeText(m?.content);
+        if (!role || !content) return null;
+        return `${role.toUpperCase()}: ${content}`;
+      })
+      .filter(Boolean);
 
     if (trimmed.length) {
       parts.push("");
-      parts.push("Conversation context (most recent first is not required):");
+      parts.push("Conversation context:");
       parts.push(trimmed.join("\n"));
     }
   }
@@ -138,7 +137,7 @@ export function buildDoctorUserMessage({
 
   parts.push("");
   parts.push(
-`Write ONE continuous report in the user's language (locale="${lang}") with no headings and no lists.
+    `Write ONE continuous report in the user's language (locale="${lang}") with no headings and no lists.
 Never claim you cannot analyze audio if audio is provided.
 If the user asks for nearby places, prices, part numbers, recalls, or where-to-find/buy, use web search if available and provide 2–3 best results as short separate paragraphs (not bullets).
 Give at most three likely causes when diagnosing.
