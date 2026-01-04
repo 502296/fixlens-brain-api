@@ -8,7 +8,6 @@ const app = express();
 app.use(cors());
 app.use(express.json({ limit: "25mb" }));
 
-// ---------- Helpers ----------
 function safeStr(x) {
   return typeof x === "string" ? x : "";
 }
@@ -17,15 +16,6 @@ function normalizeLocale(locale = "en") {
   const l = String(locale || "en").trim();
   if (!l) return "en";
   return l.split("-")[0].toLowerCase();
-}
-
-function isArabicText(s) {
-  return /[\u0600-\u06FF]/.test(safeStr(s));
-}
-
-function shouldArabic(locale, userText) {
-  const l = normalizeLocale(locale);
-  return l === "ar" || isArabicText(userText);
 }
 
 function stripDataUrl(b64) {
@@ -48,7 +38,6 @@ function nowISO() {
   return new Date().toISOString();
 }
 
-// ---------- Routes ----------
 app.get("/", (req, res) => {
   res.json({
     ok: true,
@@ -67,10 +56,10 @@ app.post("/api/diagnose", (req, res) => processRequest(req, res));
 app.post("/api/dial", (req, res) => processRequest(req, res));
 app.post("/v1/doctor", (req, res) => processRequest(req, res));
 
-// ---------- Main handler ----------
 async function processRequest(req, res) {
   try {
     const body = req.body || {};
+
     const {
       text,
       image, // base64 string OR { base64, mime }
@@ -81,7 +70,6 @@ async function processRequest(req, res) {
       audioTranscript = "",
     } = body;
 
-    // 1) Build image object FIRST
     const imageObj =
       typeof image === "string"
         ? { base64: image, mime: "image/jpeg" }
@@ -89,42 +77,34 @@ async function processRequest(req, res) {
         ? { base64: image.base64, mime: image.mime || "image/jpeg" }
         : null;
 
-    // 2) Build audio object FIRST
     const audioObj =
       audio && typeof audio.base64 === "string"
         ? { base64: audio.base64, mime: audio.mime || "audio/m4a" }
         : null;
 
-    // 3) Safe text (fallback) must match user's language
-    const hasText = typeof text === "string" && text.trim().length > 0;
-    const userText = hasText ? text.trim() : "";
-    const useArabic = shouldArabic(locale, userText);
+    const userText = safeStr(text).trim();
 
+    // English-only fallback; the model will reply in the user's language via prompt rules.
     let safeTextFinal = userText;
 
     if (!safeTextFinal && audioObj) {
-      safeTextFinal = useArabic
-        ? "حلّل تسجيل صوت السيارة المرفق. أعطني بحد أقصى 3 أسباب محتملة، وقل هل القيادة آمنة الآن، واسأل سؤالاً واحداً فقط إذا احتجت."
-        : "Analyze the attached car audio recording. Return max 3 likely causes, say whether it's safe to keep driving, and ask at most ONE follow-up question if needed.";
+      safeTextFinal =
+        "Analyze the attached car audio recording. Return max 3 likely causes, say whether it's safe to keep driving now, and ask at most ONE follow-up question if needed.";
     }
 
     if (!safeTextFinal && imageObj) {
-      safeTextFinal = useArabic
-        ? "حلّل صورة السيارة المرفقة. أعطني بحد أقصى 3 أسباب محتملة، وقل هل القيادة آمنة الآن، واسأل سؤالاً واحداً فقط إذا احتجت."
-        : "Analyze the attached car photo. Return max 3 likely causes, say whether it's safe to keep driving, and ask at most ONE follow-up question if needed.";
+      safeTextFinal =
+        "Analyze the attached car photo. Return max 3 likely causes, say whether it's safe to keep driving now, and ask at most ONE follow-up question if needed.";
     }
 
     if (!safeTextFinal) {
-      safeTextFinal = useArabic
-        ? "صف المشكلة باختصار: الأعراض، أي لمبة تحذير، ومتى تظهر المشكلة (عند التسارع، الفرملة، أو الوقوف)."
-        : "Describe the car problem briefly: symptoms, any warning lights, and when it happens (acceleration, braking, or idling).";
+      safeTextFinal =
+        "Describe the car problem briefly: symptoms, any warning lights, and when it happens (acceleration, braking, or idling).";
     }
 
-    // 4) Convert base64 to buffers
     const imageBuffer = imageObj ? b64ToBuffer(imageObj.base64) : null;
     const audioBuffer = audioObj ? b64ToBuffer(audioObj.base64) : null;
 
-    // 5) Call Pro brain (search remains in service.js)
     const result = await handleFixLensRequest({
       text: safeTextFinal,
       locale: normalizeLocale(locale),
@@ -153,6 +133,7 @@ async function processRequest(req, res) {
     return res.json({
       ok: true,
       reply: safeStr(result.reply),
+      transcript: safeStr(result.transcript || ""),
       meta: result.meta || {},
     });
   } catch (err) {
@@ -165,7 +146,6 @@ async function processRequest(req, res) {
   }
 }
 
-// ---------- Start ----------
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`FixLens Brain API running on port ${PORT}`);
