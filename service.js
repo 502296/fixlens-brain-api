@@ -13,7 +13,7 @@ const openai = new OpenAI({ apiKey: OPENAI_KEY });
 
 // ✅ Recommended defaults
 const MODEL_TEXT = process.env.MODEL_TEXT || "gpt-4o-mini";
-const MODEL_VISION = process.env.MODEL_VISION || "gpt-4o"; // better on images
+const MODEL_VISION = process.env.MODEL_VISION || "gpt-4o";
 
 const MAX_KNOWLEDGE_SNIPS = Number(process.env.MAX_KNOWLEDGE_SNIPS || 7);
 const MAX_SEARCH_RESULTS = Number(process.env.MAX_SEARCH_RESULTS || 5);
@@ -39,57 +39,27 @@ function hasSerperKey() {
 }
 
 // ------------------------
-// Search intent detection
+// Search intent detection (English-only)
 // ------------------------
-// English-only keyword set (no non-English strings in code).
 function isSearchIntent(text = "") {
   const t = String(text || "").toLowerCase().trim();
   if (!t) return false;
 
-  const place =
-    t.includes("near me") ||
-    t.includes("nearby") ||
-    t.includes("closest") ||
-    t.includes("where is") ||
-    t.includes("location") ||
-    t.includes("address") ||
-    t.includes("directions") ||
-    t.includes("google maps") ||
-    t.includes("maps") ||
-    t.includes("yelp") ||
-    t.includes("shop near") ||
-    t.includes("repair shop") ||
-    t.includes("mechanic") ||
-    t.includes("dealer") ||
-    t.includes("service center") ||
-    t.includes("junk yard") ||
-    t.includes("junkyard") ||
-    t.includes("salvage yard") ||
-    t.includes("auto salvage") ||
-    t.includes("pick-n-pull") ||
-    t.includes("pull a part") ||
-    t.includes("scrap yard") ||
-    t.includes("parts yard");
+  // Broader triggers that also work when user writes Arabic but includes brand names
+  const tokens = [
+    "near me", "nearby", "closest", "where is", "location", "address", "directions",
+    "google maps", "maps", "yelp", "shop", "store", "order online",
+    "price", "cost", "how much", "part number", "oem", "aftermarket", "recall", "tsb",
+    "walmart", "autozone", "o'reilly", "oreilly", "advance auto", "napa",
+    "dealership", "service center", "mechanic", "repair shop"
+  ];
 
-  const commerce =
-    t.includes("price") ||
-    t.includes("cost") ||
-    t.includes("how much") ||
-    t.includes("part number") ||
-    t.includes("oem") ||
-    t.includes("aftermarket") ||
-    t.includes("recall") ||
-    t.includes("tsb") ||
-    t.includes("service bulletin") ||
-    t.includes("where can i buy") ||
-    t.includes("where to buy") ||
-    t.includes("where can i find") ||
-    t.includes("where to find") ||
-    t.includes("shop") ||
-    t.includes("store") ||
-    t.includes("order online");
+  if (tokens.some((k) => t.includes(k))) return true;
 
-  return place || commerce;
+  // Also if there are coordinates/zip-like patterns or lots of digits with a place word
+  if (/\b\d{5}\b/.test(t)) return true;
+
+  return false;
 }
 
 function formatSearchSnippets(results = []) {
@@ -109,18 +79,25 @@ function formatSearchSnippets(results = []) {
     .filter(Boolean);
 }
 
-async function maybeWebSearch(userText, { gl = "us", hl = "en", num = MAX_SEARCH_RESULTS } = {}) {
-  if (!isSearchIntent(userText)) return { ok: true, snippets: [], used: false };
-  if (!hasSerperKey()) return { ok: false, snippets: [], used: false, error: "NO_SERPER_API_KEY" };
+async function maybeWebSearch(userText, locale, { gl = "us", num = MAX_SEARCH_RESULTS } = {}) {
+  if (!isSearchIntent(userText)) return { ok: true, snippets: [], used: false, error: "" };
+
+  if (!hasSerperKey()) {
+    // ✅ No apology. Just mark as not available.
+    return { ok: true, snippets: [], used: false, error: "NO_SERPER_API_KEY" };
+  }
 
   const q = safeText(userText);
-  if (!q) return { ok: true, snippets: [], used: false };
+  if (!q) return { ok: true, snippets: [], used: false, error: "" };
+
+  // ✅ Use locale for hl when possible (keep it simple)
+  const hl = normalizeLocale(locale) || "en";
 
   const res = await webSearchSerper(q, { gl, hl, num });
-  if (!res?.ok) return { ok: false, snippets: [], used: true, error: res?.error || "SEARCH_FAILED" };
+  if (!res?.ok) return { ok: true, snippets: [], used: true, error: res?.error || "SEARCH_FAILED" };
 
   const snippets = formatSearchSnippets(res?.results || []);
-  return { ok: true, snippets, used: true };
+  return { ok: true, snippets, used: true, error: "" };
 }
 
 // ------------------------
@@ -130,7 +107,6 @@ async function transcribeAudio({ audioBuffer, audioMime = "audio/mp4" }) {
   if (!OPENAI_KEY) throw new Error("NO_OPENAI_KEY");
   if (!audioBuffer || !Buffer.isBuffer(audioBuffer) || audioBuffer.length === 0) return "";
 
-  // ✅ stable way with OpenAI SDK
   const file = await toFile(audioBuffer, "audio.m4a", { type: audioMime });
   const tx = await openai.audio.transcriptions.create({
     model: "whisper-1",
@@ -140,21 +116,42 @@ async function transcribeAudio({ audioBuffer, audioMime = "audio/mp4" }) {
 }
 
 // ------------------------
-// FIXLENS PRO "Doctor" System Rules (hard clamp)
+// Hard “Doctor Pro” system prompt
 // ------------------------
 function buildProSystemPrompt(locale) {
-  // English-only code. The model will answer in the user's language via instructions.
+  const lang = normalizeLocale(locale);
+
   return [
-    "You are FixLens Doctor Mechanic Pro — a calm, practical second-opinion mechanic.",
-    "You MUST reply in the user's language based on the conversation (do not mention language detection).",
-    "Do NOT sound like a medical or safety hotline. Be a mechanic: practical, calm, confident, not dramatic.",
-    "Never say 'I can’t' or 'I cannot' or 'I’m unable'. If something is missing, ask ONE short follow-up question.",
-    "Output must be ONE professional paragraph, no headings, no bullet points, no numbered lists.",
-    "Give at most 3 likely causes using probability language (likely/common/often).",
-    "Include one short drivability note: safe to continue briefly vs not recommended; keep it calm, no fear.",
-    "Ask at most ONE follow-up question at the end if needed.",
-    "If web search snippets are provided, use them to recommend realistic next steps (shops/parts) without dumping links.",
+    "You are FixLens Doctor Mechanic Pro — a calm, practical second-opinion mechanic for car issues.",
+    `You MUST reply in the user's language. languageHint is '${lang}'. Do not switch languages.`,
+    "Do NOT be showy. Do NOT lecture. Do NOT mention that you are following rules.",
+    "Never give a final diagnosis. Use probability words: likely, common, often.",
+    "Limit to at most 3 likely causes.",
+    "Include one calm drivability note: safe briefly vs not recommended.",
+    "Ask at most ONE short follow-up question if needed.",
+    "Format: one professional paragraph, no headings, no bullets, no numbered lists.",
+    "Do NOT say: 'I can't', 'I cannot', 'I'm unable', or refuse. If search is unavailable, give practical alternatives instead.",
+    "If internal knowledge snippets are present, use them first to reduce cost and improve accuracy.",
+    "If search snippets are present, use them to suggest realistic next steps without dumping links.",
   ].join("\n");
+}
+
+// ------------------------
+// Post-cleaning guard (anti-refusal / anti-apology)
+// ------------------------
+function softenRefusals(reply, locale) {
+  let out = safeText(reply);
+
+  // Remove common refusal patterns without changing meaning too much
+  out = out.replace(/i can[’']?t|i cannot|i'm unable to|unable to/gi, "I");
+  out = out.replace(/sorry[,!.\s]+/gi, "");
+
+  // If it becomes empty, return a minimal helpful fallback (English-only code; content will still be guided by system)
+  if (!out) {
+    return "Share the main symptom, when it happens, and any warning light; I’ll narrow it down and tell you the safest next step.";
+  }
+
+  return out;
 }
 
 // ------------------------
@@ -186,8 +183,8 @@ async function runDoctor({
   }
   const knowledgeClamped = clampArray(knowledgeSnippets || [], MAX_KNOWLEDGE_SNIPS);
 
-  // 2) Search
-  const search = await maybeWebSearch(userText, { gl: "us", hl: "en", num: MAX_SEARCH_RESULTS });
+  // 2) Search (optional)
+  const search = await maybeWebSearch(userText, lang, { gl: "us", num: MAX_SEARCH_RESULTS });
   const searchSnips = clampArray(search?.snippets || [], MAX_SEARCH_SNIPS);
 
   // 3) Transcribe audio if needed
@@ -200,8 +197,8 @@ async function runDoctor({
     }
   }
 
-  // 4) Build unified messages
-  const messagesFromPrompt = buildDoctorMessages({
+  // 4) Build unified messages (no system inside doctorPrompt now)
+  const doctorMsgs = buildDoctorMessages({
     history,
     locale: lang,
     text: userText,
@@ -212,13 +209,12 @@ async function runDoctor({
     audioTranscript: transcript,
   });
 
-  // ✅ Inject our hard system prompt first (overrides tone/format)
   const messages = [
     { role: "system", content: buildProSystemPrompt(lang) },
-    ...messagesFromPrompt,
+    ...doctorMsgs,
   ];
 
-  // 5) Call OpenAI (Vision if image exists)
+  // 5) Call OpenAI
   try {
     const modelToUse = hasImage && imageBuffer ? MODEL_VISION : MODEL_TEXT;
 
@@ -227,6 +223,7 @@ async function runDoctor({
       const b64 = imageBuffer.toString("base64");
       const mime = imageMime || "image/jpeg";
 
+      // last user message is a string content
       const lastUser = messages[messages.length - 1];
       const userTextBlock = typeof lastUser?.content === "string" ? lastUser.content : userText;
 
@@ -255,11 +252,7 @@ async function runDoctor({
     }
 
     let reply = safeText(completion?.choices?.[0]?.message?.content);
-
-    // ✅ extra guard: remove "I can't" style if it slips
-    if (/i can[’']?t|i cannot|unable to/i.test(reply)) {
-      reply = reply.replace(/i can[’']?t|i cannot|unable to/gi, "I");
-    }
+    reply = softenRefusals(reply, lang);
 
     return {
       ok: true,
@@ -267,8 +260,7 @@ async function runDoctor({
       meta: {
         locale: lang,
         used_search: Boolean(search?.used),
-        search_ok: Boolean(search?.ok),
-        search_error: search?.error || "",
+        search_error: safeText(search?.error),
         search_snips: searchSnips.length,
         knowledge_snips: knowledgeClamped.length,
         hasImage: Boolean(hasImage),
@@ -314,7 +306,7 @@ export async function handleFixLensRequest(input = {}) {
     audioTranscript,
   });
 
-  if (!out?.ok) return { ok: false, error: out?.error || "UNKNOWN_ERROR", reply: "" };
+  if (!out?.ok) return { ok: false, error: out?.error || "UNKNOWN_ERROR", reply: "", meta: out?.meta || {} };
 
   return {
     ok: true,
