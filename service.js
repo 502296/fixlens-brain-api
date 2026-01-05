@@ -1,4 +1,5 @@
-// service.js — FixLens Brain API (PRO, stable)
+
+// service.js — FixLens Brain API (FINAL, stable)
 import OpenAI from "openai";
 import { toFile } from "openai/uploads";
 
@@ -8,13 +9,13 @@ import { webSearchSerper } from "./lib/search.js";
 
 const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-// Models
+// Models (good defaults)
 const DEFAULT_TEXT_MODEL =
-  process.env.FIXLENS_TEXT_MODEL || process.env.FIXLENS_MODEL || "gpt-4o-mini";
+  process.env.FIXLENS_TEXT_MODEL || process.env.FIXLENS_MODEL || "gpt-5-mini";
 const DEFAULT_VISION_MODEL =
   process.env.FIXLENS_VISION_MODEL || process.env.FIXLENS_MODEL || "gpt-4o";
 const DEFAULT_AUDIO_MODEL =
-  process.env.FIXLENS_AUDIO_MODEL || process.env.FIXLENS_MODEL || "gpt-4o-mini";
+  process.env.FIXLENS_AUDIO_MODEL || process.env.FIXLENS_MODEL || "gpt-4o";
 
 const MAX_OUTPUT_TOKENS = Number(process.env.FIXLENS_MAX_OUTPUT_TOKENS || 700);
 const MAX_TURNS = Number(process.env.FIXLENS_MAX_TURNS || 20);
@@ -139,7 +140,6 @@ function buildHistoryParts(history = []) {
     .filter(Boolean);
 }
 
-// ✅ MAIN
 export async function handleFixLensRequest(payload = {}) {
   const locale = normalizeLocale(payload.locale || payload.language || "en");
   const text = safeStr(payload.text || payload.userText || payload.message || "").trim();
@@ -164,6 +164,11 @@ export async function handleFixLensRequest(payload = {}) {
      hasAudio ? DEFAULT_AUDIO_MODEL :
      DEFAULT_TEXT_MODEL);
 
+  const fallback =
+    locale === "ar"
+      ? "حصل خطأ بسيط أثناء التحليل. جرّب مرة ثانية بعد لحظة."
+      : "A small error happened while analyzing. Please try again in a moment.";
+
   try {
     // 1) Knowledge
     const kb = buildKnowledgeSnippets(text, { locale });
@@ -176,12 +181,11 @@ export async function handleFixLensRequest(payload = {}) {
       audioTranscript: payload.audioTranscript,
     });
 
-    // 3) Web search snippets (optional)
+    // 3) Web search (optional)
     const searchSnippets = looksLikeSearchIntent(text) ? await tryWebSearch(text, locale) : [];
 
-    // 4) Build doctor sys+user text (from doctorPrompt.js)
+    // 4) Build doctor messages (no duplicated history inside prompt)
     const msgs = buildDoctorMessages({
-      locale,
       text,
       knowledgeSnippets: Array.isArray(kb) ? kb : (kb ? [String(kb)] : []),
       searchSnippets,
@@ -189,21 +193,26 @@ export async function handleFixLensRequest(payload = {}) {
       hasAudio,
       audioTranscript,
       alreadyAskedIntake: intakeAlreadyAsked,
-      history: history.map((m) => ({ role: m.role, content: m.content })),
+      extraRules: `
+Keep replies efficient and confident.
+Do not re-ask the intake question every message.
+If the user writes a second/third message, keep going normally.
+`,
     });
 
     const systemText = safeStr(msgs?.[0]?.content).trim();
     const userText = safeStr(msgs?.[1]?.content).trim();
 
-    // ✅ Responses API input (كل part بيه type صحيح)
     const input = [];
 
     if (systemText) {
       input.push({ role: "system", content: [{ type: "input_text", text: systemText }] });
     }
 
+    // Real conversation history (multi-turn)
     input.push(...buildHistoryParts(history));
 
+    // Current user turn (text + image if any)
     const userParts = [];
     if (userText) userParts.push({ type: "input_text", text: userText });
 
@@ -217,6 +226,7 @@ export async function handleFixLensRequest(payload = {}) {
       content: userParts.length ? userParts : [{ type: "input_text", text: "" }],
     });
 
+    // 5) OpenAI Responses API
     const resp = await client.responses.create({
       model: chosenModel,
       input,
@@ -224,12 +234,14 @@ export async function handleFixLensRequest(payload = {}) {
     });
 
     const reply = pickBestOutputText(resp);
+
     if (!reply) {
       return {
         ok: false,
-        reply: locale === "ar" ? "صار خطأ بسيط بتوليد الرد. جرّب مرة ثانية." : "Small issue generating reply. Try again.",
+        reply: fallback,
         language: locale,
         error: { status: 500, message: "EMPTY_OUTPUT" },
+        meta: { model: chosenModel, usedSearch: Boolean(searchSnippets?.length) },
       };
     }
 
@@ -246,10 +258,14 @@ export async function handleFixLensRequest(payload = {}) {
     };
   } catch (err) {
     const e = openAIErrorToJSON(err);
-    const fallback =
-      locale === "ar"
-        ? "صار خطأ أثناء التحليل. جرّب مرة ثانية بعد لحظة."
-        : "Something went wrong while analyzing. Please try again in a moment.";
-    return { ok: false, reply: fallback, language: locale, error: e };
+    console.error("handleFixLensRequest error:", e);
+
+    return {
+      ok: false,
+      reply: fallback,
+      language: locale,
+      error: e,
+      meta: { model: chosenModel },
+    };
   }
 }
