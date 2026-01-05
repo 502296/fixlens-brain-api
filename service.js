@@ -1,9 +1,8 @@
-// service.js — FixLens Brain API (GPT-5 via Responses API)
-// ✅ Uses Responses API (required for GPT-5 stability)
-// ✅ Matches doctorPrompt.js buildDoctorMessages() exactly
-// ✅ Multimodal: text + image (input_image) + audio (whisper transcript)
-// ✅ Efficient web search via Serper
-// ✅ English-only code. Replies in user's language via doctorPrompt hard rule.
+// service.js — FixLens Brain API (GPT-5 via Responses API, FINAL)
+// ✅ GPT-5 compatible (no chat roles; single instruction input)
+// ✅ Matches doctorPrompt.js buildDoctorMessages()
+// ✅ Uses autoKnowledge.js + Serper search + Whisper transcription
+// ✅ English-only code. Replies in user's language via doctorPrompt rules.
 
 import OpenAI from "openai";
 import { toFile } from "openai/uploads";
@@ -14,12 +13,12 @@ import { webSearchSerper } from "./lib/search.js";
 
 const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-// ✅ GPT-5 default (Responses API)
+// Defaults
 const DEFAULT_MODEL = process.env.FIXLENS_MODEL || "gpt-5";
-
-// Output tokens for Responses API
 const MAX_OUTPUT_TOKENS = Number(process.env.FIXLENS_MAX_OUTPUT_TOKENS || 750);
-const MAX_TURNS = Number(process.env.FIXLENS_MAX_TURNS || 20);
+
+// History is currently injected as summarized text (GPT-5 safe), not role-based chat
+const MAX_TURNS = Number(process.env.FIXLENS_MAX_TURNS || 12);
 
 // Search tuning
 const SEARCH_NUM_RESULTS = Number(process.env.FIXLENS_SEARCH_NUM || 5);
@@ -69,6 +68,21 @@ function normalizeHistory(history = []) {
     .filter(Boolean);
 }
 
+function historyToText(historyMsgs) {
+  const msgs = Array.isArray(historyMsgs) ? historyMsgs : [];
+  if (!msgs.length) return "";
+  // Keep it compact for GPT-5
+  return (
+    "CONVERSATION HISTORY (most recent last):\n" +
+    msgs
+      .map((m) => {
+        const r = m.role === "assistant" ? "Assistant" : "User";
+        return `${r}: ${safeStr(m.content).trim()}`;
+      })
+      .join("\n")
+  ).trim();
+}
+
 function shouldUseSearch(text) {
   const t = safeStr(text).trim();
   if (!t) return false;
@@ -114,7 +128,7 @@ function shouldUseSearch(text) {
   const hasQuestion = /[?？]/.test(t);
   const looksLikeLookup =
     lower.startsWith("http") || lower.includes(".com") || lower.includes("www.") || lower.includes("wiki");
-  const shortQuestion = t.length <= 70 && hasQuestion;
+  const shortQuestion = t.length <= 80 && hasQuestion;
 
   return hasCurrency || looksLikeLookup || shortQuestion;
 }
@@ -194,31 +208,34 @@ function bufToDataUrl(buffer, mime = "image/jpeg") {
   return `data:${mime};base64,${buffer.toString("base64")}`;
 }
 
-function buildSystemInjection({ knowledgeSnippets, searchSnippets, audioTranscript }) {
-  let injected = "";
+function buildInjectedContext({ knowledgeSnippets, searchSnippets, audioTranscript, historyText }) {
+  const parts = [];
+
+  if (historyText) {
+    parts.push(historyText);
+  }
 
   if (Array.isArray(knowledgeSnippets) && knowledgeSnippets.length) {
-    injected +=
-      "\nAUTO_KNOWLEDGE:\n" +
-      knowledgeSnippets.map((s, i) => `${i + 1}. ${safeStr(s)}`).join("\n") +
-      "\n";
+    parts.push(
+      "AUTO_KNOWLEDGE:\n" +
+        knowledgeSnippets.map((s, i) => `${i + 1}. ${safeStr(s)}`).join("\n")
+    );
   }
 
   if (Array.isArray(searchSnippets) && searchSnippets.length) {
-    injected +=
-      "\nWEB_SEARCH_SNIPPETS:\n" +
-      searchSnippets.map((s, i) => `${i + 1}. ${safeStr(s)}`).join("\n") +
-      "\n";
+    parts.push(
+      "WEB_SEARCH_SNIPPETS:\n" +
+        searchSnippets.map((s, i) => `${i + 1}. ${safeStr(s)}`).join("\n")
+    );
   }
 
   if (safeStr(audioTranscript).trim()) {
-    injected += "\nAUDIO_INFO:\n" + safeStr(audioTranscript).trim() + "\n";
+    parts.push("AUDIO_INFO:\n" + safeStr(audioTranscript).trim());
   }
 
-  return injected.trim();
+  return parts.filter(Boolean).join("\n\n").trim();
 }
 
-// Robust extraction for Responses API
 function extractResponseText(resp) {
   const direct = safeStr(resp?.output_text).trim();
   if (direct) return direct;
@@ -227,15 +244,12 @@ function extractResponseText(resp) {
   if (!Array.isArray(out)) return "";
 
   for (const item of out) {
-    // Typical: {type:"message", content:[{type:"output_text", text:"..."}]}
     if (item?.type === "message" && Array.isArray(item?.content)) {
       for (const c of item.content) {
         const t = safeStr(c?.text).trim();
         if (t) return t;
       }
     }
-
-    // Fallback: any nested text
     if (Array.isArray(item?.content)) {
       for (const c of item.content) {
         const t = safeStr(c?.text).trim();
@@ -243,13 +257,13 @@ function extractResponseText(resp) {
       }
     }
   }
-
   return "";
 }
 
-// MAIN (Responses API)
+// ✅ MAIN
 export async function handleFixLensRequest(payload = {}) {
   const locale = normalizeLocale(payload.locale || payload.language || "en");
+  const chosenModel = safeStr(payload.model) || DEFAULT_MODEL;
 
   const text = safeStr(payload.text || payload.userText || payload.message || "").trim();
 
@@ -263,15 +277,12 @@ export async function handleFixLensRequest(payload = {}) {
 
   const intakeAlreadyAsked = Boolean(payload.intakeAlreadyAsked);
 
-  // Model routing: for GPT-5, keep one model stable
-  const chosenModel = safeStr(payload.model) || DEFAULT_MODEL;
-
   try {
-    // 1) Auto knowledge
+    // 1) autoKnowledge
     const kb = buildKnowledgeSnippets(text, { locale });
     const knowledgeSnippets = Array.isArray(kb) ? kb : kb ? [String(kb)] : [];
 
-    // 2) Audio transcript
+    // 2) audio transcript
     const audioTranscript = await transcribeAudioIfNeeded({
       hasAudio,
       audioBuffer,
@@ -279,13 +290,12 @@ export async function handleFixLensRequest(payload = {}) {
       audioTranscript: payload.audioTranscript,
     });
 
-    // 3) Web search
+    // 3) search
     const doSearch = shouldUseSearch(text);
     const needTop3 = doSearch && isNearbyShopsQuery(text);
     const searchSnippets = doSearch ? await tryWebSearch(text, locale, { forceTop3: needTop3 }) : [];
 
-    // 4) Doctor prompts (match doctorPrompt.js)
-    // Keep user small; inject heavy context into system
+    // 4) doctorPrompt (keep it authoritative)
     const doctorMsgs = buildDoctorMessages({
       locale,
       text,
@@ -300,50 +310,35 @@ export async function handleFixLensRequest(payload = {}) {
     const systemBase = safeStr(doctorMsgs?.[0]?.content).trim();
     const userMessageText = safeStr(doctorMsgs?.[1]?.content).trim();
 
-    const injected = buildSystemInjection({ knowledgeSnippets, searchSnippets, audioTranscript });
-    const systemText = injected ? `${systemBase}\n\n${injected}` : systemBase;
+    // 5) compact history injection (GPT-5 safe)
+    const historyMsgs = normalizeHistory(payload.history || []);
+    const historyText = historyToText(historyMsgs);
 
-    // 5) Build Responses input with history + multimodal user message
-    const input = [];
-
-    // system
-    input.push({
-      role: "system",
-      content: [{ type: "input_text", text: systemText }],
+    // 6) inject context (kb/search/audio/history)
+    const injected = buildInjectedContext({
+      knowledgeSnippets,
+      searchSnippets,
+      audioTranscript,
+      historyText,
     });
 
-    // history
-    const historyMsgs = normalizeHistory(payload.history || []);
-    for (const h of historyMsgs) {
-      input.push({
-        role: h.role,
-        content: [{ type: "input_text", text: h.content }],
-      });
-    }
+    const fullInstruction = injected
+      ? `${systemBase}\n\n${injected}\n\nUSER MESSAGE:\n${userMessageText || text || "Describe the issue."}`
+      : `${systemBase}\n\nUSER MESSAGE:\n${userMessageText || text || "Describe the issue."}`;
 
-    // current user (with optional image)
+    // 7) build GPT-5 compatible input (no roles)
+    const content = [{ type: "input_text", text: fullInstruction }];
+
+    // optional image
     if (hasImage && imageBuffer) {
       const dataUrl = bufToDataUrl(imageBuffer, imageMime);
-
-      const contentParts = [];
-      contentParts.push({ type: "input_text", text: userMessageText || text || "Describe the issue." });
-
-      if (dataUrl) {
-        contentParts.push({ type: "input_image", image_url: dataUrl });
-      }
-
-      input.push({ role: "user", content: contentParts });
-    } else {
-      input.push({
-        role: "user",
-        content: [{ type: "input_text", text: userMessageText || text || "Describe the issue." }],
-      });
+      if (dataUrl) content.push({ type: "input_image", image_url: dataUrl });
     }
 
-    // 6) Responses API call (GPT-5)
+    // 8) Responses API
     const resp = await client.responses.create({
       model: chosenModel,
-      input,
+      input: content,
       max_output_tokens: MAX_OUTPUT_TOKENS,
     });
 
