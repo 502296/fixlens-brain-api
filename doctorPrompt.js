@@ -1,8 +1,49 @@
 // doctorPrompt.js
-// FixLens Doctor Mechanic Pro — FINAL (session-aware intake)
-// Compatible with service.js import { buildDoctorMessages }
+// FixLens Doctor Mechanic Pro — PRODUCTION
+// ✅ Exports compatible with BOTH styles:
+// - buildDoctorMessages()  -> returns [{role, content}, {role, content}]
+// - buildDoctorSystemPrompt() -> returns STRING
+// - buildDoctorUserMessage()  -> returns STRING
 
-export function buildDoctorMessages({
+function safeStr(x) {
+  return typeof x === "string" ? x : "";
+}
+
+export function buildDoctorSystemPrompt({
+  locale = "en",
+  extraRules = "",
+} = {}) {
+  return `
+You are FixLens — a calm, professional “doctor mechanic” second-opinion assistant for car problems.
+
+Mission:
+Reduce confusion, fear, and unnecessary spending. Be practical, not showy.
+
+Language (hard rule):
+- Reply fully in the user’s language. Never mix languages.
+- Translate ALL labels/headings into the user's language (do not keep English labels).
+
+Style:
+- Short sections, numbered points.
+- Max 3 likely causes (ranked).
+- Always include a Safety line (safe to drive? yes/no + short reason).
+- Provide 3–6 next steps (include ONE discriminating check).
+- Ask at most ONE follow-up question.
+
+Session-aware intake rule:
+- Ask for year + make/model + when it happens ONLY IF missing AND alreadyAskedIntake=false.
+- If alreadyAskedIntake=true, do NOT ask intake again.
+
+Web search (shops/addresses):
+- If user asks for nearby shops/addresses: provide EXACTLY 3 options formatted:
+  Name — Address — (optional phone/website)
+- Do not refuse. Do not tell the user to search themselves.
+
+${safeStr(extraRules).trim()}
+`.trim();
+}
+
+export function buildDoctorUserMessage({
   locale = "en",
   text = "",
   knowledgeSnippets = [],
@@ -25,45 +66,27 @@ export function buildDoctorMessages({
 
   const AUDIO =
     hasAudio && audioTranscript
-      ? `\nAUDIO_INFO:\n${audioTranscript}\n`
+      ? `\nAUDIO_INFO:\n${safeStr(audioTranscript)}\n`
       : "";
 
   const MODE = hasImage ? "IMAGE" : hasAudio ? "AUDIO" : "TEXT";
 
-  const sys = `
-You are FixLens — a calm, professional “doctor mechanic” second-opinion assistant for car problems.
+  const recentHistory = Array.isArray(history)
+    ? history
+        .slice(-12)
+        .map((m) => `${m?.role || "user"}: ${m?.content || ""}`)
+        .join("\n")
+    : "";
 
-Language (hard rule):
-- Reply fully in the user’s language. Never mix languages.
-- Translate ALL labels/headings into the user's language (do not keep English labels).
-
-Style:
-- Use numbered points and short sections.
-- Practical, not showy.
-- Max 3 causes (ranked).
-- Always include a safety line in the user's language (safe to drive or avoid driving + short reason).
-- Provide 3–6 next steps (include ONE discriminating check).
-- Ask at most ONE follow-up question.
-
-Session-aware intake rule:
-- Ask for year + make/model and when it happens ONLY IF it is missing AND ONLY IF alreadyAskedIntake=false.
-- If alreadyAskedIntake=true, do NOT ask the intake question again.
-
-Web search (shops/addresses):
-- If user asks for nearby shops/addresses: provide EXACTLY 3 options formatted:
-  Name — Address — (optional phone/website)
-- Do not refuse, do not tell user to search themselves.
-`;
-
-  const user = `
+  return `
 MODE: ${MODE}
 alreadyAskedIntake: ${alreadyAskedIntake}
 
 RECENT_HISTORY (may help):
-${Array.isArray(history) ? history.slice(-12).map(m => `${m.role}: ${m.content}`).join("\n") : ""}
+${recentHistory}
 
 USER_TEXT:
-${text || ""}
+${safeStr(text)}
 
 ${AUTO}
 ${WEB}
@@ -76,15 +99,15 @@ OUTPUT FORMAT (translate the labels to user's language):
 3) Safety (safe to drive? yes/no + reason + rule)
 4) What to do next (3–6 steps)
 5) One follow-up question (optional; max one; obey session-aware intake rule)
-`;
-
-  return [
-    { role: "system", content: sys.trim() },
-    { role: "user", content: user.trim() },
-  ];
+`.trim();
 }
 
-// Optional alias
-export function buildDoctorSystemPrompt() {
-  return buildDoctorMessages();
+// ✅ Backward-compatible: returns messages array (strings)
+export function buildDoctorMessages(opts = {}) {
+  const sys = buildDoctorSystemPrompt(opts);
+  const user = buildDoctorUserMessage(opts);
+  return [
+    { role: "system", content: sys },
+    { role: "user", content: user },
+  ];
 }
