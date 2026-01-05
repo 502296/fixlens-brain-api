@@ -1,6 +1,9 @@
 // service.js — FixLens Brain API (PRO, multimodal + efficient search)
-// Matches doctorPrompt.js buildDoctorMessages() exactly (returns [system,user])
-// English-only code. Replies in user's language via doctorPrompt hard rule.
+// ✅ Matches your doctorPrompt.js exactly
+// ✅ Moves AUTO_KNOWLEDGE / WEB_SEARCH / AUDIO_INFO into SYSTEM (fixes EMPTY_OUTPUT)
+// ✅ English-only code. Replies in user's language via doctorPrompt hard rule.
+// ✅ Uses autoKnowledge.js via buildKnowledgeSnippets()
+// ✅ Uses search.js via webSearchSerper()
 
 import OpenAI from "openai";
 import { toFile } from "openai/uploads";
@@ -53,6 +56,7 @@ function normalizeHistory(history = []) {
   const arr = Array.isArray(history) ? history : [];
   const last = arr.slice(-MAX_TURNS);
 
+  // Flutter sometimes stores {role, content} or {role, text}
   return last
     .map((m) => {
       const role = m?.role === "assistant" ? "assistant" : "user";
@@ -71,9 +75,8 @@ function normalizeHistory(history = []) {
 
 /**
  * Efficient search intent:
- * - Only run search when user likely asks for: places/addresses, prices, parts, recalls/TSBs, specs,
- *   "where to buy", comparisons, or short factual questions.
- * - Language-agnostic signals included.
+ * - runs search only when useful (places/addresses, prices, parts, recalls/TSBs, specs, quick factual Qs)
+ * - includes language-agnostic signals (currency, short question, URL-like)
  */
 function shouldUseSearch(text) {
   const t = safeStr(text).trim();
@@ -127,8 +130,9 @@ function shouldUseSearch(text) {
 }
 
 /**
- * Detect "shops/addresses" requests so the prompt can output exactly 3 options.
- * We only adjust how many results we pass to the prompt (3 vs 5).
+ * Detect "nearby shops/addresses" to enforce your doctorPrompt rule:
+ * - Provide EXACTLY 3 options formatted as: Name — Address — (optional phone/website)
+ * We help the model by passing only top 3 results for these queries.
  */
 function isNearbyShopsQuery(text) {
   const lower = safeStr(text).toLowerCase();
@@ -158,10 +162,7 @@ async function tryWebSearch(query, locale, { forceTop3 = false } = {}) {
 
     const results = (r.results || []).slice(0, num);
 
-    // Compact, model-friendly snippets:
-    // Title
-    // Link
-    // Snippet
+    // Compact, model-friendly snippets
     return results
       .map((x) => {
         const title = safeStr(x.title);
@@ -238,6 +239,35 @@ async function createChatCompletionWithFallback(req) {
   }
 }
 
+/**
+ * IMPORTANT FIX:
+ * Move heavy context (knowledge/search/audio) into SYSTEM injection,
+ * keep USER message small to prevent empty outputs.
+ */
+function buildSystemInjection({ knowledgeSnippets, searchSnippets, audioTranscript }) {
+  let injected = "";
+
+  if (Array.isArray(knowledgeSnippets) && knowledgeSnippets.length) {
+    injected +=
+      "\nAUTO_KNOWLEDGE:\n" +
+      knowledgeSnippets.map((s, i) => `${i + 1}. ${safeStr(s)}`).join("\n") +
+      "\n";
+  }
+
+  if (Array.isArray(searchSnippets) && searchSnippets.length) {
+    injected +=
+      "\nWEB_SEARCH_SNIPPETS:\n" +
+      searchSnippets.map((s, i) => `${i + 1}. ${safeStr(s)}`).join("\n") +
+      "\n";
+  }
+
+  if (safeStr(audioTranscript).trim()) {
+    injected += "\nAUDIO_INFO:\n" + safeStr(audioTranscript).trim() + "\n";
+  }
+
+  return injected.trim();
+}
+
 // MAIN
 export async function handleFixLensRequest(payload = {}) {
   const locale = normalizeLocale(payload.locale || payload.language || "en");
@@ -269,7 +299,7 @@ export async function handleFixLensRequest(payload = {}) {
     const kb = buildKnowledgeSnippets(text, { locale });
     const knowledgeSnippets = Array.isArray(kb) ? kb : kb ? [String(kb)] : [];
 
-    // 2) Audio transcript (sequential, stable)
+    // 2) Audio transcript (sequential)
     const audioTranscript = await transcribeAudioIfNeeded({
       hasAudio,
       audioBuffer,
@@ -277,32 +307,42 @@ export async function handleFixLensRequest(payload = {}) {
       audioTranscript: payload.audioTranscript,
     });
 
-    // 3) Web search (efficient + rule-aware for nearby shops)
+    // 3) Web search (efficient + top3 when nearby shops query)
     const doSearch = shouldUseSearch(text);
     const needTop3 = doSearch && isNearbyShopsQuery(text);
     const searchSnippets = doSearch
       ? await tryWebSearch(text, locale, { forceTop3: needTop3 })
       : [];
 
-    // 4) Build doctor messages EXACTLY as your doctorPrompt expects
-    // buildDoctorMessages returns: [{role:"system",content}, {role:"user",content}]
+    // 4) Doctor prompts (MATCH your doctorPrompt.js exactly)
+    // We DO NOT pass knowledge/search/audio to user message anymore.
     const doctorMsgs = buildDoctorMessages({
       locale,
       text,
-      knowledgeSnippets,
-      searchSnippets,
       hasImage,
       hasAudio,
-      audioTranscript,
+      audioTranscript: "", // keep user small
+      knowledgeSnippets: [], // keep user small
+      searchSnippets: [], // keep user small
       alreadyAskedIntake: intakeAlreadyAsked,
     });
 
-    const systemText = safeStr(doctorMsgs?.[0]?.content).trim();
+    const systemBase = safeStr(doctorMsgs?.[0]?.content).trim();
     const userMessageText = safeStr(doctorMsgs?.[1]?.content).trim();
 
-    // 5) Assemble chat messages with history continuity
+    // Inject heavy context into SYSTEM
+    const injected = buildSystemInjection({
+      knowledgeSnippets,
+      searchSnippets,
+      audioTranscript,
+    });
+
+    // 5) Assemble messages with history continuity
     const messages = [];
-    if (systemText) messages.push({ role: "system", content: systemText });
+    messages.push({
+      role: "system",
+      content: injected ? `${systemBase}\n\n${injected}` : systemBase,
+    });
 
     const historyMsgs = normalizeHistory(payload.history || []);
     for (const h of historyMsgs) messages.push({ role: h.role, content: h.content });
