@@ -1,47 +1,53 @@
-// ... (البداية كما هي: الاستيراد والإعدادات)
+import OpenAI from "openai";
+import { buildDoctorSystemPrompt } from "./doctorPrompt.js";
+import { buildKnowledgeSnippets } from "./lib/autoKnowledge.js";
 
-// تأكد من وجود كلمة export هنا ليراها ملف server.js
+const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+
+// ✅ تصدير الدالة بشكل صحيح لحل خطأ SyntaxError
 export async function handleFixLensRequest(req) {
-// الكود الذي أرسلته سابقاً...
-// تأكد من استدعاء الدوال الجديدة التي تستخدم Chat Completions
-if (imageFile?.buffer?.length) {
-const reply = await analyzeWithVision({ userText, locale, imageFile });
-return { ok: true, reply, locale, meta: { usedVision: true } };
+try {
+const { text, locale, image_base64 } = req.body;
+// جلب البيانات المحلية لتقليل استخدام الـ Tokens والمصاريف
+const kb = buildKnowledgeSnippets(text);
+const userText = `${text}\n\n[Internal Data]:\n${kb}`;
+
+// التحقق مما إذا كان هناك صورة
+if (image_base64) {
+return await analyzeWithVision(userText, locale, image_base64);
 }
 
-const reply = await analyzeWithText({ userText, locale });
-return { ok: true, reply, locale, meta: { usedVision: false } };
+return await analyzeWithText(userText, locale);
+} catch (error) {
+console.error("Error in handleFixLensRequest:", error);
+throw error;
+}
 }
 
-// دالة النص (استخدم gpt-4o)
-async function analyzeWithText({ userText, locale }) {
-const system = buildDoctorSystemPrompt(locale);
-const res = await client.chat.completions.create({
-model: "gpt-4o", // هذا هو المودل الأفضل حالياً
+async function analyzeWithText(userText, locale) {
+const response = await client.chat.completions.create({
+model: "gpt-4o", // ✅ استخدام الموديل الأفضل
 messages: [
-{ role: "system", content: system },
-{ role: "user", content: userText }
-]
+{ role: "system", content: buildDoctorSystemPrompt(locale) },
+{ role: "user", content: userText },
+],
 });
-return res.choices[0].message.content;
+return { ok: true, reply: response.choices[0].message.content };
 }
 
-// دالة الصور (استخدم gpt-4o)
-async function analyzeWithVision({ userText, locale, imageFile }) {
-const system = buildDoctorSystemPrompt(locale);
-const b64 = imageFile.buffer.toString("base64");
-const res = await client.chat.completions.create({
+async function analyzeWithVision(userText, locale, base64Image) {
+const response = await client.chat.completions.create({
 model: "gpt-4o",
 messages: [
-{ role: "system", content: system },
+{ role: "system", content: buildDoctorSystemPrompt(locale) },
 {
 role: "user",
 content: [
 { type: "text", text: userText },
-{ type: "image_url", image_url: { url: `data:image/jpeg;base64,${b64}` } }
-]
-}
-]
+{ type: "image_url", image_url: { url: `data:image/jpeg;base64,${base64Image}` } },
+],
+},
+],
 });
-return res.choices[0].message.content;
+return { ok: true, reply: response.choices[0].message.content };
 }
