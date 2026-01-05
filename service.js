@@ -3,7 +3,7 @@
 // English-only codebase. Replies in the user's language.
 
 import { buildKnowledgeSnippets } from "./lib/autoKnowledge.js";
-import { buildDoctorMessages } from "./doctorPrompt.js";
+import { buildDoctorMessages } from "./doctorPrompt.js"; // <-- returns SYSTEM PROMPT string
 import { webSearchSerper } from "./lib/search.js";
 import OpenAI from "openai";
 import { toFile } from "openai/uploads";
@@ -11,9 +11,9 @@ import { toFile } from "openai/uploads";
 const OPENAI_KEY = process.env.OPENAI_API_KEY || process.env.OPENAI_KEY || "";
 const openai = new OpenAI({ apiKey: OPENAI_KEY });
 
-// ✅ Recommended defaults
+// Recommended defaults
 const MODEL_TEXT = process.env.MODEL_TEXT || "gpt-4o-mini";
-const MODEL_VISION = process.env.MODEL_VISION || "gpt-4o"; // better on images
+const MODEL_VISION = process.env.MODEL_VISION || "gpt-4o";
 
 const MAX_KNOWLEDGE_SNIPS = Number(process.env.MAX_KNOWLEDGE_SNIPS || 7);
 const MAX_SEARCH_RESULTS = Number(process.env.MAX_SEARCH_RESULTS || 5);
@@ -41,11 +41,16 @@ function hasSerperKey() {
 // ------------------------
 // Search intent detection
 // ------------------------
-// English-only keyword set (no non-English strings in code).
+function hasZipLike(text = "") {
+  const t = String(text || "");
+  return /\b\d{5}\b/.test(t); // US ZIP heuristic
+}
+
 function isSearchIntent(text = "") {
   const t = String(text || "").toLowerCase().trim();
   if (!t) return false;
 
+  // English keywords (codebase stays English-only)
   const place =
     t.includes("near me") ||
     t.includes("nearby") ||
@@ -62,14 +67,10 @@ function isSearchIntent(text = "") {
     t.includes("mechanic") ||
     t.includes("dealer") ||
     t.includes("service center") ||
-    t.includes("junk yard") ||
-    t.includes("junkyard") ||
-    t.includes("salvage yard") ||
-    t.includes("auto salvage") ||
-    t.includes("pick-n-pull") ||
-    t.includes("pull a part") ||
-    t.includes("scrap yard") ||
-    t.includes("parts yard");
+    t.includes("tire") ||
+    t.includes("alignment") ||
+    t.includes("midas") ||
+    t.includes("discount tire");
 
   const commerce =
     t.includes("price") ||
@@ -89,7 +90,8 @@ function isSearchIntent(text = "") {
     t.includes("store") ||
     t.includes("order online");
 
-  return place || commerce;
+  // If user provides ZIP, it's often a nearby intent even if they typed in another language.
+  return place || commerce || hasZipLike(text);
 }
 
 function formatSearchSnippets(results = []) {
@@ -134,7 +136,7 @@ async function maybeWebSearch(
 }
 
 // ------------------------
-// Audio transcription (ROBUST)
+// Audio transcription
 // ------------------------
 function extFromMime(mime = "") {
   const m = String(mime || "").toLowerCase();
@@ -143,16 +145,13 @@ function extFromMime(mime = "") {
   if (m.includes("aac")) return "aac";
   if (m.includes("ogg")) return "ogg";
   if (m.includes("webm")) return "webm";
-  // audio/mp4, audio/m4a, audio/x-m4a, audio/caf -> treat as m4a
   return "m4a";
 }
 
 function normalizeAudioMime(mime = "") {
   const m = String(mime || "").toLowerCase().trim();
   if (!m) return "audio/mp4";
-  // iOS sometimes gives audio/x-m4a or audio/m4a
   if (m === "audio/m4a" || m === "audio/x-m4a") return "audio/mp4";
-  // caf isn't accepted directly by Whisper; upload as mp4 container
   if (m.includes("caf")) return "audio/mp4";
   return m;
 }
@@ -178,21 +177,48 @@ async function transcribeAudio({ audioBuffer, audioMime = "audio/mp4" }) {
 }
 
 // ------------------------
-// FIXLENS PRO "Doctor" System Rules (hard clamp)
+// Build unified USER message text
 // ------------------------
-function buildProSystemPrompt(locale) {
-  // English-only code. The model will answer in the user's language via instructions.
-  return [
-    "You are FixLens Doctor Mechanic Pro — a calm, practical second-opinion mechanic.",
-    "You MUST reply in the user's language based on the conversation (do not mention language detection).",
-    "Do NOT sound like a medical or safety hotline. Be a mechanic: practical, calm, confident, not dramatic.",
-    "Never say 'I can’t' or 'I cannot' or 'I’m unable'. If something is missing, ask ONE short follow-up question.",
-    "Output must be ONE professional paragraph, no headings, no bullet points, no numbered lists.",
-    "Give at most 3 likely causes using probability language (likely/common/often).",
-    "Include one short drivability note: safe to continue briefly vs not recommended; keep it calm, no fear.",
-    "Ask at most ONE follow-up question at the end if needed.",
-    "If web search snippets are provided, use them to recommend realistic next steps (shops/parts) without dumping links.",
-  ].join("\n");
+function buildUnifiedUserText({
+  lang,
+  userText,
+  knowledgeSnippets = [],
+  searchSnippets = [],
+  hasImage = false,
+  hasAudio = false,
+  transcript = "",
+} = {}) {
+  const parts = [];
+
+  // Hard language pinning (prevents image/audio replies defaulting to English)
+  parts.push(`User language: ${lang}`);
+  parts.push(`Reply ONLY in ${lang}.`);
+
+  if (userText) {
+    parts.push(`USER_MESSAGE:\n${userText}`);
+  }
+
+  if (hasAudio) {
+    if (transcript) {
+      parts.push(`AUDIO_TRANSCRIPT:\n${transcript}`);
+    } else {
+      parts.push(`AUDIO_NOTE:\nUser attached an audio clip. No transcript available.`);
+    }
+  }
+
+  if (hasImage) {
+    parts.push(`IMAGE_NOTE:\nUser attached an image. Analyze what is visible and use it in your diagnosis.`);
+  }
+
+  if (knowledgeSnippets.length) {
+    parts.push(`AUTO_KNOWLEDGE:\n${knowledgeSnippets.join("\n\n")}`);
+  }
+
+  if (searchSnippets.length) {
+    parts.push(`WEB_SEARCH_SNIPPETS:\n${searchSnippets.join("\n\n")}`);
+  }
+
+  return parts.join("\n\n");
 }
 
 // ------------------------
@@ -225,7 +251,16 @@ async function runDoctor({
   const knowledgeClamped = clampArray(knowledgeSnippets || [], MAX_KNOWLEDGE_SNIPS);
 
   // 2) Search
-  const search = await maybeWebSearch(userText, { gl: "us", hl: "en", num: MAX_SEARCH_RESULTS });
+  let search = { ok: true, used: false, snippets: [] };
+  try {
+    search = await maybeWebSearch(userText, {
+      gl: "us",
+      hl: lang === "ar" ? "ar" : "en",
+      num: MAX_SEARCH_RESULTS,
+    });
+  } catch (e) {
+    search = { ok: false, used: false, snippets: [], error: "SEARCH_THROW" };
+  }
   const searchSnips = clampArray(search?.snippets || [], MAX_SEARCH_SNIPS);
 
   // 3) Transcribe audio if needed
@@ -238,46 +273,56 @@ async function runDoctor({
     }
   }
 
-  // 4) Build unified messages
-  const messagesFromPrompt = buildDoctorMessages({
-    history,
-    locale: lang,
-    text: userText,
+  // 4) Build messages (service-compatible with doctorPrompt.js that returns a SYSTEM PROMPT string)
+  const systemPrompt = safeText(buildDoctorMessages()); // <-- STRING
+  const unifiedUserText = buildUnifiedUserText({
+    lang,
+    userText,
     knowledgeSnippets: knowledgeClamped,
     searchSnippets: searchSnips,
     hasImage: Boolean(hasImage),
     hasAudio: Boolean(hasAudio),
-    audioTranscript: transcript,
+    transcript,
   });
 
-  // ✅ Inject our hard system prompt first (overrides tone/format)
-  const messages = [
-    { role: "system", content: buildProSystemPrompt(lang) },
-    ...messagesFromPrompt,
+  // Optional: include a short portion of history (safe & cheap)
+  const historyMsgs = Array.isArray(history)
+    ? history
+        .slice(-10)
+        .map((m) => {
+          const role = m?.role === "assistant" ? "assistant" : "user";
+          const content = safeText(m?.content || m?.text || "");
+          if (!content) return null;
+          return { role, content };
+        })
+        .filter(Boolean)
+    : [];
+
+  const baseMessages = [
+    { role: "system", content: systemPrompt },
+    ...historyMsgs,
   ];
 
-  // 5) Call OpenAI (Vision if image exists)
+  // 5) Call OpenAI
   try {
     const modelToUse = hasImage && imageBuffer ? MODEL_VISION : MODEL_TEXT;
 
     let completion;
+
     if (hasImage && imageBuffer && Buffer.isBuffer(imageBuffer) && imageBuffer.length > 0) {
       const b64 = imageBuffer.toString("base64");
       const mime = imageMime || "image/jpeg";
 
-      const lastUser = messages[messages.length - 1];
-      const userTextBlock = typeof lastUser?.content === "string" ? lastUser.content : userText;
-
       completion = await openai.chat.completions.create({
         model: modelToUse,
         temperature: 0.35,
-        max_tokens: 520,
+        max_tokens: 700,
         messages: [
-          ...messages.slice(0, -1),
+          ...baseMessages,
           {
             role: "user",
             content: [
-              { type: "text", text: userTextBlock },
+              { type: "text", text: unifiedUserText },
               { type: "image_url", image_url: { url: `data:${mime};base64,${b64}` } },
             ],
           },
@@ -287,17 +332,15 @@ async function runDoctor({
       completion = await openai.chat.completions.create({
         model: modelToUse,
         temperature: 0.35,
-        max_tokens: 520,
-        messages,
+        max_tokens: 700,
+        messages: [
+          ...baseMessages,
+          { role: "user", content: unifiedUserText },
+        ],
       });
     }
 
     let reply = safeText(completion?.choices?.[0]?.message?.content);
-
-    // ✅ extra guard: remove "I can't" style if it slips
-    if (/i can[’']?t|i cannot|unable to/i.test(reply)) {
-      reply = reply.replace(/i can[’']?t|i cannot|unable to/gi, "I");
-    }
 
     return {
       ok: true,
@@ -316,8 +359,15 @@ async function runDoctor({
       },
       transcript,
     };
-  } catch {
-    return { ok: false, error: "OPENAI_CALL_FAILED", reply: "" };
+  } catch (err) {
+    // IMPORTANT: show real error in logs (so we don't fly blind)
+    console.error("OPENAI_CALL_FAILED:");
+    console.error(err?.response?.data || err?.message || err);
+    return {
+      ok: false,
+      error: err?.response?.data || err?.message || "OPENAI_CALL_FAILED",
+      reply: "",
+    };
   }
 }
 
@@ -352,7 +402,10 @@ export async function handleFixLensRequest(input = {}) {
     audioTranscript,
   });
 
-  if (!out?.ok) return { ok: false, error: out?.error || "UNKNOWN_ERROR", reply: "" };
+  if (!out?.ok) {
+    // Return a stable shape; keep detailed error in server logs
+    return { ok: false, error: out?.error || "UNKNOWN_ERROR", reply: "" };
+  }
 
   return {
     ok: true,
