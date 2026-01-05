@@ -1,3 +1,4 @@
+// service.js — FixLens Brain API (FINAL, stable, PRO)
 import OpenAI from "openai";
 import { toFile } from "openai/uploads";
 
@@ -7,7 +8,6 @@ import { webSearchSerper } from "./lib/search.js";
 
 const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-// Defaults (safe)
 const DEFAULT_TEXT_MODEL =
   process.env.FIXLENS_TEXT_MODEL || process.env.FIXLENS_MODEL || "gpt-5-mini";
 const DEFAULT_VISION_MODEL =
@@ -15,7 +15,7 @@ const DEFAULT_VISION_MODEL =
 const DEFAULT_AUDIO_MODEL =
   process.env.FIXLENS_AUDIO_MODEL || process.env.FIXLENS_MODEL || "gpt-4o";
 
-const MAX_OUTPUT_TOKENS = Number(process.env.FIXLENS_MAX_OUTPUT_TOKENS || 650);
+const MAX_COMPLETION_TOKENS = Number(process.env.FIXLENS_MAX_OUTPUT_TOKENS || 650);
 const MAX_TURNS = Number(process.env.FIXLENS_MAX_TURNS || 20);
 
 function safeStr(x) {
@@ -26,12 +26,6 @@ function normalizeLocale(locale = "en") {
   const l = String(locale || "en").trim();
   if (!l) return "en";
   return l.split("-")[0].toLowerCase();
-}
-
-function bufToDataUrl(buffer, mime = "image/jpeg") {
-  if (!buffer || !Buffer.isBuffer(buffer) || buffer.length < 10) return null;
-  const b64 = buffer.toString("base64");
-  return `data:${mime};base64,${b64}`;
 }
 
 function openAIErrorToJSON(err) {
@@ -45,22 +39,6 @@ function openAIErrorToJSON(err) {
     safeStr(err?.headers?.["x-request-id"]) ||
     "";
   return { status, message, code, param, request_id };
-}
-
-function pickBestOutputText(resp) {
-  try {
-    const out = resp?.output || [];
-    const chunks = [];
-    for (const item of out) {
-      const parts = item?.content || [];
-      for (const p of parts) {
-        if (p?.type === "output_text" && p?.text) chunks.push(p.text);
-      }
-    }
-    return chunks.join("").trim();
-  } catch {
-    return "";
-  }
 }
 
 function looksLikeSearchIntent(text) {
@@ -127,25 +105,67 @@ async function transcribeAudioIfNeeded({ hasAudio, audioBuffer, audioMime, audio
   return safeStr(tr?.text).trim();
 }
 
-function buildHistoryParts(history = []) {
+function bufToDataUrl(buffer, mime = "image/jpeg") {
+  if (!buffer || !Buffer.isBuffer(buffer) || buffer.length < 10) return null;
+  return `data:${mime};base64,${buffer.toString("base64")}`;
+}
+
+function normalizeHistory(history = []) {
   const arr = Array.isArray(history) ? history : [];
   const last = arr.slice(-MAX_TURNS);
 
+  // Flutter sometimes stores {role, content} or {role, text}
   return last
     .map((m) => {
       const role = m?.role === "assistant" ? "assistant" : "user";
-      const text = safeStr(m?.content || m?.text || "").trim();
-      if (!text) return null;
-      return {
-        role,
-        content: [{ type: "input_text", text }],
-      };
+      const content =
+        typeof m?.content === "string"
+          ? m.content
+          : typeof m?.text === "string"
+          ? m.text
+          : "";
+      const t = safeStr(content).trim();
+      if (!t) return null;
+      return { role, content: t };
     })
     .filter(Boolean);
 }
 
+// Robust: try max_completion_tokens first, fallback to max_tokens if needed
+async function createChatCompletionWithFallback(req) {
+  try {
+    return await client.chat.completions.create(req);
+  } catch (err) {
+    const msg = safeStr(err?.message);
+    const code = safeStr(err?.code);
+
+    // If API complains about max_tokens vs max_completion_tokens, retry swap
+    const needsSwap =
+      msg.toLowerCase().includes("max_tokens") ||
+      msg.toLowerCase().includes("max_completion_tokens") ||
+      code === "unsupported_parameter";
+
+    if (!needsSwap) throw err;
+
+    const cloned = { ...req };
+
+    // Swap params
+    if ("max_tokens" in cloned) {
+      cloned.max_completion_tokens = cloned.max_tokens;
+      delete cloned.max_tokens;
+    } else if ("max_completion_tokens" in cloned) {
+      cloned.max_tokens = cloned.max_completion_tokens;
+      delete cloned.max_completion_tokens;
+    }
+
+    return await client.chat.completions.create(cloned);
+  }
+}
+
+// ✅ MAIN
 export async function handleFixLensRequest(payload = {}) {
   const locale = normalizeLocale(payload.locale || payload.language || "en");
+
   const text = safeStr(payload.text || payload.userText || payload.message || "").trim();
 
   const hasImage = Boolean(payload.hasImage);
@@ -156,7 +176,6 @@ export async function handleFixLensRequest(payload = {}) {
   const audioBuffer = payload.audioBuffer || null;
   const audioMime = safeStr(payload.audioMime) || "audio/mp4";
 
-  const history = Array.isArray(payload.history) ? payload.history : [];
   const intakeAlreadyAsked = Boolean(payload.intakeAlreadyAsked);
 
   // model routing
@@ -170,8 +189,10 @@ export async function handleFixLensRequest(payload = {}) {
      DEFAULT_TEXT_MODEL);
 
   try {
+    // 1) Knowledge
     const kb = buildKnowledgeSnippets(text, { locale });
 
+    // 2) Audio transcript
     const audioTranscript = await transcribeAudioIfNeeded({
       hasAudio,
       audioBuffer,
@@ -179,8 +200,10 @@ export async function handleFixLensRequest(payload = {}) {
       audioTranscript: payload.audioTranscript,
     });
 
+    // 3) Web search snippets (optional)
     const searchSnippets = looksLikeSearchIntent(text) ? await tryWebSearch(text, locale) : [];
 
+    // 4) Build doctor messages (system+user) — you already have doctorPrompt.js
     const msgs = buildDoctorMessages({
       locale,
       text,
@@ -190,53 +213,61 @@ export async function handleFixLensRequest(payload = {}) {
       hasAudio,
       audioTranscript,
       alreadyAskedIntake: intakeAlreadyAsked,
-      history: history.map((m) => ({ role: m.role, content: m.content })),
+      history: normalizeHistory(payload.history || []),
     });
 
     const systemText = safeStr(msgs?.[0]?.content).trim();
     const userText = safeStr(msgs?.[1]?.content).trim();
 
-    // ✅ Responses API ONLY (this avoids your "input_text" + "max_tokens" errors)
-    const input = [];
+    // 5) Chat messages
+    const messages = [];
 
-    if (systemText) {
-      input.push({
-        role: "system",
-        content: [{ type: "input_text", text: systemText }],
-      });
+    if (systemText) messages.push({ role: "system", content: systemText });
+
+    // history
+    const historyMsgs = normalizeHistory(payload.history || []);
+    for (const h of historyMsgs) {
+      messages.push({ role: h.role, content: h.content });
     }
 
-    input.push(...buildHistoryParts(history));
-
-    const userParts = [];
-    if (userText) userParts.push({ type: "input_text", text: userText });
-
+    // current user with optional image
     if (hasImage && imageBuffer) {
       const dataUrl = bufToDataUrl(imageBuffer, imageMime);
-      if (dataUrl) {
-        userParts.push({
-          type: "input_image",
-          image_url: { url: dataUrl },
-        });
-      }
+      const parts = [];
+      if (userText) parts.push({ type: "text", text: userText });
+      if (dataUrl) parts.push({ type: "image_url", image_url: { url: dataUrl } });
+
+      messages.push({
+        role: "user",
+        content: parts.length ? parts : userText || "Analyze the image.",
+      });
+    } else {
+      messages.push({ role: "user", content: userText || text || "Describe the issue." });
     }
 
-    input.push({
-      role: "user",
-      content: userParts.length ? userParts : [{ type: "input_text", text: "" }],
-    });
-
-    const resp = await client.responses.create({
+    // 6) Call OpenAI (Chat Completions) — fixes your 'input_text' error
+    const req = {
       model: chosenModel,
-      input,
-      max_output_tokens: MAX_OUTPUT_TOKENS,
-    });
+      messages,
+      // prefer max_completion_tokens; fallback swap handled in helper
+      max_completion_tokens: MAX_COMPLETION_TOKENS,
+    };
 
-    const reply =
-      pickBestOutputText(resp) ||
-      (locale === "ar"
-        ? "صار خطأ بسيط بتوليد الرد. جرّب مرة ثانية."
-        : "There was a small issue generating a reply. Please try again.");
+    const resp = await createChatCompletionWithFallback(req);
+
+    const reply = safeStr(resp?.choices?.[0]?.message?.content).trim();
+
+    if (!reply) {
+      return {
+        ok: false,
+        reply:
+          locale === "ar"
+            ? "صار خطأ بسيط بتوليد الرد. جرّب مرة ثانية."
+            : "Small issue generating a reply. Please try again.",
+        language: locale,
+        error: { status: 500, message: "EMPTY_OUTPUT" },
+      };
+    }
 
     return {
       ok: true,
@@ -251,11 +282,15 @@ export async function handleFixLensRequest(payload = {}) {
     };
   } catch (err) {
     const e = openAIErrorToJSON(err);
+
+    // Important: log real error server-side so we stop guessing
     console.error("handleFixLensRequest error:", e);
+
     const fallback =
       locale === "ar"
-        ? "صار خطأ أثناء التحليل. جرّب مرة ثانية بعد لحظة."
+        ? "حصل خطأ بسيط أثناء التحليل. جرّب مرة ثانية بعد لحظة."
         : "Something went wrong while analyzing. Please try again in a moment.";
-    return { ok: false, reply: fallback, language: locale, error: e, meta: { model: chosenModel } };
+
+    return { ok: false, reply: fallback, language: locale, error: e };
   }
 }
