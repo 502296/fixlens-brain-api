@@ -70,6 +70,10 @@ async function processRequest(req, res) {
       sessionId = "",
       audioTranscript = "",
       intakeAlreadyAsked = false, // ✅ NEW (from Flutter)
+
+      // ✅ NEW: model routing from Flutter
+      model = "", // e.g. "gpt-5-mini" or "gpt-4o"
+      capability = "", // "text" | "vision" | "audio"
     } = body;
 
     const imageObj =
@@ -109,9 +113,21 @@ async function processRequest(req, res) {
       audioBuffer && Buffer.isBuffer(audioBuffer) && audioBuffer.length > 2000
     );
 
+    // ✅ Decide model if client didn't send it
+    // (Flutter WILL send it, but this keeps server safe)
+    const chosenModel =
+      safeStr(model) ||
+      (hasAudioReal ? "gpt-4o" : "gpt-5-mini");
+
+    const chosenCapability =
+      safeStr(capability) ||
+      (hasAudioReal ? "audio" : imageBuffer ? "vision" : "text");
+
+    const normalizedLocale = normalizeLocale(locale);
+
     const result = await handleFixLensRequest({
       text: safeTextFinal,
-      locale: normalizeLocale(locale),
+      locale: normalizedLocale,
       history: Array.isArray(history) ? history : [],
       sessionId: safeStr(sessionId),
 
@@ -127,6 +143,12 @@ async function processRequest(req, res) {
 
       // ✅ pass session intake flag
       intakeAlreadyAsked: Boolean(intakeAlreadyAsked),
+
+      // ✅ NEW: pass model routing to service.js (extra fields won't break anything)
+      model: chosenModel,
+      capability: chosenCapability,
+      textModel: "gpt-5-mini",
+      audioModel: "gpt-4o",
     });
 
     if (!result?.ok) {
@@ -134,13 +156,25 @@ async function processRequest(req, res) {
         ok: false,
         error: result?.error || "SERVER_ERROR",
         reply: "",
+        language: normalizedLocale,
       });
     }
+
+    // ✅ IMPORTANT: send language so Flutter can lock session language correctly
+    const outLanguage =
+      safeStr(result?.language) ||
+      safeStr(result?.meta?.language) ||
+      normalizedLocale;
 
     return res.json({
       ok: true,
       reply: safeStr(result.reply),
-      meta: result.meta || {},
+      language: outLanguage,
+      meta: {
+        ...(result.meta || {}),
+        model: chosenModel,
+        capability: chosenCapability,
+      },
     });
   } catch (err) {
     console.error("processRequest error:", err?.message || err);
@@ -148,6 +182,7 @@ async function processRequest(req, res) {
       ok: false,
       error: "PROCESS_REQUEST_FAILED",
       reply: "",
+      language: "en",
     });
   }
 }
