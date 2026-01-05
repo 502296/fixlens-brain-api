@@ -3,7 +3,7 @@ import OpenAI from "openai";
 import { toFile } from "openai/uploads";
 
 import { buildKnowledgeSnippets } from "./lib/autoKnowledge.js";
-import { buildDoctorMessages } from "./doctorPrompt.js"; // ✅ matches your doctorPrompt export
+import { buildDoctorMessages } from "./doctorPrompt.js"; // ✅ matches your latest doctorPrompt
 import { webSearchSerper } from "./lib/search.js"; // optional (SERPER_API_KEY)
 
 const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
@@ -35,79 +35,8 @@ function bufToDataUrl(buffer, mime = "image/jpeg") {
   return `data:${mime};base64,${b64}`;
 }
 
-// ✅ ALWAYS build content parts with type
-function textPart(text) {
-  return { type: "input_text", text: safeStr(text || "") };
-}
-
-function isPartLike(x) {
-  return x && typeof x === "object" && typeof x.type === "string";
-}
-
-// ✅ Normalize ANY incoming message content into valid parts[]
-function normalizeContentToParts(content) {
-  // 1) plain string
-  if (typeof content === "string") {
-    const t = content.trim();
-    return t ? [textPart(t)] : [];
-  }
-
-  // 2) already parts array
-  if (Array.isArray(content)) {
-    const parts = [];
-    for (const p of content) {
-      // valid part
-      if (isPartLike(p)) {
-        // ensure required fields exist for common types
-        if (p.type === "input_text") {
-          const t = safeStr(p.text).trim();
-          if (t) parts.push({ type: "input_text", text: t });
-        } else if (p.type === "input_image" && p.image_url?.url) {
-          parts.push({ type: "input_image", image_url: { url: String(p.image_url.url) } });
-        }
-        continue;
-      }
-
-      // sometimes: { text: "..." } without type
-      if (p && typeof p === "object" && typeof p.text === "string") {
-        const t = p.text.trim();
-        if (t) parts.push({ type: "input_text", text: t });
-      }
-    }
-    return parts;
-  }
-
-  // 3) object with .text
-  if (content && typeof content === "object" && typeof content.text === "string") {
-    const t = content.text.trim();
-    return t ? [textPart(t)] : [];
-  }
-
-  // unknown
-  return [];
-}
-
-// ✅ Normalize history into Responses API messages (role + parts[])
-function normalizeHistoryToInput(history = []) {
-  const arr = Array.isArray(history) ? history : [];
-  const last = arr.slice(-MAX_TURNS);
-
-  const out = [];
-  for (const m of last) {
-    const role = m?.role === "assistant" ? "assistant" : "user";
-
-    // accept: content or text
-    const parts =
-      normalizeContentToParts(m?.content) ||
-      normalizeContentToParts(m?.text) ||
-      [];
-
-    if (parts && parts.length) out.push({ role, content: parts });
-  }
-  return out;
-}
-
 function pickBestOutputText(resp) {
+  // Responses API: gather all output_text
   try {
     const out = resp?.output || [];
     const chunks = [];
@@ -124,6 +53,7 @@ function pickBestOutputText(resp) {
 }
 
 function openAIErrorToJSON(err) {
+  // Never depend on err.status only
   const status =
     err?.status || err?.response?.status || err?.error?.status || 500;
 
@@ -169,23 +99,32 @@ async function tryWebSearch(query, locale) {
     const gl = "us";
     const r = await webSearchSerper(query, { gl, hl, num: 5 });
     if (!r?.ok) return [];
-    return (r.results || []).slice(0, 5).map((x) => {
+
+    const items = (r.results || []).slice(0, 5).map((x) => {
       const title = safeStr(x.title);
       const link = safeStr(x.link);
       const snippet = safeStr(x.snippet);
       return `${title}\n${link}\n${snippet}`.trim();
     });
+
+    return items;
   } catch {
     return [];
   }
 }
 
-async function transcribeAudioIfNeeded({ hasAudio, audioBuffer, audioMime, audioTranscript }) {
-  const preset = safeStr(audioTranscript).trim();
-  if (preset) return preset;
+async function transcribeAudioIfNeeded({
+  hasAudio,
+  audioBuffer,
+  audioMime,
+  audioTranscript,
+}) {
+  const pre = safeStr(audioTranscript).trim();
+  if (pre) return pre;
 
   if (!hasAudio) return "";
-  if (!audioBuffer || !Buffer.isBuffer(audioBuffer) || audioBuffer.length < 2000) return "";
+  if (!audioBuffer || !Buffer.isBuffer(audioBuffer) || audioBuffer.length < 2000)
+    return "";
 
   const mime = safeStr(audioMime) || "audio/mp4";
   const ext =
@@ -197,13 +136,33 @@ async function transcribeAudioIfNeeded({ hasAudio, audioBuffer, audioMime, audio
     "mp4";
 
   const file = await toFile(audioBuffer, `voice.${ext}`);
-  const tr = await client.audio.transcriptions.create({ model: "whisper-1", file });
+
+  const tr = await client.audio.transcriptions.create({
+    model: "whisper-1",
+    file,
+  });
+
   return safeStr(tr?.text).trim();
 }
 
-/**
- * handleFixLensRequest(payload) — called from server.js
- */
+function buildHistoryInput(history = []) {
+  // expects history items: { role:"user"/"assistant", content:"..." } or {text:"..."}
+  const arr = Array.isArray(history) ? history : [];
+  const last = arr.slice(-MAX_TURNS);
+
+  const out = [];
+  for (const m of last) {
+    const role = m?.role === "assistant" ? "assistant" : "user";
+    const text = safeStr(m?.content || m?.text || "");
+    if (!text) continue;
+    out.push({
+      role,
+      content: [{ type: "input_text", text }], // ✅ always has type
+    });
+  }
+  return out;
+}
+
 export async function handleFixLensRequest(payload = {}) {
   const locale = normalizeLocale(payload.locale || payload.language || "en");
 
@@ -242,12 +201,12 @@ export async function handleFixLensRequest(payload = {}) {
       audioTranscript: payload.audioTranscript,
     });
 
-    // 3) Web search snippets
-    const searchSnippets = looksLikeSearchIntent(text) ? await tryWebSearch(text, locale) : [];
+    // 3) Web search snippets (optional)
+    const searchSnippets = looksLikeSearchIntent(text)
+      ? await tryWebSearch(text, locale)
+      : [];
 
-    // 4) Build system+user strings (doctorPrompt owns formatting)
-    // IMPORTANT: we pass history for “context display” ONLY
-    // BUT we will also send real history to the model as structured messages
+    // 4) Build doctor prompt text (system+user) using your doctorPrompt.js
     const msgs = buildDoctorMessages({
       locale,
       text,
@@ -260,33 +219,40 @@ export async function handleFixLensRequest(payload = {}) {
       history: Array.isArray(history) ? history : [],
     });
 
-    const systemText = safeStr(msgs?.[0]?.content).trim();
-    const userText = safeStr(msgs?.[1]?.content).trim();
+    const systemText = safeStr(msgs?.[0]?.content);
+    const userText = safeStr(msgs?.[1]?.content);
 
-    // 5) Build Responses API input (✅ guaranteed parts+type)
+    // 5) Build Responses API input (✅ every part has type)
     const input = [];
 
     if (systemText) {
-      input.push({ role: "system", content: [textPart(systemText)] });
+      input.push({
+        role: "system",
+        content: [{ type: "input_text", text: systemText }],
+      });
     }
 
-    // ✅ Real multi-turn context (normalized safely)
-    const historyInput = normalizeHistoryToInput(history);
-    if (historyInput.length) input.push(...historyInput);
+    // include history as plain text (safe)
+    input.push(...buildHistoryInput(history));
 
-    // Current user msg parts (text + optional image)
+    // current user with text + optional image
     const userParts = [];
-
-    if (userText) userParts.push(textPart(userText));
-    else if (text) userParts.push(textPart(text));
-    else userParts.push(textPart(locale === "ar" ? "اشرح المشكلة باختصار." : "Describe the issue briefly."));
+    if (userText) userParts.push({ type: "input_text", text: userText });
 
     if (hasImage && imageBuffer) {
       const dataUrl = bufToDataUrl(imageBuffer, imageMime);
-      if (dataUrl) userParts.push({ type: "input_image", image_url: { url: dataUrl } });
+      if (dataUrl) {
+        userParts.push({
+          type: "input_image",
+          image_url: { url: dataUrl },
+        });
+      }
     }
 
-    input.push({ role: "user", content: userParts });
+    input.push({
+      role: "user",
+      content: userParts.length ? userParts : [{ type: "input_text", text: "" }],
+    });
 
     // 6) Call OpenAI Responses
     const resp = await client.responses.create({
@@ -299,12 +265,13 @@ export async function handleFixLensRequest(payload = {}) {
 
     if (!reply) {
       return {
-        ok: true,
-        reply: locale === "ar"
-          ? "حصلت مشكلة بسيطة بتوليد الرد. جرّب مرة ثانية."
-          : "There was a small issue generating a reply. Please try again.",
+        ok: false,
+        reply:
+          locale === "ar"
+            ? "صار خطأ بسيط بتوليد الرد. جرّب مرة ثانية."
+            : "There was a small issue generating a reply. Please try again.",
         language: locale,
-        meta: { model: chosenModel, emptyOutput: true },
+        error: { status: 500, message: "EMPTY_OUTPUT" },
       };
     }
 
@@ -321,10 +288,6 @@ export async function handleFixLensRequest(payload = {}) {
     };
   } catch (err) {
     const e = openAIErrorToJSON(err);
-
-    // ✅ server-side visibility (VERY IMPORTANT)
-    console.error("FixLens OpenAI error:", e);
-
     const fallback =
       locale === "ar"
         ? "صار خطأ أثناء التحليل. جرّب مرة ثانية بعد لحظة."
