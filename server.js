@@ -69,6 +69,7 @@ async function processRequest(req, res) {
       history = [],
       sessionId = "",
       audioTranscript = "",
+      intakeAlreadyAsked = false, // ✅ NEW (from Flutter)
     } = body;
 
     const imageObj =
@@ -86,12 +87,14 @@ async function processRequest(req, res) {
     const userText = typeof text === "string" ? text.trim() : "";
     let safeTextFinal = userText;
 
-    // Minimal fallback prompt if user sent only image/audio without text
+    // ✅ Minimal fallback prompt if user sent only image/audio without text
     if (!safeTextFinal && audioObj) {
-      safeTextFinal = "Analyze the attached car audio recording.";
+      safeTextFinal =
+        "Analyze the attached engine/vehicle noise recording from a car. This is NOT a stereo/speaker/radio issue.";
     }
     if (!safeTextFinal && imageObj) {
-      safeTextFinal = "Analyze the attached car photo.";
+      safeTextFinal =
+        "Analyze the attached car photo and describe what it suggests.";
     }
     if (!safeTextFinal) {
       safeTextFinal =
@@ -121,6 +124,9 @@ async function processRequest(req, res) {
       audioMime: audioObj?.mime || "audio/mp4",
 
       audioTranscript: safeStr(audioTranscript),
+
+      // ✅ pass session intake flag
+      intakeAlreadyAsked: Boolean(intakeAlreadyAsked),
     });
 
     if (!result?.ok) {
