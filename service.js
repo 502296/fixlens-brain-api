@@ -1,16 +1,20 @@
-// service.js
+// service.js (FixLens Brain API) — PRO, robust, no crashes
 import OpenAI from "openai";
 import { toFile } from "openai/uploads";
 
 import { buildKnowledgeSnippets } from "./lib/autoKnowledge.js";
-import { buildDoctorSystemPrompt, buildDoctorUserMessage } from "./doctorPrompt.js";
-import { webSearchSerper } from "./lib/search.js"; // إذا عندك هذا الملف + SERPER_API_KEY
+import { buildDoctorMessages } from "./doctorPrompt.js"; // ✅ use what doctorPrompt actually exports
+import { webSearchSerper } from "./lib/search.js"; // optional (SERPER_API_KEY)
 
 const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-const DEFAULT_MODEL = process.env.FIXLENS_MODEL || "gpt-4o"; // غيّرها إذا تحب
+// Defaults
+const DEFAULT_TEXT_MODEL = process.env.FIXLENS_TEXT_MODEL || process.env.FIXLENS_MODEL || "gpt-5-mini";
+const DEFAULT_VISION_MODEL = process.env.FIXLENS_VISION_MODEL || process.env.FIXLENS_MODEL || "gpt-4o";
+const DEFAULT_AUDIO_MODEL = process.env.FIXLENS_AUDIO_MODEL || process.env.FIXLENS_MODEL || "gpt-4o";
+
 const MAX_OUTPUT_TOKENS = Number(process.env.FIXLENS_MAX_OUTPUT_TOKENS || 650);
-const MAX_TURNS = Number(process.env.FIXLENS_MAX_TURNS || 20); // آخر كم رسالة نحافظ عليها
+const MAX_TURNS = Number(process.env.FIXLENS_MAX_TURNS || 20);
 
 function safeStr(x) {
   return typeof x === "string" ? x : "";
@@ -22,129 +26,20 @@ function normalizeLocale(locale = "en") {
   return l.split("-")[0].toLowerCase();
 }
 
-function stripDataUrl(b64OrDataUrl) {
-  const s = safeStr(b64OrDataUrl);
-  const idx = s.indexOf("base64,");
-  return idx !== -1 ? s.slice(idx + "base64,".length) : s;
-}
-
-function guessImageMimeFromDataUrl(dataUrl) {
-  const s = safeStr(dataUrl);
-  const m = s.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,/);
-  return m?.[1] || "image/jpeg";
-}
-
-function makeImageDataUrl(b64OrDataUrl) {
-  const s = safeStr(b64OrDataUrl);
-  if (!s) return null;
-  if (s.startsWith("data:image/")) return s;
-  // افتراض jpeg إذا ماكو data url
-  return `data:image/jpeg;base64,${stripDataUrl(s)}`;
-}
-
-async function transcribeAudioIfAny(audio) {
-  // audio يمكن يكون:
-  // { base64, mimeType } أو string base64
-  if (!audio) return "";
-
-  let base64 = "";
-  let mimeType = "audio/m4a";
-
-  if (typeof audio === "string") {
-    base64 = audio;
-  } else if (typeof audio === "object") {
-    base64 = audio.base64 || audio.data || "";
-    mimeType = audio.mimeType || audio.type || mimeType;
-  }
-
-  base64 = safeStr(base64);
-  if (!base64) return "";
-
-  const raw = Buffer.from(stripDataUrl(base64), "base64");
-
-  // اسم ملف مناسب حسب النوع
-  const ext =
-    mimeType.includes("wav") ? "wav" :
-    mimeType.includes("mp3") ? "mp3" :
-    mimeType.includes("ogg") ? "ogg" :
-    mimeType.includes("webm") ? "webm" :
-    "m4a";
-
-  const file = await toFile(raw, `voice.${ext}`);
-
-  const tr = await client.audio.transcriptions.create({
-    model: "whisper-1",
-    file,
-  });
-
-  return safeStr(tr.text).trim();
-}
-
-function looksLikeSearchIntent(text) {
-  const t = safeStr(text).toLowerCase();
-  if (!t) return false;
-  // كلمات شائعة لنية البحث
-  return (
-    t.includes("near me") ||
-    t.includes("closest") ||
-    t.includes("nearby") ||
-    t.includes("address") ||
-    t.includes("location") ||
-    t.includes("find a shop") ||
-    t.includes("mechanic shop") ||
-    t.includes("كراج") ||
-    t.includes("ورشة") ||
-    t.includes("قريب مني") ||
-    t.includes("اقرب") ||
-    t.includes("وين") ||
-    t.includes("عنوان")
-  );
-}
-
-async function tryWebSearch(query, { gl = "us", hl = "en", num = 5 } = {}) {
-  // إذا ما عندك SERPER_API_KEY، يرجع فاضي بدون ما يكسر
-  try {
-    const r = await webSearchSerper(query, { gl, hl, num });
-    if (!r?.ok) return { ok: false, results: [] };
-    // نبني سطور قصيرة بعناوين + روابط
-    const items = (r.results || []).slice(0, num).map((x) => {
-      const title = safeStr(x.title);
-      const link = safeStr(x.link);
-      const snippet = safeStr(x.snippet);
-      return { title, link, snippet };
-    });
-    return { ok: true, results: items };
-  } catch {
-    return { ok: false, results: [] };
-  }
-}
-
-function buildInputFromMessages(messages) {
-  // messages بصيغة Flutter/Chat: [{role:"user"|"assistant", content:"..."}]
-  // نطلعها بصيغة Responses API مع content parts.
-  const arr = Array.isArray(messages) ? messages : [];
-  const last = arr.slice(-MAX_TURNS);
-
-  return last.map((m) => {
-    const role = m?.role === "assistant" ? "assistant" : "user";
-    const text = safeStr(m?.content || m?.text || "");
-    return {
-      role,
-      content: text ? [{ type: "input_text", text }] : [{ type: "input_text", text: "" }],
-    };
-  });
+function bufToDataUrl(buffer, mime = "image/jpeg") {
+  if (!buffer || !Buffer.isBuffer(buffer) || buffer.length < 10) return null;
+  const b64 = buffer.toString("base64");
+  return `data:${mime};base64,${b64}`;
 }
 
 function pickBestOutputText(resp) {
-  // Responses API يرجع output array
-  // نلتقط كل output_text ونجمعه
   try {
     const out = resp?.output || [];
     const chunks = [];
     for (const item of out) {
-      const c = item?.content || [];
-      for (const part of c) {
-        if (part?.type === "output_text" && part?.text) chunks.push(part.text);
+      const parts = item?.content || [];
+      for (const p of parts) {
+        if (p?.type === "output_text" && p?.text) chunks.push(p.text);
       }
     }
     return chunks.join("").trim();
@@ -154,180 +49,223 @@ function pickBestOutputText(resp) {
 }
 
 function openAIErrorToJSON(err) {
-  // لا تعتمد على err.status لأن مرات مو موجود
-  const status =
-    err?.status ||
-    err?.response?.status ||
-    err?.error?.status ||
-    500;
-
-  const message =
-    safeStr(err?.message) ||
-    safeStr(err?.error?.message) ||
-    "Unknown error";
-
-  const code =
-    safeStr(err?.code) ||
-    safeStr(err?.error?.code) ||
-    "";
-
-  const param =
-    safeStr(err?.param) ||
-    safeStr(err?.error?.param) ||
-    "";
-
+  const status = err?.status || err?.response?.status || err?.error?.status || 500;
+  const message = safeStr(err?.message) || safeStr(err?.error?.message) || "Unknown error";
+  const code = safeStr(err?.code) || safeStr(err?.error?.code) || "";
+  const param = safeStr(err?.param) || safeStr(err?.error?.param) || "";
   const request_id =
     safeStr(err?.request_id) ||
     safeStr(err?.response?.headers?.["x-request-id"]) ||
+    safeStr(err?.headers?.["x-request-id"]) ||
     "";
-
   return { status, message, code, param, request_id };
+}
+
+function looksLikeSearchIntent(text) {
+  const t = safeStr(text).toLowerCase();
+  if (!t) return false;
+  return (
+    t.includes("near me") ||
+    t.includes("closest") ||
+    t.includes("nearby") ||
+    t.includes("address") ||
+    t.includes("location") ||
+    t.includes("shop") ||
+    t.includes("mechanic") ||
+    t.includes("كراج") ||
+    t.includes("ورشة") ||
+    t.includes("قريب مني") ||
+    t.includes("اقرب") ||
+    t.includes("وين") ||
+    t.includes("عنوان")
+  );
+}
+
+async function tryWebSearch(query, locale) {
+  if (!process.env.SERPER_API_KEY) return [];
+  try {
+    const hl = locale === "ar" ? "ar" : "en";
+    const gl = "us";
+    const r = await webSearchSerper(query, { gl, hl, num: 5 });
+    if (!r?.ok) return [];
+    const items = (r.results || []).slice(0, 5).map((x) => {
+      const title = safeStr(x.title);
+      const link = safeStr(x.link);
+      const snippet = safeStr(x.snippet);
+      return `${title}\n${link}\n${snippet}`.trim();
+    });
+    return items;
+  } catch {
+    return [];
+  }
+}
+
+async function transcribeAudioIfNeeded({ hasAudio, audioBuffer, audioMime, audioTranscript }) {
+  if (safeStr(audioTranscript).trim()) return safeStr(audioTranscript).trim();
+  if (!hasAudio) return "";
+
+  if (!audioBuffer || !Buffer.isBuffer(audioBuffer) || audioBuffer.length < 2000) return "";
+
+  const mime = safeStr(audioMime) || "audio/mp4";
+  const ext =
+    mime.includes("wav") ? "wav" :
+    mime.includes("mp3") ? "mp3" :
+    mime.includes("ogg") ? "ogg" :
+    mime.includes("webm") ? "webm" :
+    mime.includes("m4a") ? "m4a" :
+    "mp4";
+
+  const file = await toFile(audioBuffer, `voice.${ext}`);
+
+  const tr = await client.audio.transcriptions.create({
+    model: "whisper-1",
+    file,
+  });
+
+  return safeStr(tr?.text).trim();
+}
+
+function buildHistoryParts(history = []) {
+  // expects: [{role:"user"/"assistant", content:"..."}]
+  const arr = Array.isArray(history) ? history : [];
+  const last = arr.slice(-MAX_TURNS);
+  return last
+    .map((m) => {
+      const role = m?.role === "assistant" ? "assistant" : "user";
+      const text = safeStr(m?.content || m?.text || "");
+      return {
+        role,
+        content: [{ type: "input_text", text }],
+      };
+    })
+    .filter((x) => safeStr(x?.content?.[0]?.text).length > 0);
 }
 
 /**
  * handleFixLensRequest(payload)
- * payload متوقع يحتوي:
- * - locale
- * - messages (اختياري) للمحادثة متعددة
- * - text (اختياري) أو userText
- * - image (اختياري) base64 أو dataUrl
- * - images (اختياري) array
- * - audio (اختياري) base64 أو {base64,mimeType}
+ * This is called from server.js
  */
 export async function handleFixLensRequest(payload = {}) {
   const locale = normalizeLocale(payload.locale || payload.language || "en");
 
-  const userText =
-    safeStr(payload.text) ||
-    safeStr(payload.userText) ||
-    safeStr(payload.message) ||
-    "";
+  const text = safeStr(payload.text || payload.userText || payload.message || "").trim();
 
-  // صور
-  const images = [];
-  if (payload.image) images.push(payload.image);
-  if (Array.isArray(payload.images)) images.push(...payload.images);
+  const hasImage = Boolean(payload.hasImage);
+  const imageBuffer = payload.imageBuffer || null;
+  const imageMime = safeStr(payload.imageMime) || "image/jpeg";
 
-  // صوت
-  const audio = payload.audio || payload.voice || payload.voiceNote || null;
+  const hasAudio = Boolean(payload.hasAudio);
+  const audioBuffer = payload.audioBuffer || null;
+  const audioMime = safeStr(payload.audioMime) || "audio/mp4";
 
-  // History / messages
-  const incomingMessages = Array.isArray(payload.messages) ? payload.messages : null;
+  const history = Array.isArray(payload.history) ? payload.history : [];
+  const intakeAlreadyAsked = Boolean(payload.intakeAlreadyAsked);
+
+  // model routing from server (optional)
+  const capability = safeStr(payload.capability || "");
+  const chosenModel =
+    safeStr(payload.model) ||
+    (capability === "vision" ? DEFAULT_VISION_MODEL :
+     capability === "audio" ? DEFAULT_AUDIO_MODEL :
+     hasImage ? DEFAULT_VISION_MODEL :
+     hasAudio ? DEFAULT_AUDIO_MODEL :
+     DEFAULT_TEXT_MODEL);
 
   try {
-    // 1) Knowledge base
-    const kb = buildKnowledgeSnippets(userText, { locale });
+    // 1) Knowledge
+    const kb = buildKnowledgeSnippets(text, { locale });
 
-    // 2) Transcribe audio (إذا موجود)
-    let audioTranscript = "";
-    if (audio) {
-      try {
-        audioTranscript = await transcribeAudioIfAny(audio);
-      } catch {
-        audioTranscript = "";
-      }
-    }
-
-    // 3) Web search (اختياري) إذا نية بحث
-    let webBlock = "";
-    if (looksLikeSearchIntent(userText) && process.env.SERPER_API_KEY) {
-      const hl = locale === "ar" ? "ar" : "en";
-      const gl = "us";
-      const sr = await tryWebSearch(userText, { gl, hl, num: 5 });
-      if (sr.ok && sr.results.length) {
-        const lines = sr.results.map((r, i) => {
-          const t = r.title || "Result";
-          const l = r.link || "";
-          const s = r.snippet || "";
-          return `${i + 1}) ${t}\n${l}\n${s}`.trim();
-        });
-        webBlock = `\n\nWeb results (for reference):\n${lines.join("\n\n")}`;
-      }
-    }
-
-    // 4) System + user message builder
-    const systemPrompt = buildDoctorSystemPrompt({
-      locale,
-      // نضيف توجيه لتقليل الإطالة + دعم multi-turn
-      extraRules: `
-Keep replies practical and not overly long.
-If the user asks a second question, answer it (multi-turn). Do not freeze after one reply.
-Do not repeat the same intake questions every message. Ask at most ONE follow-up question only when truly needed.
-`,
+    // 2) Audio transcript (if any)
+    const audioTranscript = await transcribeAudioIfNeeded({
+      hasAudio,
+      audioBuffer,
+      audioMime,
+      audioTranscript: payload.audioTranscript,
     });
 
-    const combinedUser = buildDoctorUserMessage({
+    // 3) Web search snippets (optional)
+    const searchSnippets = looksLikeSearchIntent(text) ? await tryWebSearch(text, locale) : [];
+
+    // 4) Build doctor messages (system+user) using your doctorPrompt.js
+    const msgs = buildDoctorMessages({
       locale,
-      text: userText,
+      text,
+      knowledgeSnippets: Array.isArray(kb) ? kb : (kb ? [String(kb)] : []),
+      searchSnippets,
+      hasImage,
+      hasAudio,
       audioTranscript,
-      knowledge: kb,
-      webBlock,
+      alreadyAskedIntake: intakeAlreadyAsked,
+      history: history.map((m) => ({ role: m.role, content: m.content })),
     });
 
-    // 5) Build Responses input
+    const systemText = safeStr(msgs?.[0]?.content);
+    const userText = safeStr(msgs?.[1]?.content);
+
+    // 5) Build Responses API input (✅ every content part has `type`)
     const input = [];
 
-    // System message
-    input.push({
-      role: "system",
-      content: [{ type: "input_text", text: systemPrompt }],
-    });
+    // System
+    if (systemText) {
+      input.push({
+        role: "system",
+        content: [{ type: "input_text", text: systemText }],
+      });
+    }
 
-    // Conversation history (إن وجد)
-    if (incomingMessages && incomingMessages.length) {
-      input.push(...buildInputFromMessages(incomingMessages));
-      // ونضيف رسالة المستخدم الحالية (إذا مو ضمن messages)
-      if (combinedUser) {
-        input.push({
-          role: "user",
-          content: [{ type: "input_text", text: combinedUser }],
-        });
-      }
-    } else {
-      // No history: نضيف رسالة المستخدم الحالية مع الصور
-      const parts = [];
-      if (combinedUser) parts.push({ type: "input_text", text: combinedUser });
+    // Prior history (optional)
+    input.push(...buildHistoryParts(history));
 
-      for (const img of images) {
-        const dataUrl = makeImageDataUrl(img);
-        if (!dataUrl) continue;
-        parts.push({
+    // Current user message with text + optional image
+    const userParts = [];
+    if (userText) userParts.push({ type: "input_text", text: userText });
+
+    if (hasImage && imageBuffer) {
+      const dataUrl = bufToDataUrl(imageBuffer, imageMime);
+      if (dataUrl) {
+        userParts.push({
           type: "input_image",
           image_url: { url: dataUrl },
         });
       }
-
-      input.push({ role: "user", content: parts.length ? parts : [{ type: "input_text", text: "" }] });
     }
+
+    input.push({
+      role: "user",
+      content: userParts.length ? userParts : [{ type: "input_text", text: "" }],
+    });
 
     // 6) Call OpenAI Responses
     const resp = await client.responses.create({
-      model: DEFAULT_MODEL,
+      model: chosenModel,
       input,
       max_output_tokens: MAX_OUTPUT_TOKENS,
     });
 
-    const reply = pickBestOutputText(resp) || "Sorry — I couldn’t generate a reply this time.";
+    const reply =
+      pickBestOutputText(resp) ||
+      (locale === "ar"
+        ? "صار خطأ بسيط بتوليد الرد. جرّب مرة ثانية."
+        : "There was a small issue generating a reply. Please try again.");
 
     return {
       ok: true,
       reply,
       language: locale,
+      meta: {
+        model: chosenModel,
+        hasAudio: Boolean(audioTranscript),
+        hasImage,
+        usedSearch: Boolean(searchSnippets?.length),
+      },
     };
   } catch (err) {
     const e = openAIErrorToJSON(err);
-
-    // رد آمن للمستخدم بدل كسر التطبيق
     const fallback =
       locale === "ar"
         ? "صار خطأ أثناء التحليل. جرّب مرة ثانية بعد لحظة."
         : "Something went wrong while analyzing. Please try again in a moment.";
 
-    return {
-      ok: false,
-      reply: fallback,
-      language: locale,
-      error: e,
-    };
+    return { ok: false, reply: fallback, language: locale, error: e };
   }
 }
