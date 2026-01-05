@@ -3,69 +3,38 @@ dotenv.config();
 
 import multer from "multer";
 import OpenAI from "openai";
-import { toFile } from "openai/uploads";
 import { buildDoctorSystemPrompt } from "./doctorPrompt.js";
 import { convertToWav16kMono } from "./lib/audio.js";
+import { toFile } from "openai/uploads";
 
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: {
-    fileSize: 25 * 1024 * 1024, // 25MB
-  },
+  limits: { fileSize: 25 * 1024 * 1024 }
 });
 
-// OpenAI client
-const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
-if (!OPENAI_API_KEY) {
-  console.warn("⚠️ Missing OPENAI_API_KEY");
-}
-const client = new OpenAI({ apiKey: OPENAI_API_KEY });
+const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-function safeStr(x) {
-  return typeof x === "string" ? x : "";
-}
-
+function safeStr(x) { return typeof x === "string" ? x : ""; }
 function normalizeLocale(locale = "en") {
   const l = String(locale || "en").trim();
-  if (!l) return "en";
-  return l.split("-")[0].toLowerCase();
+  return (l.split("-")[0] || "en").toLowerCase();
 }
 
 function pickModel() {
-  // You can set ONE variable only: FIXLENS_MODEL
-  // Or use OPENAI_MODEL_TEXT (fallback)
-  return (
-    process.env.FIXLENS_MODEL ||
-    process.env.OPENAI_MODEL_TEXT ||
-    "gpt-4o"
-  );
+  // ✅ stable default
+  return process.env.FIXLENS_MODEL || "gpt-4o";
 }
-
 function pickVisionModel() {
-  return (
-    process.env.OPENAI_MODEL_VISION ||
-    process.env.FIXLENS_MODEL ||
-    process.env.OPENAI_MODEL_TEXT ||
-    "gpt-4o"
-  );
+  return process.env.FIXLENS_VISION_MODEL || process.env.FIXLENS_MODEL || "gpt-4o";
 }
-
 function pickTranscribeModel() {
-  // safest default for transcription
   return process.env.OPENAI_MODEL_TRANSCRIBE || "whisper-1";
 }
 
-/**
- * Expect request from Flutter like:
- * - JSON: { text, locale, history? }
- * - OR multipart/form-data including:
- *   - fields: text, locale
- *   - files: audio, image
- */
+// -------- Main handler --------
 export async function handleFixLensRequest(req) {
-  // Parse either JSON or multipart
-  const contentType = String(req.headers["content-type"] || "");
-  const isMultipart = contentType.includes("multipart/form-data");
+  const ct = String(req.headers["content-type"] || "");
+  const isMultipart = ct.includes("multipart/form-data");
 
   let text = "";
   let locale = "en";
@@ -76,19 +45,15 @@ export async function handleFixLensRequest(req) {
     const parsed = await new Promise((resolve, reject) => {
       upload.fields([
         { name: "image", maxCount: 1 },
-        { name: "audio", maxCount: 1 },
+        { name: "audio", maxCount: 1 }
       ])(req, null, (err) => {
         if (err) return reject(err);
-        resolve({
-          body: req.body || {},
-          files: req.files || {},
-        });
+        resolve({ body: req.body || {}, files: req.files || {} });
       });
     });
 
     text = safeStr(parsed.body?.text);
     locale = normalizeLocale(parsed.body?.locale || "en");
-
     imageFile = parsed.files?.image?.[0] || null;
     audioFile = parsed.files?.audio?.[0] || null;
   } else {
@@ -96,117 +61,106 @@ export async function handleFixLensRequest(req) {
     locale = normalizeLocale(req.body?.locale || "en");
   }
 
-  // If audio exists, transcribe first
-  let transcribed = "";
+  // 1) Audio → transcription (best effort)
+  let transcription = "";
   if (audioFile?.buffer?.length) {
-    transcribed = await transcribeAudio(audioFile);
-    // If user didn’t provide text, use transcription as text
-    if (!text.trim()) text = transcribed;
-    else {
-      text = `${text}\n\n[User audio transcription]\n${transcribed}`;
+    transcription = await transcribeAudioBestEffort(audioFile);
+    if (transcription.trim()) {
+      text = text.trim()
+        ? `${text}\n\n[Audio transcription]\n${transcription}`
+        : transcription;
     }
   }
 
-  // Build response
+  // 2) Build prompts
+  const system = buildDoctorSystemPrompt(locale);
+
+  // 3) Image path
   if (imageFile?.buffer?.length) {
-    // Vision path
-    const reply = await analyzeWithVision({
-      text,
-      locale,
-      imageFile,
-    });
-    return { ok: true, reply, locale };
+    const reply = await analyzeWithVision({ system, text, locale, imageFile });
+    return { ok: true, reply, locale, used: { image: true, audio: !!transcription } };
   }
 
-  // Text-only path
-  const reply = await analyzeWithText({ text, locale });
-  return { ok: true, reply, locale };
+  // 4) Text path
+  const reply = await analyzeWithText({ system, text, locale });
+  return { ok: true, reply, locale, used: { image: false, audio: !!transcription } };
 }
 
-async function transcribeAudio(audioFile) {
-  try {
-    // Convert anything into WAV 16k mono (solves "Invalid file format")
-    const wavBuffer = await convertToWav16kMono(audioFile.buffer);
-
-    const file = await toFile(wavBuffer, "audio.wav", {
-      type: "audio/wav",
-    });
-
-    const model = pickTranscribeModel();
-    const tr = await client.audio.transcriptions.create({
-      model,
-      file,
-    });
-
-    const text = safeStr(tr?.text);
-    return text || "";
-  } catch (err) {
-    console.error("transcribeAudio error:", err?.message || err);
-    // Don’t hard-fail the whole request
-    return "";
-  }
-}
-
-async function analyzeWithText({ text, locale }) {
-  if (!text.trim()) {
+// -------- Text-only --------
+async function analyzeWithText({ system, text, locale }) {
+  const t = text?.trim();
+  if (!t) {
     return locale === "ar"
-      ? "اكتب المشكلة باختصار (السنة + الموديل + الأعراض + متى تحدث)، وأنا أساعدك خطوة بخطوة."
-      : "Type the issue briefly (year + make/model + symptoms + when it happens) and I’ll guide you step by step.";
+      ? "اكتب المشكلة باختصار: سنة السيارة + الموديل + الأعراض + متى تظهر."
+      : "Type the issue briefly: year + make/model + symptoms + when it happens.";
   }
 
   const model = pickModel();
-  const system = buildDoctorSystemPrompt(locale);
 
-  // ✅ Correct Responses API structure (fixes your earlier 400 about input_text)
-  const r = await client.responses.create({
+  const r = await client.chat.completions.create({
     model,
-    input: [
+    temperature: 0.3,
+    messages: [
       { role: "system", content: system },
-      { role: "user", content: text },
-    ],
+      { role: "user", content: t }
+    ]
   });
 
-  const out =
-    r.output_text ||
-    safeStr(r?.output?.[0]?.content?.[0]?.text) ||
-    "";
-
-  if (!out.trim()) {
-    throw new Error("Empty model response");
-  }
+  const out = r?.choices?.[0]?.message?.content || "";
+  if (!out.trim()) throw new Error("Empty model response (text)");
   return out;
 }
 
-async function analyzeWithVision({ text, locale, imageFile }) {
+// -------- Vision --------
+async function analyzeWithVision({ system, text, locale, imageFile }) {
   const model = pickVisionModel();
-  const system = buildDoctorSystemPrompt(locale);
+
+  const userText =
+    text?.trim() ||
+    (locale === "ar"
+      ? "حلّل الصورة وشخّص المشكلة بشكل عملي."
+      : "Analyze the photo and give a practical diagnosis.");
 
   const b64 = imageFile.buffer.toString("base64");
   const mime = imageFile.mimetype || "image/jpeg";
 
-  const userText = text?.trim()
-    ? text
-    : locale === "ar"
-      ? "حلّل الصورة وشخّص المشكلة بشكل عملي."
-      : "Analyze the photo and give a practical diagnosis.";
-
-  const r = await client.responses.create({
+  const r = await client.chat.completions.create({
     model,
-    input: [
+    temperature: 0.3,
+    messages: [
       { role: "system", content: system },
       {
         role: "user",
         content: [
-          { type: "input_text", text: userText },
-          { type: "input_image", image_url: `data:${mime};base64,${b64}` },
-        ],
-      },
-    ],
+          { type: "text", text: userText },
+          { type: "image_url", image_url: { url: `data:${mime};base64,${b64}` } }
+        ]
+      }
+    ]
   });
 
-  const out = r.output_text || "";
-  if (!out.trim()) {
-    throw new Error("Empty vision response");
-  }
+  const out = r?.choices?.[0]?.message?.content || "";
+  if (!out.trim()) throw new Error("Empty model response (vision)");
   return out;
+}
+
+// -------- Audio transcription (best effort) --------
+async function transcribeAudioBestEffort(audioFile) {
+  try {
+    // Convert any input to WAV 16k mono to satisfy supported formats.
+    const wavBuffer = await convertToWav16kMono(audioFile.buffer);
+
+    const file = await toFile(wavBuffer, "audio.wav", { type: "audio/wav" });
+
+    const model = pickTranscribeModel();
+    const tr = await client.audio.transcriptions.create({
+      model,
+      file
+    });
+
+    return safeStr(tr?.text);
+  } catch (err) {
+    console.error("Audio transcription failed (continuing):", err?.message || err);
+    return ""; // don't fail whole request
+  }
 }
