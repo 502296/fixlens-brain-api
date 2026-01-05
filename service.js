@@ -1,4 +1,7 @@
-// service.js — FixLens Brain API (PRO, stable, multimodal + search, English-only code)
+// service.js — FixLens Brain API (PRO, multimodal + efficient search)
+// Matches doctorPrompt.js buildDoctorMessages() exactly (returns [system,user])
+// English-only code. Replies in user's language via doctorPrompt hard rule.
+
 import OpenAI from "openai";
 import { toFile } from "openai/uploads";
 
@@ -15,9 +18,13 @@ const DEFAULT_VISION_MODEL =
 const DEFAULT_AUDIO_MODEL =
   process.env.FIXLENS_AUDIO_MODEL || process.env.FIXLENS_MODEL || "gpt-4o";
 
-const MAX_COMPLETION_TOKENS = Number(process.env.FIXLENS_MAX_OUTPUT_TOKENS || 700);
+const MAX_COMPLETION_TOKENS = Number(process.env.FIXLENS_MAX_OUTPUT_TOKENS || 750);
 const MAX_TURNS = Number(process.env.FIXLENS_MAX_TURNS || 20);
+
+// Search tuning
 const SEARCH_NUM_RESULTS = Number(process.env.FIXLENS_SEARCH_NUM || 5);
+const SEARCH_GL = process.env.FIXLENS_SEARCH_GL || "us";
+const SEARCH_FALLBACK_HL = process.env.FIXLENS_SEARCH_HL || "en";
 
 function safeStr(x) {
   return typeof x === "string" ? x : "";
@@ -46,7 +53,6 @@ function normalizeHistory(history = []) {
   const arr = Array.isArray(history) ? history : [];
   const last = arr.slice(-MAX_TURNS);
 
-  // Flutter sometimes stores {role, content} or {role, text}
   return last
     .map((m) => {
       const role = m?.role === "assistant" ? "assistant" : "user";
@@ -64,11 +70,10 @@ function normalizeHistory(history = []) {
 }
 
 /**
- * Search intent detector:
- * - triggers for location/near-me, prices, part numbers, recalls/TSBs, specs,
- *   and "what is" factual web queries.
- * - works across languages without putting non-English strings in code by using
- *   simple heuristics (question marks, currency symbols, URL-like, etc.)
+ * Efficient search intent:
+ * - Only run search when user likely asks for: places/addresses, prices, parts, recalls/TSBs, specs,
+ *   "where to buy", comparisons, or short factual questions.
+ * - Language-agnostic signals included.
  */
 function shouldUseSearch(text) {
   const t = safeStr(text).trim();
@@ -76,8 +81,7 @@ function shouldUseSearch(text) {
 
   const lower = t.toLowerCase();
 
-  // Strong English triggers
-  const englishTriggers = [
+  const triggers = [
     "near me",
     "nearby",
     "closest",
@@ -107,47 +111,58 @@ function shouldUseSearch(text) {
     "reset procedure",
     "where to buy",
     "buy",
-    "best",
     "compare",
+    "best",
   ];
 
-  if (englishTriggers.some((k) => lower.includes(k))) return true;
+  if (triggers.some((k) => lower.includes(k))) return true;
 
-  // Language-agnostic signals
   const hasCurrency = /[$€£¥]/.test(t);
   const hasQuestion = /[?？]/.test(t);
-  const hasDigitsAndBrandLike = /\b\d{3,}\b/.test(t) && /[a-zA-Z]/.test(t); // typical part codes, model codes
   const looksLikeLookup =
-    lower.startsWith("http") ||
-    lower.includes(".com") ||
-    lower.includes("www.") ||
-    lower.includes("google") ||
-    lower.includes("wiki");
+    lower.startsWith("http") || lower.includes(".com") || lower.includes("www.") || lower.includes("wiki");
+  const shortQuestion = t.length <= 70 && hasQuestion;
 
-  // Short factual questions often benefit from search
-  const shortQuery = t.length <= 70 && hasQuestion;
-
-  return hasCurrency || hasDigitsAndBrandLike || looksLikeLookup || shortQuery;
+  return hasCurrency || looksLikeLookup || shortQuestion;
 }
 
-async function tryWebSearch(query, locale) {
+/**
+ * Detect "shops/addresses" requests so the prompt can output exactly 3 options.
+ * We only adjust how many results we pass to the prompt (3 vs 5).
+ */
+function isNearbyShopsQuery(text) {
+  const lower = safeStr(text).toLowerCase();
+  if (!lower) return false;
+  return (
+    lower.includes("near me") ||
+    lower.includes("nearby") ||
+    lower.includes("closest") ||
+    lower.includes("address") ||
+    lower.includes("location") ||
+    lower.includes("shop") ||
+    lower.includes("garage") ||
+    lower.includes("mechanic") ||
+    lower.includes("dealership")
+  );
+}
+
+async function tryWebSearch(query, locale, { forceTop3 = false } = {}) {
   if (!process.env.SERPER_API_KEY) return [];
 
   try {
-    const hl = locale === "en" ? "en" : locale; // Serper accepts many hl values
-    const gl = process.env.FIXLENS_SEARCH_GL || "us";
+    const hl = safeStr(locale) || SEARCH_FALLBACK_HL;
+    const num = forceTop3 ? 3 : Math.max(1, Math.min(10, SEARCH_NUM_RESULTS));
 
-    const r = await webSearchSerper(query, {
-      gl,
-      hl,
-      num: Math.max(1, Math.min(10, SEARCH_NUM_RESULTS)),
-    });
-
+    const r = await webSearchSerper(query, { gl: SEARCH_GL, hl, num });
     if (!r?.ok) return [];
 
-    // Keep titles + links + short snippet for doctorPrompt
-    return (r.results || [])
-      .slice(0, SEARCH_NUM_RESULTS)
+    const results = (r.results || []).slice(0, num);
+
+    // Compact, model-friendly snippets:
+    // Title
+    // Link
+    // Snippet
+    return results
       .map((x) => {
         const title = safeStr(x.title);
         const link = safeStr(x.link);
@@ -223,7 +238,7 @@ async function createChatCompletionWithFallback(req) {
   }
 }
 
-// Main entry
+// MAIN
 export async function handleFixLensRequest(payload = {}) {
   const locale = normalizeLocale(payload.locale || payload.language || "en");
 
@@ -250,7 +265,7 @@ export async function handleFixLensRequest(payload = {}) {
      DEFAULT_TEXT_MODEL);
 
   try {
-    // 1) Knowledge snippets (autoKnowledge.js)
+    // 1) Auto knowledge (autoKnowledge.js)
     const kb = buildKnowledgeSnippets(text, { locale });
     const knowledgeSnippets = Array.isArray(kb) ? kb : kb ? [String(kb)] : [];
 
@@ -262,14 +277,16 @@ export async function handleFixLensRequest(payload = {}) {
       audioTranscript: payload.audioTranscript,
     });
 
-    // 3) Web search (efficient + optional)
+    // 3) Web search (efficient + rule-aware for nearby shops)
     const doSearch = shouldUseSearch(text);
-    const searchSnippets = doSearch ? await tryWebSearch(text, locale) : [];
+    const needTop3 = doSearch && isNearbyShopsQuery(text);
+    const searchSnippets = doSearch
+      ? await tryWebSearch(text, locale, { forceTop3: needTop3 })
+      : [];
 
-    // 4) Doctor prompt builder (must enforce user-language replies)
-    // buildDoctorMessages should produce message objects or a structure your doctorPrompt defines.
-    // We pass everything needed: locale, text, knowledge, search, media flags, transcript, history.
-    const doctorPack = buildDoctorMessages({
+    // 4) Build doctor messages EXACTLY as your doctorPrompt expects
+    // buildDoctorMessages returns: [{role:"system",content}, {role:"user",content}]
+    const doctorMsgs = buildDoctorMessages({
       locale,
       text,
       knowledgeSnippets,
@@ -278,25 +295,12 @@ export async function handleFixLensRequest(payload = {}) {
       hasAudio,
       audioTranscript,
       alreadyAskedIntake: intakeAlreadyAsked,
-      history: normalizeHistory(payload.history || []),
     });
 
-    // Support either:
-    // - doctorPack is an array of {role, content}
-    // - or doctorPack provides {system, user}
-    let systemText = "";
-    let userText = "";
+    const systemText = safeStr(doctorMsgs?.[0]?.content).trim();
+    const userMessageText = safeStr(doctorMsgs?.[1]?.content).trim();
 
-    if (Array.isArray(doctorPack)) {
-      systemText = safeStr(doctorPack?.find((m) => m?.role === "system")?.content).trim();
-      // prefer explicit user message from pack, fallback to text
-      userText = safeStr(doctorPack?.find((m) => m?.role === "user")?.content).trim() || text;
-    } else {
-      systemText = safeStr(doctorPack?.system).trim();
-      userText = safeStr(doctorPack?.user).trim() || text;
-    }
-
-    // 5) Assemble chat messages (keeps continuity)
+    // 5) Assemble chat messages with history continuity
     const messages = [];
     if (systemText) messages.push({ role: "system", content: systemText });
 
@@ -306,19 +310,23 @@ export async function handleFixLensRequest(payload = {}) {
     // Current user message with optional image
     if (hasImage && imageBuffer) {
       const dataUrl = bufToDataUrl(imageBuffer, imageMime);
+
       const parts = [];
-      if (userText) parts.push({ type: "text", text: userText });
+      if (userMessageText) parts.push({ type: "text", text: userMessageText });
       if (dataUrl) parts.push({ type: "image_url", image_url: { url: dataUrl } });
 
       messages.push({
         role: "user",
-        content: parts.length ? parts : [{ type: "text", text: userText || "Analyze the image." }],
+        content: parts.length ? parts : [{ type: "text", text: userMessageText || "Analyze the image." }],
       });
     } else {
-      messages.push({ role: "user", content: userText || text || "Describe the issue." });
+      messages.push({
+        role: "user",
+        content: userMessageText || text || "Describe the issue.",
+      });
     }
 
-    // 6) Call OpenAI (Chat Completions)
+    // 6) OpenAI call
     const req = {
       model: chosenModel,
       messages,
@@ -354,7 +362,6 @@ export async function handleFixLensRequest(payload = {}) {
     const e = openAIErrorToJSON(err);
     console.error("handleFixLensRequest error:", e);
 
-    // English-only fallback (doctorPrompt should handle user-language normally)
     return {
       ok: false,
       reply: "Something went wrong while analyzing. Please try again in a moment.",
