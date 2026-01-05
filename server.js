@@ -1,3 +1,4 @@
+// server.js — FixLens Brain API (FINAL)
 import express from "express";
 import cors from "cors";
 import { handleFixLensRequest } from "./service.js";
@@ -56,76 +57,75 @@ app.post("/api/dial", (req, res) => processRequest(req, res));
 app.post("/v1/doctor", (req, res) => processRequest(req, res));
 
 async function processRequest(req, res) {
+  const body = req.body || {};
+
+  const {
+    text = "",
+    image = null, // {base64, mime} OR string base64
+    audio = null, // {base64, mime}
+    locale = "en",
+    history = [],
+    sessionId = "",
+    audioTranscript = "",
+    intakeAlreadyAsked = false,
+
+    // optional routing from Flutter:
+    model = "", // e.g. gpt-5-mini, gpt-4o
+    capability = "", // text|vision|audio
+  } = body;
+
+  const normalizedLocale = normalizeLocale(locale);
+
+  // Normalize image/audio objects
+  const imageObj =
+    typeof image === "string"
+      ? { base64: image, mime: "image/jpeg" }
+      : image && typeof image.base64 === "string"
+      ? { base64: image.base64, mime: image.mime || "image/jpeg" }
+      : null;
+
+  const audioObj =
+    audio && typeof audio.base64 === "string"
+      ? { base64: audio.base64, mime: audio.mime || "audio/mp4" }
+      : null;
+
+  // Text fallback if user sent only image/audio
+  let userText = typeof text === "string" ? text.trim() : "";
+  if (!userText && audioObj) {
+    userText =
+      "Analyze the attached vehicle noise recording. Focus on mechanical/engine/drivetrain causes.";
+  }
+  if (!userText && imageObj) {
+    userText = "Analyze the attached car photo and infer what it suggests.";
+  }
+  if (!userText) {
+    userText = "Describe the problem briefly: symptoms, any warning lights, and when it happens.";
+  }
+
+  const imageBuffer = imageObj ? b64ToBuffer(imageObj.base64) : null;
+  const audioBuffer = audioObj ? b64ToBuffer(audioObj.base64) : null;
+
+  // avoid tiny buffers being treated as real media
+  const hasImageReal = Boolean(imageBuffer && Buffer.isBuffer(imageBuffer) && imageBuffer.length > 10);
+  const hasAudioReal = Boolean(audioBuffer && Buffer.isBuffer(audioBuffer) && audioBuffer.length > 2000);
+
+  // Choose model if none passed
+  const chosenModel =
+    safeStr(model) ||
+    (hasImageReal ? "gpt-4o" : "gpt-5-mini"); // you can change defaults here safely
+
+  const chosenCapability =
+    safeStr(capability) ||
+    (hasAudioReal ? "audio" : hasImageReal ? "vision" : "text");
+
   try {
-    const body = req.body || {};
-
-    const {
-      text = "",
-      image = null,  // { base64, mime } OR string base64
-      audio = null,  // { base64, mime }
-      locale = "en",
-      history = [],
-      sessionId = "",
-      audioTranscript = "",
-      intakeAlreadyAsked = false,
-
-      // Optional model routing from Flutter
-      model = "",
-      capability = "", // "text" | "vision" | "audio"
-    } = body;
-
-    const normalizedLocale = normalizeLocale(locale);
-
-    const imageObj =
-      typeof image === "string"
-        ? { base64: image, mime: "image/jpeg" }
-        : image && typeof image.base64 === "string"
-        ? { base64: image.base64, mime: image.mime || "image/jpeg" }
-        : null;
-
-    const audioObj =
-      audio && typeof audio.base64 === "string"
-        ? { base64: audio.base64, mime: audio.mime || "audio/mp4" }
-        : null;
-
-    const imageBuffer = imageObj ? b64ToBuffer(imageObj.base64) : null;
-    const audioBuffer = audioObj ? b64ToBuffer(audioObj.base64) : null;
-
-    const hasImage = Boolean(imageBuffer && Buffer.isBuffer(imageBuffer) && imageBuffer.length > 10);
-    const hasAudioReal = Boolean(audioBuffer && Buffer.isBuffer(audioBuffer) && audioBuffer.length > 2000);
-
-    let safeTextFinal = typeof text === "string" ? text.trim() : "";
-
-    // Minimal fallback prompt if user sent only image/audio without text
-    if (!safeTextFinal && hasAudioReal) {
-      safeTextFinal =
-        "Analyze the attached vehicle noise recording. This is NOT a stereo/speaker/radio issue.";
-    } else if (!safeTextFinal && hasImage) {
-      safeTextFinal = "Analyze the attached car photo and describe what it suggests.";
-    } else if (!safeTextFinal) {
-      safeTextFinal = "Describe the problem briefly: symptoms, warning lights, and when it happens.";
-    }
-
-    // Decide model if client didn't send it (safe defaults)
-    const chosenCapability =
-      safeStr(capability) ||
-      (hasAudioReal ? "audio" : hasImage ? "vision" : "text");
-
-    const chosenModel =
-      safeStr(model) ||
-      (chosenCapability === "vision"
-        ? (process.env.FIXLENS_VISION_MODEL || process.env.FIXLENS_MODEL || "gpt-4o")
-        : chosenCapability === "audio"
-        ? (process.env.FIXLENS_AUDIO_MODEL || process.env.FIXLENS_MODEL || "gpt-4o")
-        : (process.env.FIXLENS_TEXT_MODEL || process.env.FIXLENS_MODEL || "gpt-5-mini"));
-
     const result = await handleFixLensRequest({
-      text: safeTextFinal,
+      text: userText,
       locale: normalizedLocale,
       history: Array.isArray(history) ? history : [],
       sessionId: safeStr(sessionId),
 
-      hasImage,
+      hasImage: hasImageReal,
       imageBuffer,
       imageMime: imageObj?.mime || "image/jpeg",
 
@@ -140,33 +140,30 @@ async function processRequest(req, res) {
       capability: chosenCapability,
     });
 
-    if (!result?.ok) {
-      return res.status(500).json({
-        ok: false,
-        error: result?.error || "SERVER_ERROR",
-        reply: safeStr(result?.reply),
-        language: normalizedLocale,
-        meta: result?.meta || {},
-      });
-    }
+    const outLanguage = safeStr(result?.language) || normalizedLocale;
 
+    // Always return a user-visible reply string
     return res.json({
-      ok: true,
-      reply: safeStr(result.reply),
-      language: safeStr(result.language) || normalizedLocale,
+      ok: Boolean(result?.ok),
+      reply: safeStr(result?.reply),
+      language: outLanguage,
       meta: {
-        ...(result.meta || {}),
+        ...(result?.meta || {}),
         model: chosenModel,
         capability: chosenCapability,
       },
+      error: result?.ok ? undefined : result?.error,
     });
   } catch (err) {
-    console.error("processRequest error:", err?.message || err);
+    console.error("processRequest fatal:", err?.message || err);
     return res.status(500).json({
       ok: false,
-      error: "PROCESS_REQUEST_FAILED",
-      reply: "",
-      language: "en",
+      reply:
+        normalizedLocale === "ar"
+          ? "صار خطأ بالسيرفر أثناء التحليل. جرّب بعد لحظة."
+          : "Server error while analyzing. Please try again in a moment.",
+      language: normalizedLocale,
+      error: { message: safeStr(err?.message) || "PROCESS_REQUEST_FAILED" },
     });
   }
 }
