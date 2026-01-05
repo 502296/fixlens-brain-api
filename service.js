@@ -475,4 +475,19 @@ export async function handleFixLensRequest({
         lang: outLang,
         sessionId: safeText(sessionId),
         usedSearch: Boolean(searchSnips),
-        usedKnowledge: Boolean(knowledgeSnips
+        usedKnowledge: Boolean(knowledgeSnips?.length),
+        hasImage: Boolean(hasImage),
+        hasAudio: Boolean(hasAudio),
+        audioFileId: audioFileId || null,
+        transcriptLen: transcript ? transcript.length : 0,
+      },
+    };
+  } catch (err) {
+    console.error("handleFixLensRequest error:", err?.message || err);
+    return {
+      ok: false,
+      error: "HANDLE_FIXLENS_FAILED",
+      reply: "",
+    };
+  }
+}
