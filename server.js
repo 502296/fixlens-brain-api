@@ -1,4 +1,4 @@
-// server.js — FixLens Brain API (FINAL, stable)
+// server.js
 import express from "express";
 import cors from "cors";
 import { handleFixLensRequest } from "./service.js";
@@ -48,13 +48,7 @@ app.get("/", (req, res) => {
 });
 
 app.get("/health", (req, res) => {
-  res.json({
-    ok: true,
-    service: "fixlens-brain-api",
-    time: nowISO(),
-    hasOpenAIKey: Boolean(process.env.OPENAI_API_KEY),
-    hasSerperKey: Boolean(process.env.SERPER_API_KEY),
-  });
+  res.json({ ok: true, service: "fixlens-brain-api", time: nowISO() });
 });
 
 app.post("/api/chat", (req, res) => processRequest(req, res));
@@ -63,9 +57,9 @@ app.post("/api/dial", (req, res) => processRequest(req, res));
 app.post("/v1/doctor", (req, res) => processRequest(req, res));
 
 async function processRequest(req, res) {
-  const body = req.body || {};
-
   try {
+    const body = req.body || {};
+
     const {
       text = "",
       image = null, // { base64, mime } OR string base64
@@ -76,8 +70,8 @@ async function processRequest(req, res) {
       audioTranscript = "",
       intakeAlreadyAsked = false,
 
-      // optional routing from Flutter
-      model = "",
+      // optional model routing from Flutter
+      model = "", // preferred final model
       capability = "", // "text" | "vision" | "audio"
     } = body;
 
@@ -93,17 +87,17 @@ async function processRequest(req, res) {
         ? { base64: audio.base64, mime: audio.mime || "audio/mp4" }
         : null;
 
-    let safeTextFinal = typeof text === "string" ? text.trim() : "";
+    const userText = typeof text === "string" ? text.trim() : "";
+    let safeTextFinal = userText;
 
-    // Minimal fallback if user sent only audio/image
+    // Minimal fallback prompt if user sent only image/audio without text
     if (!safeTextFinal && audioObj) {
       safeTextFinal =
         "Analyze the attached engine/vehicle noise recording from a car. This is NOT a stereo/speaker/radio issue.";
-    }
-    if (!safeTextFinal && imageObj) {
-      safeTextFinal = "Analyze the attached car photo and describe what it suggests.";
-    }
-    if (!safeTextFinal) {
+    } else if (!safeTextFinal && imageObj) {
+      safeTextFinal =
+        "Analyze the attached car photo and describe what it suggests.";
+    } else if (!safeTextFinal) {
       safeTextFinal =
         "Describe the problem briefly: symptoms, any warning lights, and when it happens.";
     }
@@ -112,15 +106,24 @@ async function processRequest(req, res) {
     const audioBuffer = audioObj ? b64ToBuffer(audioObj.base64) : null;
 
     // avoid treating tiny/empty buffers as real audio
-    const hasAudioReal = Boolean(audioBuffer && Buffer.isBuffer(audioBuffer) && audioBuffer.length > 2000);
-
-    const chosenModel =
-      safeStr(model) || (hasAudioReal ? "gpt-4o" : "gpt-5-mini");
-
-    const chosenCapability =
-      safeStr(capability) || (hasAudioReal ? "audio" : imageBuffer ? "vision" : "text");
+    const hasAudioReal = Boolean(
+      audioBuffer && Buffer.isBuffer(audioBuffer) && audioBuffer.length > 2000
+    );
 
     const normalizedLocale = normalizeLocale(locale);
+
+    // Decide defaults if client didn't send
+    const chosenCapability =
+      safeStr(capability) ||
+      (hasAudioReal ? "audio" : imageBuffer ? "vision" : "text");
+
+    const chosenModel =
+      safeStr(model) ||
+      (chosenCapability === "vision"
+        ? (process.env.FIXLENS_VISION_MODEL || process.env.FIXLENS_MODEL || "gpt-4o")
+        : chosenCapability === "audio"
+        ? (process.env.FIXLENS_AUDIO_MODEL || process.env.FIXLENS_MODEL || "gpt-4o")
+        : (process.env.FIXLENS_TEXT_MODEL || process.env.FIXLENS_MODEL || "gpt-5-mini"));
 
     const result = await handleFixLensRequest({
       text: safeTextFinal,
@@ -135,7 +138,6 @@ async function processRequest(req, res) {
       hasAudio: hasAudioReal,
       audioBuffer,
       audioMime: audioObj?.mime || "audio/mp4",
-
       audioTranscript: safeStr(audioTranscript),
 
       intakeAlreadyAsked: Boolean(intakeAlreadyAsked),
@@ -144,23 +146,19 @@ async function processRequest(req, res) {
       capability: chosenCapability,
     });
 
-    const outLanguage =
-      safeStr(result?.language) || normalizedLocale;
-
-    // ✅ CRITICAL: Always return a usable reply to Flutter (even on ok:false)
     if (!result?.ok) {
-      return res.status(200).json({
+      return res.status(500).json({
         ok: false,
-        reply: safeStr(result?.reply) || (outLanguage === "ar"
-          ? "حصل خطأ بسيط أثناء التحليل. جرّب مرة ثانية."
-          : "A small error happened while analyzing. Please try again."),
-        language: outLanguage,
-        error: result?.error || "SERVICE_ERROR",
-        meta: result?.meta || { model: chosenModel, capability: chosenCapability },
+        error: result?.error || "SERVER_ERROR",
+        reply: safeStr(result?.reply || ""),
+        language: normalizedLocale,
       });
     }
 
-    return res.status(200).json({
+    const outLanguage =
+      safeStr(result?.language) || normalizedLocale;
+
+    return res.json({
       ok: true,
       reply: safeStr(result.reply),
       language: outLanguage,
@@ -172,13 +170,11 @@ async function processRequest(req, res) {
     });
   } catch (err) {
     console.error("processRequest error:", err?.message || err);
-
-    // ✅ return 200 + friendly message (Flutter won't look broken)
-    return res.status(200).json({
+    return res.status(500).json({
       ok: false,
-      reply: "Server error. Please try again in a moment.",
-      language: "en",
       error: "PROCESS_REQUEST_FAILED",
+      reply: "",
+      language: "en",
     });
   }
 }
