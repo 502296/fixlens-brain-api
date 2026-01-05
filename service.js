@@ -1,4 +1,3 @@
-// service.js — FixLens Brain API (PRO, stable, supports text+image+audio+search)
 import OpenAI from "openai";
 import { toFile } from "openai/uploads";
 
@@ -8,7 +7,7 @@ import { webSearchSerper } from "./lib/search.js";
 
 const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-// Defaults
+// Defaults (safe)
 const DEFAULT_TEXT_MODEL =
   process.env.FIXLENS_TEXT_MODEL || process.env.FIXLENS_MODEL || "gpt-5-mini";
 const DEFAULT_VISION_MODEL =
@@ -16,7 +15,7 @@ const DEFAULT_VISION_MODEL =
 const DEFAULT_AUDIO_MODEL =
   process.env.FIXLENS_AUDIO_MODEL || process.env.FIXLENS_MODEL || "gpt-4o";
 
-const MAX_OUTPUT_TOKENS = Number(process.env.FIXLENS_MAX_OUTPUT_TOKENS || 700);
+const MAX_OUTPUT_TOKENS = Number(process.env.FIXLENS_MAX_OUTPUT_TOKENS || 650);
 const MAX_TURNS = Number(process.env.FIXLENS_MAX_TURNS || 20);
 
 function safeStr(x) {
@@ -29,12 +28,15 @@ function normalizeLocale(locale = "en") {
   return l.split("-")[0].toLowerCase();
 }
 
+function bufToDataUrl(buffer, mime = "image/jpeg") {
+  if (!buffer || !Buffer.isBuffer(buffer) || buffer.length < 10) return null;
+  const b64 = buffer.toString("base64");
+  return `data:${mime};base64,${b64}`;
+}
+
 function openAIErrorToJSON(err) {
   const status = err?.status || err?.response?.status || err?.error?.status || 500;
-  const message =
-    safeStr(err?.message) ||
-    safeStr(err?.error?.message) ||
-    "Unknown error";
+  const message = safeStr(err?.message) || safeStr(err?.error?.message) || "Unknown error";
   const code = safeStr(err?.code) || safeStr(err?.error?.code) || "";
   const param = safeStr(err?.param) || safeStr(err?.error?.param) || "";
   const request_id =
@@ -43,6 +45,22 @@ function openAIErrorToJSON(err) {
     safeStr(err?.headers?.["x-request-id"]) ||
     "";
   return { status, message, code, param, request_id };
+}
+
+function pickBestOutputText(resp) {
+  try {
+    const out = resp?.output || [];
+    const chunks = [];
+    for (const item of out) {
+      const parts = item?.content || [];
+      for (const p of parts) {
+        if (p?.type === "output_text" && p?.text) chunks.push(p.text);
+      }
+    }
+    return chunks.join("").trim();
+  } catch {
+    return "";
+  }
 }
 
 function looksLikeSearchIntent(text) {
@@ -56,6 +74,7 @@ function looksLikeSearchIntent(text) {
     t.includes("location") ||
     t.includes("shop") ||
     t.includes("mechanic") ||
+    t.includes("garage") ||
     t.includes("كراج") ||
     t.includes("ورشة") ||
     t.includes("قريب مني") ||
@@ -108,21 +127,19 @@ async function transcribeAudioIfNeeded({ hasAudio, audioBuffer, audioMime, audio
   return safeStr(tr?.text).trim();
 }
 
-function bufToDataUrl(buffer, mime = "image/jpeg") {
-  if (!buffer || !Buffer.isBuffer(buffer) || buffer.length < 10) return null;
-  return `data:${mime};base64,${buffer.toString("base64")}`;
-}
-
-function buildHistoryMessages(history = []) {
+function buildHistoryParts(history = []) {
   const arr = Array.isArray(history) ? history : [];
   const last = arr.slice(-MAX_TURNS);
 
   return last
     .map((m) => {
       const role = m?.role === "assistant" ? "assistant" : "user";
-      const content = safeStr(m?.content || m?.text || "").trim();
-      if (!content) return null;
-      return { role, content };
+      const text = safeStr(m?.content || m?.text || "").trim();
+      if (!text) return null;
+      return {
+        role,
+        content: [{ type: "input_text", text }],
+      };
     })
     .filter(Boolean);
 }
@@ -142,6 +159,7 @@ export async function handleFixLensRequest(payload = {}) {
   const history = Array.isArray(payload.history) ? payload.history : [];
   const intakeAlreadyAsked = Boolean(payload.intakeAlreadyAsked);
 
+  // model routing
   const capability = safeStr(payload.capability || "");
   const chosenModel =
     safeStr(payload.model) ||
@@ -152,10 +170,8 @@ export async function handleFixLensRequest(payload = {}) {
      DEFAULT_TEXT_MODEL);
 
   try {
-    // 1) Knowledge
     const kb = buildKnowledgeSnippets(text, { locale });
 
-    // 2) Audio transcript (if any)
     const audioTranscript = await transcribeAudioIfNeeded({
       hasAudio,
       audioBuffer,
@@ -163,10 +179,8 @@ export async function handleFixLensRequest(payload = {}) {
       audioTranscript: payload.audioTranscript,
     });
 
-    // 3) Web search snippets (optional)
     const searchSnippets = looksLikeSearchIntent(text) ? await tryWebSearch(text, locale) : [];
 
-    // 4) Build doctor sys+user from doctorPrompt.js (English prompt, multilingual output)
     const msgs = buildDoctorMessages({
       locale,
       text,
@@ -182,49 +196,47 @@ export async function handleFixLensRequest(payload = {}) {
     const systemText = safeStr(msgs?.[0]?.content).trim();
     const userText = safeStr(msgs?.[1]?.content).trim();
 
-    // 5) Build Chat Completions messages (✅ avoids your 400 input_text error)
-    const chatMessages = [];
+    // ✅ Responses API ONLY (this avoids your "input_text" + "max_tokens" errors)
+    const input = [];
 
-    if (systemText) chatMessages.push({ role: "system", content: systemText });
+    if (systemText) {
+      input.push({
+        role: "system",
+        content: [{ type: "input_text", text: systemText }],
+      });
+    }
 
-    chatMessages.push(...buildHistoryMessages(history));
+    input.push(...buildHistoryParts(history));
 
-    // user message can include text + image
+    const userParts = [];
+    if (userText) userParts.push({ type: "input_text", text: userText });
+
     if (hasImage && imageBuffer) {
       const dataUrl = bufToDataUrl(imageBuffer, imageMime);
-      chatMessages.push({
-        role: "user",
-        content: [
-          { type: "text", text: userText || text || "" },
-          ...(dataUrl ? [{ type: "image_url", image_url: { url: dataUrl } }] : []),
-        ],
-      });
-    } else {
-      chatMessages.push({
-        role: "user",
-        content: userText || text || "",
-      });
+      if (dataUrl) {
+        userParts.push({
+          type: "input_image",
+          image_url: { url: dataUrl },
+        });
+      }
     }
 
-    const completion = await client.chat.completions.create({
-      model: chosenModel,
-      messages: chatMessages,
-      max_tokens: MAX_OUTPUT_TOKENS,
-      temperature: 0.35,
+    input.push({
+      role: "user",
+      content: userParts.length ? userParts : [{ type: "input_text", text: "" }],
     });
 
-    const reply = safeStr(completion?.choices?.[0]?.message?.content).trim();
+    const resp = await client.responses.create({
+      model: chosenModel,
+      input,
+      max_output_tokens: MAX_OUTPUT_TOKENS,
+    });
 
-    if (!reply) {
-      return {
-        ok: false,
-        reply: locale === "ar"
-          ? "صار خطأ بسيط بتوليد الرد. جرّب مرة ثانية."
-          : "Small issue generating reply. Try again.",
-        language: locale,
-        error: { status: 500, message: "EMPTY_OUTPUT" },
-      };
-    }
+    const reply =
+      pickBestOutputText(resp) ||
+      (locale === "ar"
+        ? "صار خطأ بسيط بتوليد الرد. جرّب مرة ثانية."
+        : "There was a small issue generating a reply. Please try again.");
 
     return {
       ok: true,
@@ -242,8 +254,8 @@ export async function handleFixLensRequest(payload = {}) {
     console.error("handleFixLensRequest error:", e);
     const fallback =
       locale === "ar"
-        ? "حصل خطأ بسيط أثناء التحليل. جرّب مرة ثانية بعد لحظة."
+        ? "صار خطأ أثناء التحليل. جرّب مرة ثانية بعد لحظة."
         : "Something went wrong while analyzing. Please try again in a moment.";
-    return { ok: false, reply: fallback, language: locale, error: e };
+    return { ok: false, reply: fallback, language: locale, error: e, meta: { model: chosenModel } };
   }
 }
