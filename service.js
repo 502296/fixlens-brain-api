@@ -1,4 +1,4 @@
-// service.js — FixLens Brain API (FINAL, stable, PRO)
+// service.js — FixLens Brain API (PRO, stable, multimodal + search, English-only code)
 import OpenAI from "openai";
 import { toFile } from "openai/uploads";
 
@@ -15,8 +15,9 @@ const DEFAULT_VISION_MODEL =
 const DEFAULT_AUDIO_MODEL =
   process.env.FIXLENS_AUDIO_MODEL || process.env.FIXLENS_MODEL || "gpt-4o";
 
-const MAX_COMPLETION_TOKENS = Number(process.env.FIXLENS_MAX_OUTPUT_TOKENS || 650);
+const MAX_COMPLETION_TOKENS = Number(process.env.FIXLENS_MAX_OUTPUT_TOKENS || 700);
 const MAX_TURNS = Number(process.env.FIXLENS_MAX_TURNS || 20);
+const SEARCH_NUM_RESULTS = Number(process.env.FIXLENS_SEARCH_NUM || 5);
 
 function safeStr(x) {
   return typeof x === "string" ? x : "";
@@ -41,41 +42,124 @@ function openAIErrorToJSON(err) {
   return { status, message, code, param, request_id };
 }
 
-function looksLikeSearchIntent(text) {
-  const t = safeStr(text).toLowerCase();
+function normalizeHistory(history = []) {
+  const arr = Array.isArray(history) ? history : [];
+  const last = arr.slice(-MAX_TURNS);
+
+  // Flutter sometimes stores {role, content} or {role, text}
+  return last
+    .map((m) => {
+      const role = m?.role === "assistant" ? "assistant" : "user";
+      const content =
+        typeof m?.content === "string"
+          ? m.content
+          : typeof m?.text === "string"
+          ? m.text
+          : "";
+      const t = safeStr(content).trim();
+      if (!t) return null;
+      return { role, content: t };
+    })
+    .filter(Boolean);
+}
+
+/**
+ * Search intent detector:
+ * - triggers for location/near-me, prices, part numbers, recalls/TSBs, specs,
+ *   and "what is" factual web queries.
+ * - works across languages without putting non-English strings in code by using
+ *   simple heuristics (question marks, currency symbols, URL-like, etc.)
+ */
+function shouldUseSearch(text) {
+  const t = safeStr(text).trim();
   if (!t) return false;
-  return (
-    t.includes("near me") ||
-    t.includes("closest") ||
-    t.includes("nearby") ||
-    t.includes("address") ||
-    t.includes("location") ||
-    t.includes("shop") ||
-    t.includes("mechanic") ||
-    t.includes("garage") ||
-    t.includes("كراج") ||
-    t.includes("ورشة") ||
-    t.includes("قريب مني") ||
-    t.includes("اقرب") ||
-    t.includes("وين") ||
-    t.includes("عنوان")
-  );
+
+  const lower = t.toLowerCase();
+
+  // Strong English triggers
+  const englishTriggers = [
+    "near me",
+    "nearby",
+    "closest",
+    "address",
+    "location",
+    "shop",
+    "garage",
+    "mechanic",
+    "dealership",
+    "phone number",
+    "hours",
+    "open now",
+    "price",
+    "cost",
+    "how much",
+    "part number",
+    "oem",
+    "tsb",
+    "recall",
+    "service bulletin",
+    "spec",
+    "specs",
+    "torque spec",
+    "fluid capacity",
+    "oil capacity",
+    "transmission fluid",
+    "reset procedure",
+    "where to buy",
+    "buy",
+    "best",
+    "compare",
+  ];
+
+  if (englishTriggers.some((k) => lower.includes(k))) return true;
+
+  // Language-agnostic signals
+  const hasCurrency = /[$€£¥]/.test(t);
+  const hasQuestion = /[?？]/.test(t);
+  const hasDigitsAndBrandLike = /\b\d{3,}\b/.test(t) && /[a-zA-Z]/.test(t); // typical part codes, model codes
+  const looksLikeLookup =
+    lower.startsWith("http") ||
+    lower.includes(".com") ||
+    lower.includes("www.") ||
+    lower.includes("google") ||
+    lower.includes("wiki");
+
+  // Short factual questions often benefit from search
+  const shortQuery = t.length <= 70 && hasQuestion;
+
+  return hasCurrency || hasDigitsAndBrandLike || looksLikeLookup || shortQuery;
 }
 
 async function tryWebSearch(query, locale) {
   if (!process.env.SERPER_API_KEY) return [];
+
   try {
-    const hl = locale === "ar" ? "ar" : "en";
-    const gl = "us";
-    const r = await webSearchSerper(query, { gl, hl, num: 5 });
-    if (!r?.ok) return [];
-    return (r.results || []).slice(0, 5).map((x) => {
-      const title = safeStr(x.title);
-      const link = safeStr(x.link);
-      const snippet = safeStr(x.snippet);
-      return `${title}\n${link}\n${snippet}`.trim();
+    const hl = locale === "en" ? "en" : locale; // Serper accepts many hl values
+    const gl = process.env.FIXLENS_SEARCH_GL || "us";
+
+    const r = await webSearchSerper(query, {
+      gl,
+      hl,
+      num: Math.max(1, Math.min(10, SEARCH_NUM_RESULTS)),
     });
-  } catch {
+
+    if (!r?.ok) return [];
+
+    // Keep titles + links + short snippet for doctorPrompt
+    return (r.results || [])
+      .slice(0, SEARCH_NUM_RESULTS)
+      .map((x) => {
+        const title = safeStr(x.title);
+        const link = safeStr(x.link);
+        const snippet = safeStr(x.snippet);
+        const line1 = title || "Result";
+        const line2 = link ? `Source: ${link}` : "";
+        const line3 = snippet ? `Snippet: ${snippet}` : "";
+        return [line1, line2, line3].filter(Boolean).join("\n").trim();
+      })
+      .filter(Boolean);
+  } catch (e) {
+    console.error("tryWebSearch error:", e?.message || e);
     return [];
   }
 }
@@ -110,46 +194,23 @@ function bufToDataUrl(buffer, mime = "image/jpeg") {
   return `data:${mime};base64,${buffer.toString("base64")}`;
 }
 
-function normalizeHistory(history = []) {
-  const arr = Array.isArray(history) ? history : [];
-  const last = arr.slice(-MAX_TURNS);
-
-  // Flutter sometimes stores {role, content} or {role, text}
-  return last
-    .map((m) => {
-      const role = m?.role === "assistant" ? "assistant" : "user";
-      const content =
-        typeof m?.content === "string"
-          ? m.content
-          : typeof m?.text === "string"
-          ? m.text
-          : "";
-      const t = safeStr(content).trim();
-      if (!t) return null;
-      return { role, content: t };
-    })
-    .filter(Boolean);
-}
-
 // Robust: try max_completion_tokens first, fallback to max_tokens if needed
 async function createChatCompletionWithFallback(req) {
   try {
     return await client.chat.completions.create(req);
   } catch (err) {
-    const msg = safeStr(err?.message);
+    const msg = safeStr(err?.message).toLowerCase();
     const code = safeStr(err?.code);
 
-    // If API complains about max_tokens vs max_completion_tokens, retry swap
     const needsSwap =
-      msg.toLowerCase().includes("max_tokens") ||
-      msg.toLowerCase().includes("max_completion_tokens") ||
+      msg.includes("max_tokens") ||
+      msg.includes("max_completion_tokens") ||
       code === "unsupported_parameter";
 
     if (!needsSwap) throw err;
 
     const cloned = { ...req };
 
-    // Swap params
     if ("max_tokens" in cloned) {
       cloned.max_completion_tokens = cloned.max_tokens;
       delete cloned.max_tokens;
@@ -162,7 +223,7 @@ async function createChatCompletionWithFallback(req) {
   }
 }
 
-// ✅ MAIN
+// Main entry
 export async function handleFixLensRequest(payload = {}) {
   const locale = normalizeLocale(payload.locale || payload.language || "en");
 
@@ -178,7 +239,7 @@ export async function handleFixLensRequest(payload = {}) {
 
   const intakeAlreadyAsked = Boolean(payload.intakeAlreadyAsked);
 
-  // model routing
+  // Model routing
   const capability = safeStr(payload.capability || "");
   const chosenModel =
     safeStr(payload.model) ||
@@ -189,10 +250,11 @@ export async function handleFixLensRequest(payload = {}) {
      DEFAULT_TEXT_MODEL);
 
   try {
-    // 1) Knowledge
+    // 1) Knowledge snippets (autoKnowledge.js)
     const kb = buildKnowledgeSnippets(text, { locale });
+    const knowledgeSnippets = Array.isArray(kb) ? kb : kb ? [String(kb)] : [];
 
-    // 2) Audio transcript
+    // 2) Audio transcript (sequential, stable)
     const audioTranscript = await transcribeAudioIfNeeded({
       hasAudio,
       audioBuffer,
@@ -200,14 +262,17 @@ export async function handleFixLensRequest(payload = {}) {
       audioTranscript: payload.audioTranscript,
     });
 
-    // 3) Web search snippets (optional)
-    const searchSnippets = looksLikeSearchIntent(text) ? await tryWebSearch(text, locale) : [];
+    // 3) Web search (efficient + optional)
+    const doSearch = shouldUseSearch(text);
+    const searchSnippets = doSearch ? await tryWebSearch(text, locale) : [];
 
-    // 4) Build doctor messages (system+user) — you already have doctorPrompt.js
-    const msgs = buildDoctorMessages({
+    // 4) Doctor prompt builder (must enforce user-language replies)
+    // buildDoctorMessages should produce message objects or a structure your doctorPrompt defines.
+    // We pass everything needed: locale, text, knowledge, search, media flags, transcript, history.
+    const doctorPack = buildDoctorMessages({
       locale,
       text,
-      knowledgeSnippets: Array.isArray(kb) ? kb : (kb ? [String(kb)] : []),
+      knowledgeSnippets,
       searchSnippets,
       hasImage,
       hasAudio,
@@ -216,21 +281,29 @@ export async function handleFixLensRequest(payload = {}) {
       history: normalizeHistory(payload.history || []),
     });
 
-    const systemText = safeStr(msgs?.[0]?.content).trim();
-    const userText = safeStr(msgs?.[1]?.content).trim();
+    // Support either:
+    // - doctorPack is an array of {role, content}
+    // - or doctorPack provides {system, user}
+    let systemText = "";
+    let userText = "";
 
-    // 5) Chat messages
-    const messages = [];
-
-    if (systemText) messages.push({ role: "system", content: systemText });
-
-    // history
-    const historyMsgs = normalizeHistory(payload.history || []);
-    for (const h of historyMsgs) {
-      messages.push({ role: h.role, content: h.content });
+    if (Array.isArray(doctorPack)) {
+      systemText = safeStr(doctorPack?.find((m) => m?.role === "system")?.content).trim();
+      // prefer explicit user message from pack, fallback to text
+      userText = safeStr(doctorPack?.find((m) => m?.role === "user")?.content).trim() || text;
+    } else {
+      systemText = safeStr(doctorPack?.system).trim();
+      userText = safeStr(doctorPack?.user).trim() || text;
     }
 
-    // current user with optional image
+    // 5) Assemble chat messages (keeps continuity)
+    const messages = [];
+    if (systemText) messages.push({ role: "system", content: systemText });
+
+    const historyMsgs = normalizeHistory(payload.history || []);
+    for (const h of historyMsgs) messages.push({ role: h.role, content: h.content });
+
+    // Current user message with optional image
     if (hasImage && imageBuffer) {
       const dataUrl = bufToDataUrl(imageBuffer, imageMime);
       const parts = [];
@@ -239,17 +312,16 @@ export async function handleFixLensRequest(payload = {}) {
 
       messages.push({
         role: "user",
-        content: parts.length ? parts : userText || "Analyze the image.",
+        content: parts.length ? parts : [{ type: "text", text: userText || "Analyze the image." }],
       });
     } else {
       messages.push({ role: "user", content: userText || text || "Describe the issue." });
     }
 
-    // 6) Call OpenAI (Chat Completions) — fixes your 'input_text' error
+    // 6) Call OpenAI (Chat Completions)
     const req = {
       model: chosenModel,
       messages,
-      // prefer max_completion_tokens; fallback swap handled in helper
       max_completion_tokens: MAX_COMPLETION_TOKENS,
     };
 
@@ -260,10 +332,7 @@ export async function handleFixLensRequest(payload = {}) {
     if (!reply) {
       return {
         ok: false,
-        reply:
-          locale === "ar"
-            ? "صار خطأ بسيط بتوليد الرد. جرّب مرة ثانية."
-            : "Small issue generating a reply. Please try again.",
+        reply: "Small issue generating a reply. Please try again.",
         language: locale,
         error: { status: 500, message: "EMPTY_OUTPUT" },
       };
@@ -278,19 +347,19 @@ export async function handleFixLensRequest(payload = {}) {
         hasImage,
         hasAudio: Boolean(audioTranscript),
         usedSearch: Boolean(searchSnippets?.length),
+        searchCount: searchSnippets?.length || 0,
       },
     };
   } catch (err) {
     const e = openAIErrorToJSON(err);
-
-    // Important: log real error server-side so we stop guessing
     console.error("handleFixLensRequest error:", e);
 
-    const fallback =
-      locale === "ar"
-        ? "حصل خطأ بسيط أثناء التحليل. جرّب مرة ثانية بعد لحظة."
-        : "Something went wrong while analyzing. Please try again in a moment.";
-
-    return { ok: false, reply: fallback, language: locale, error: e };
+    // English-only fallback (doctorPrompt should handle user-language normally)
+    return {
+      ok: false,
+      reply: "Something went wrong while analyzing. Please try again in a moment.",
+      language: locale,
+      error: e,
+    };
   }
 }
