@@ -1,173 +1,91 @@
-// server.js — FixLens Brain API (PRO, multimodal-ready, English-only code)
+// server.js
+// FixLens Brain API — Server (Express) compatible with service.js
+
 import express from "express";
 import cors from "cors";
 import { handleFixLensRequest } from "./service.js";
 
 const app = express();
 
-app.use(cors());
-app.use(express.json({ limit: "25mb" }));
+// ---- Config ----
+const PORT = Number(process.env.PORT) || 8080;
 
-function safeStr(x) {
-  return typeof x === "string" ? x : "";
-}
+// (اختياري) تقدر تحدد دومين تطبيقك للـCORS
+// مثال: https://fixlens.ai
+const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || "")
+  .split(",")
+  .map((s) => s.trim())
+  .filter(Boolean);
 
-function normalizeLocale(locale = "en") {
-  const l = String(locale || "en").trim();
-  if (!l) return "en";
-  return l.split("-")[0].toLowerCase();
-}
-
-function stripDataUrl(b64) {
-  const s = safeStr(b64).trim();
-  const idx = s.indexOf("base64,");
-  return idx >= 0 ? s.slice(idx + "base64,".length) : s;
-}
-
-function b64ToBuffer(b64) {
-  const cleaned = stripDataUrl(b64);
-  if (!cleaned) return null;
-  try {
-    return Buffer.from(cleaned, "base64");
-  } catch {
-    return null;
+function corsOptionsDelegate(req, cb) {
+  // لو ما محدد origins، نسمح للجميع (أسهل للـstaging)
+  if (ALLOWED_ORIGINS.length === 0) {
+    return cb(null, { origin: true, credentials: true });
   }
+
+  const origin = req.header("Origin");
+  const ok = origin && ALLOWED_ORIGINS.includes(origin);
+  cb(null, { origin: ok, credentials: true });
 }
 
-function nowISO() {
-  return new Date().toISOString();
-}
+// ---- Middlewares ----
+app.use(cors(corsOptionsDelegate));
+app.use(express.json({ limit: "25mb" })); // مهم للصور/audio base64
+app.use(express.urlencoded({ extended: true, limit: "25mb" }));
 
-function jsonOk(res, payload) {
-  res.setHeader("Content-Type", "application/json");
-  return res.json(payload);
-}
-
+// ---- Routes ----
 app.get("/", (req, res) => {
-  return jsonOk(res, {
-    ok: true,
-    service: "fixlens-brain-api",
-    hint: "Use /health or POST /api/chat",
-    time: nowISO(),
-  });
+  res.json({ ok: true, name: "fixlens-brain-api", status: "running" });
 });
 
 app.get("/health", (req, res) => {
-  return jsonOk(res, { ok: true, service: "fixlens-brain-api", time: nowISO() });
+  res.json({
+    ok: true,
+    status: "healthy",
+    time: new Date().toISOString(),
+  });
 });
 
-app.post("/api/chat", (req, res) => processRequest(req, res));
-app.post("/api/diagnose", (req, res) => processRequest(req, res));
-app.post("/api/dial", (req, res) => processRequest(req, res));
-app.post("/v1/doctor", (req, res) => processRequest(req, res));
-
-async function processRequest(req, res) {
-  const body = req.body || {};
-
-  const {
-    text = "",
-    image = null, // {base64, mime} OR string base64
-    audio = null, // {base64, mime}
-    locale = "en",
-    history = [],
-    sessionId = "",
-    audioTranscript = "",
-    intakeAlreadyAsked = false,
-
-    // optional routing from Flutter
-    model = "", // e.g. gpt-5-mini, gpt-4o
-    capability = "", // text|vision|audio
-  } = body;
-
-  const normalizedLocale = normalizeLocale(locale);
-
-  // Normalize image/audio objects
-  const imageObj =
-    typeof image === "string"
-      ? { base64: image, mime: "image/jpeg" }
-      : image && typeof image.base64 === "string"
-      ? { base64: image.base64, mime: image.mime || "image/jpeg" }
-      : null;
-
-  const audioObj =
-    audio && typeof audio.base64 === "string"
-      ? { base64: audio.base64, mime: audio.mime || "audio/mp4" }
-      : null;
-
-  // Text fallback if user sent only image/audio
-  let userText = typeof text === "string" ? text.trim() : "";
-  if (!userText && audioObj) {
-    userText =
-      "Analyze the attached vehicle noise recording. Focus on likely mechanical/engine/drivetrain causes.";
-  }
-  if (!userText && imageObj) {
-    userText = "Analyze the attached car photo and infer what it suggests.";
-  }
-  if (!userText) {
-    userText = "Describe the problem briefly: symptoms, warning lights, and when it happens.";
-  }
-
-  const imageBuffer = imageObj ? b64ToBuffer(imageObj.base64) : null;
-  const audioBuffer = audioObj ? b64ToBuffer(audioObj.base64) : null;
-
-  // Avoid treating tiny buffers as real media
-  const hasImageReal = Boolean(imageBuffer && Buffer.isBuffer(imageBuffer) && imageBuffer.length > 10);
-  const hasAudioReal = Boolean(audioBuffer && Buffer.isBuffer(audioBuffer) && audioBuffer.length > 2000);
-
-  // Defaults (safe to change)
-  const chosenModel = safeStr(model) || (hasImageReal ? "gpt-4o" : "gpt-5-mini");
-  const chosenCapability =
-    safeStr(capability) || (hasAudioReal ? "audio" : hasImageReal ? "vision" : "text");
-
+/**
+ * POST /fixlens
+ * Expected body:
+ * {
+ *   text: string,
+ *   locale?: string,
+ *   image_base64?: string,
+ *   image_mime?: string,
+ *   image_url?: string,
+ *   audio_base64?: string,
+ *   audio_filename?: string,
+ *   audio_mime?: string
+ * }
+ */
+app.post("/fixlens", async (req, res) => {
   try {
-    const result = await handleFixLensRequest({
-      text: userText,
-      locale: normalizedLocale,
-      history: Array.isArray(history) ? history : [],
-      sessionId: safeStr(sessionId),
-
-      hasImage: hasImageReal,
-      imageBuffer,
-      imageMime: imageObj?.mime || "image/jpeg",
-
-      hasAudio: hasAudioReal,
-      audioBuffer,
-      audioMime: audioObj?.mime || "audio/mp4",
-
-      audioTranscript: safeStr(audioTranscript),
-      intakeAlreadyAsked: Boolean(intakeAlreadyAsked),
-
-      model: chosenModel,
-      capability: chosenCapability,
-    });
-
-    const outLanguage = safeStr(result?.language) || normalizedLocale;
-
-    return jsonOk(res, {
-      ok: Boolean(result?.ok),
-      reply: safeStr(result?.reply),
-      language: outLanguage,
-      meta: {
-        ...(result?.meta || {}),
-        model: chosenModel,
-        capability: chosenCapability,
-      },
-      error: result?.ok ? undefined : result?.error,
-    });
+    const payload = req.body || {};
+    const out = await handleFixLensRequest(payload);
+    res.status(200).json(out);
   } catch (err) {
-    console.error("processRequest fatal:", err?.message || err);
+    const status = Number(err?.status) || 500;
+    const message = String(err?.message || "Server error");
 
-    // English-only server fallback message (client can localize UI if desired)
-    return res.status(500).json({
+    // Logs مفيدة في Railway
+    console.error("handleFixLensRequest error:", {
+      status,
+      message,
+      request_id: err?.body?.request_id,
+      openai_error: err?.body?.error,
+      code: err?.body?.error?.code,
+    });
+
+    res.status(status).json({
       ok: false,
-      reply: "Server error while analyzing. Please try again in a moment.",
-      language: normalizedLocale,
-      error: { message: safeStr(err?.message) || "PROCESS_REQUEST_FAILED" },
+      error: message,
     });
   }
-}
+});
 
-const PORT = process.env.PORT || 8080;
+// ---- Start ----
 app.listen(PORT, () => {
   console.log(`FixLens Brain API running on port ${PORT}`);
 });
