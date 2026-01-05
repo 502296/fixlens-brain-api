@@ -1,4 +1,4 @@
-// server.js — FixLens Brain API (FINAL)
+// server.js — FixLens Brain API (PRO, multimodal-ready, English-only code)
 import express from "express";
 import cors from "cors";
 import { handleFixLensRequest } from "./service.js";
@@ -38,8 +38,13 @@ function nowISO() {
   return new Date().toISOString();
 }
 
+function jsonOk(res, payload) {
+  res.setHeader("Content-Type", "application/json");
+  return res.json(payload);
+}
+
 app.get("/", (req, res) => {
-  res.json({
+  return jsonOk(res, {
     ok: true,
     service: "fixlens-brain-api",
     hint: "Use /health or POST /api/chat",
@@ -48,7 +53,7 @@ app.get("/", (req, res) => {
 });
 
 app.get("/health", (req, res) => {
-  res.json({ ok: true, service: "fixlens-brain-api", time: nowISO() });
+  return jsonOk(res, { ok: true, service: "fixlens-brain-api", time: nowISO() });
 });
 
 app.post("/api/chat", (req, res) => processRequest(req, res));
@@ -69,7 +74,7 @@ async function processRequest(req, res) {
     audioTranscript = "",
     intakeAlreadyAsked = false,
 
-    // optional routing from Flutter:
+    // optional routing from Flutter
     model = "", // e.g. gpt-5-mini, gpt-4o
     capability = "", // text|vision|audio
   } = body;
@@ -93,30 +98,26 @@ async function processRequest(req, res) {
   let userText = typeof text === "string" ? text.trim() : "";
   if (!userText && audioObj) {
     userText =
-      "Analyze the attached vehicle noise recording. Focus on mechanical/engine/drivetrain causes.";
+      "Analyze the attached vehicle noise recording. Focus on likely mechanical/engine/drivetrain causes.";
   }
   if (!userText && imageObj) {
     userText = "Analyze the attached car photo and infer what it suggests.";
   }
   if (!userText) {
-    userText = "Describe the problem briefly: symptoms, any warning lights, and when it happens.";
+    userText = "Describe the problem briefly: symptoms, warning lights, and when it happens.";
   }
 
   const imageBuffer = imageObj ? b64ToBuffer(imageObj.base64) : null;
   const audioBuffer = audioObj ? b64ToBuffer(audioObj.base64) : null;
 
-  // avoid tiny buffers being treated as real media
+  // Avoid treating tiny buffers as real media
   const hasImageReal = Boolean(imageBuffer && Buffer.isBuffer(imageBuffer) && imageBuffer.length > 10);
   const hasAudioReal = Boolean(audioBuffer && Buffer.isBuffer(audioBuffer) && audioBuffer.length > 2000);
 
-  // Choose model if none passed
-  const chosenModel =
-    safeStr(model) ||
-    (hasImageReal ? "gpt-4o" : "gpt-5-mini"); // you can change defaults here safely
-
+  // Defaults (safe to change)
+  const chosenModel = safeStr(model) || (hasImageReal ? "gpt-4o" : "gpt-5-mini");
   const chosenCapability =
-    safeStr(capability) ||
-    (hasAudioReal ? "audio" : hasImageReal ? "vision" : "text");
+    safeStr(capability) || (hasAudioReal ? "audio" : hasImageReal ? "vision" : "text");
 
   try {
     const result = await handleFixLensRequest({
@@ -142,8 +143,7 @@ async function processRequest(req, res) {
 
     const outLanguage = safeStr(result?.language) || normalizedLocale;
 
-    // Always return a user-visible reply string
-    return res.json({
+    return jsonOk(res, {
       ok: Boolean(result?.ok),
       reply: safeStr(result?.reply),
       language: outLanguage,
@@ -156,12 +156,11 @@ async function processRequest(req, res) {
     });
   } catch (err) {
     console.error("processRequest fatal:", err?.message || err);
+
+    // English-only server fallback message (client can localize UI if desired)
     return res.status(500).json({
       ok: false,
-      reply:
-        normalizedLocale === "ar"
-          ? "صار خطأ بالسيرفر أثناء التحليل. جرّب بعد لحظة."
-          : "Server error while analyzing. Please try again in a moment.",
+      reply: "Server error while analyzing. Please try again in a moment.",
       language: normalizedLocale,
       error: { message: safeStr(err?.message) || "PROCESS_REQUEST_FAILED" },
     });
