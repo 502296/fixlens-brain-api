@@ -1,91 +1,97 @@
 // server.js
-// FixLens Brain API — Server (Express) compatible with service.js
-
 import express from "express";
 import cors from "cors";
+import morgan from "morgan";
+import multer from "multer";
+
 import { handleFixLensRequest } from "./service.js";
 
 const app = express();
 
-// ---- Config ----
-const PORT = Number(process.env.PORT) || 8080;
+// Railway / proxies
+app.set("trust proxy", 1);
 
-// (اختياري) تقدر تحدد دومين تطبيقك للـCORS
-// مثال: https://fixlens.ai
-const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || "")
-  .split(",")
-  .map((s) => s.trim())
-  .filter(Boolean);
+app.use(cors({ origin: "*", methods: ["GET", "POST", "OPTIONS"] }));
+app.use(express.json({ limit: "25mb" }));
+app.use(morgan("combined"));
 
-function corsOptionsDelegate(req, cb) {
-  // لو ما محدد origins، نسمح للجميع (أسهل للـstaging)
-  if (ALLOWED_ORIGINS.length === 0) {
-    return cb(null, { origin: true, credentials: true });
-  }
-
-  const origin = req.header("Origin");
-  const ok = origin && ALLOWED_ORIGINS.includes(origin);
-  cb(null, { origin: ok, credentials: true });
-}
-
-// ---- Middlewares ----
-app.use(cors(corsOptionsDelegate));
-app.use(express.json({ limit: "25mb" })); // مهم للصور/audio base64
-app.use(express.urlencoded({ extended: true, limit: "25mb" }));
-
-// ---- Routes ----
-app.get("/", (req, res) => {
-  res.json({ ok: true, name: "fixlens-brain-api", status: "running" });
+// Multer for multipart (audio/image)
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 25 * 1024 * 1024 }, // 25MB
 });
 
 app.get("/health", (req, res) => {
-  res.json({
-    ok: true,
-    status: "healthy",
-    time: new Date().toISOString(),
-  });
+  res.json({ ok: true, service: "fixlens-brain-api", ts: Date.now() });
 });
 
 /**
- * POST /fixlens
- * Expected body:
- * {
- *   text: string,
- *   locale?: string,
- *   image_base64?: string,
- *   image_mime?: string,
- *   image_url?: string,
- *   audio_base64?: string,
- *   audio_filename?: string,
- *   audio_mime?: string
- * }
+ * Accepts:
+ * 1) JSON:
+ *   {
+ *     text: "...",
+ *     locale: "ar" | "en" | ...,
+ *     image_base64: "data:image/jpeg;base64,...." OR raw base64,
+ *     audio_base64: "base64..." (m4a/wav/mp3...) OR data:audio/...;base64,
+ *     audio_filename: "recording.m4a" (optional)
+ *   }
+ *
+ * 2) multipart/form-data:
+ *   fields: text, locale
+ *   files: image (jpg/png/webp), audio (m4a/mp3/wav/webm...)
  */
-app.post("/fixlens", async (req, res) => {
-  try {
-    const payload = req.body || {};
-    const out = await handleFixLensRequest(payload);
-    res.status(200).json(out);
-  } catch (err) {
-    const status = Number(err?.status) || 500;
-    const message = String(err?.message || "Server error");
+app.post(
+  "/api/fixlens",
+  upload.fields([
+    { name: "image", maxCount: 1 },
+    { name: "audio", maxCount: 1 },
+  ]),
+  async (req, res) => {
+    try {
+      const text = typeof req.body?.text === "string" ? req.body.text : "";
+      const locale = typeof req.body?.locale === "string" ? req.body.locale : "en";
 
-    // Logs مفيدة في Railway
-    console.error("handleFixLensRequest error:", {
-      status,
-      message,
-      request_id: err?.body?.request_id,
-      openai_error: err?.body?.error,
-      code: err?.body?.error?.code,
-    });
+      const imageFile = req.files?.image?.[0] || null;
+      const audioFile = req.files?.audio?.[0] || null;
 
-    res.status(status).json({
-      ok: false,
-      error: message,
-    });
+      const payload = {
+        text,
+        locale,
+        // JSON base64 inputs (if not multipart)
+        image_base64: req.body?.image_base64,
+        audio_base64: req.body?.audio_base64,
+        audio_filename: req.body?.audio_filename,
+        // multipart buffers (if provided)
+        image_file: imageFile
+          ? { buffer: imageFile.buffer, mimetype: imageFile.mimetype, originalname: imageFile.originalname }
+          : null,
+        audio_file: audioFile
+          ? { buffer: audioFile.buffer, mimetype: audioFile.mimetype, originalname: audioFile.originalname }
+          : null,
+      };
+
+      const out = await handleFixLensRequest(payload);
+
+      res.json({
+        ok: true,
+        reply: out.reply,
+        language: out.language || null,
+        meta: out.meta || {},
+      });
+    } catch (err) {
+      const msg = err?.message || String(err);
+      console.error("API ERROR:", msg);
+
+      res.status(500).json({
+        ok: false,
+        error: "INTERNAL_ERROR",
+        message: msg,
+      });
+    }
   }
-});
+);
 
-// ---- Start ----
-app.listen(PORT, () => {
-  console.log(`FixLens Brain API running on port ${PORT}`);
+const port = process.env.PORT || 8080;
+app.listen(port, () => {
+  console.log(`FixLens Brain API running on port ${port}`);
 });
