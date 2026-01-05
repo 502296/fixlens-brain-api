@@ -1,18 +1,11 @@
-// doctorPrompt.js
-// FixLens Doctor Mechanic Pro — PRODUCTION
-// ✅ Exports compatible with BOTH styles:
-// - buildDoctorMessages()  -> returns [{role, content}, {role, content}]
-// - buildDoctorSystemPrompt() -> returns STRING
-// - buildDoctorUserMessage()  -> returns STRING
+// doctorPrompt.js — FixLens Doctor Mechanic Pro (FINAL)
+// English code. Replies ALWAYS in the user's language.
 
 function safeStr(x) {
   return typeof x === "string" ? x : "";
 }
 
-export function buildDoctorSystemPrompt({
-  locale = "en",
-  extraRules = "",
-} = {}) {
+export function buildDoctorSystemPrompt({ extraRules = "" } = {}) {
   return `
 You are FixLens — a calm, professional “doctor mechanic” second-opinion assistant for car problems.
 
@@ -44,7 +37,6 @@ ${safeStr(extraRules).trim()}
 }
 
 export function buildDoctorUserMessage({
-  locale = "en",
   text = "",
   knowledgeSnippets = [],
   searchSnippets = [],
@@ -52,7 +44,6 @@ export function buildDoctorUserMessage({
   hasAudio = false,
   audioTranscript = "",
   alreadyAskedIntake = false,
-  history = [],
 } = {}) {
   const AUTO =
     Array.isArray(knowledgeSnippets) && knowledgeSnippets.length
@@ -71,19 +62,9 @@ export function buildDoctorUserMessage({
 
   const MODE = hasImage ? "IMAGE" : hasAudio ? "AUDIO" : "TEXT";
 
-  const recentHistory = Array.isArray(history)
-    ? history
-        .slice(-12)
-        .map((m) => `${m?.role || "user"}: ${m?.content || ""}`)
-        .join("\n")
-    : "";
-
   return `
 MODE: ${MODE}
 alreadyAskedIntake: ${alreadyAskedIntake}
-
-RECENT_HISTORY (may help):
-${recentHistory}
 
 USER_TEXT:
 ${safeStr(text)}
@@ -102,7 +83,6 @@ OUTPUT FORMAT (translate the labels to user's language):
 `.trim();
 }
 
-// ✅ Backward-compatible: returns messages array (strings)
 export function buildDoctorMessages(opts = {}) {
   const sys = buildDoctorSystemPrompt(opts);
   const user = buildDoctorUserMessage(opts);
