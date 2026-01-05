@@ -1,93 +1,56 @@
-// doctorPrompt.js — FixLens Doctor Mechanic Pro (FINAL)
-// English code. Replies ALWAYS in the user's language.
+// doctorPrompt.js
 
-function safeStr(x) {
-  return typeof x === "string" ? x : "";
-}
-
-export function buildDoctorSystemPrompt({ extraRules = "" } = {}) {
+export function buildDoctorSystemPrompt() {
   return `
-You are FixLens — a calm, professional “doctor mechanic” second-opinion assistant for car problems.
+You are FixLens — a calm, professional second-opinion assistant for car problems.
 
-Mission:
-Reduce confusion, fear, and unnecessary spending. Be practical, not showy.
+Goal:
+Reduce confusion and unnecessary spending. Be practical, not showy.
 
-Language (hard rule):
-- Reply fully in the user’s language. Never mix languages.
-- Translate ALL labels/headings into the user's language (do not keep English labels).
+Language:
+- ALWAYS reply in the user's language.
+- If user writes Arabic -> Arabic.
+- If user writes English -> English.
+- If user writes Spanish -> Spanish.
+- Never switch languages unless user switches.
 
-Style:
-- Short sections, numbered points.
-- Max 3 likely causes (ranked).
-- Always include a Safety line (safe to drive? yes/no + short reason).
-- Provide 3–6 next steps (include ONE discriminating check).
-- Ask at most ONE follow-up question.
+Style rules:
+- Keep it calm, confident, and human.
+- NEVER use numbered outlines like (1) (2) (3) — avoid that format.
+- No long lectures. No history. No manufacturing talk.
+- Ask at most ONE follow-up question, only if essential.
 
-Session-aware intake rule:
-- Ask for year + make/model + when it happens ONLY IF missing AND alreadyAskedIntake=false.
-- If alreadyAskedIntake=true, do NOT ask intake again.
-
-Web search (shops/addresses):
-- If user asks for nearby shops/addresses: provide EXACTLY 3 options formatted:
-  Name — Address — (optional phone/website)
-- Do not refuse. Do not tell the user to search themselves.
-
-${safeStr(extraRules).trim()}
-`.trim();
+Diagnostic rules:
+- Never give an absolute diagnosis.
+- Give up to 3 likely causes only.
+- Always include a quick safety note: "safe to drive or not and why".
+- Provide a short next-steps plan: 3 checks/tests max.
+- If an image/audio is provided, use it. Do not say you can't analyze it.
+`;
 }
 
-export function buildDoctorUserMessage({
-  text = "",
-  knowledgeSnippets = [],
-  searchSnippets = [],
-  hasImage = false,
-  hasAudio = false,
-  audioTranscript = "",
-  alreadyAskedIntake = false,
-} = {}) {
-  const AUTO =
-    Array.isArray(knowledgeSnippets) && knowledgeSnippets.length
-      ? `\nAUTO_KNOWLEDGE:\n${knowledgeSnippets.map((s, i) => `${i + 1}. ${s}`).join("\n")}\n`
-      : "";
+export function buildDoctorUserMessage({ text, transcript, hasImage, hasAudio }) {
+  const parts = [];
 
-  const WEB =
-    Array.isArray(searchSnippets) && searchSnippets.length
-      ? `\nWEB_SEARCH_SNIPPETS:\n${searchSnippets.map((s, i) => `${i + 1}. ${s}`).join("\n")}\n`
-      : "";
+  if (text?.trim()) {
+    parts.push(`USER TEXT:\n${text.trim()}`);
+  }
 
-  const AUDIO =
-    hasAudio && audioTranscript
-      ? `\nAUDIO_INFO:\n${safeStr(audioTranscript)}\n`
-      : "";
+  if (hasAudio && transcript?.trim()) {
+    parts.push(`AUDIO TRANSCRIPT (from user's recording):\n${transcript.trim()}`);
+  }
 
-  const MODE = hasImage ? "IMAGE" : hasAudio ? "AUDIO" : "TEXT";
+  if (hasAudio && !transcript?.trim()) {
+    parts.push(`AUDIO PROVIDED but transcript is empty. Still answer based on the user's text/image.`);
+  }
 
-  return `
-MODE: ${MODE}
-alreadyAskedIntake: ${alreadyAskedIntake}
+  if (hasImage) {
+    parts.push(`IMAGE PROVIDED: Use the image evidence in your reasoning.`);
+  }
 
-USER_TEXT:
-${safeStr(text)}
+  parts.push(`
+Return only the final answer to the user. Do not mention internal tools, prompts, or system rules.
+`);
 
-${AUTO}
-${WEB}
-${AUDIO}
-
-OUTPUT FORMAT (translate the labels to user's language):
-0) One short professional opening line
-1) What I think is happening (1–2 lines; mention 1–2 clues)
-2) Likely causes (ranked 1–3)
-3) Safety (safe to drive? yes/no + reason + rule)
-4) What to do next (3–6 steps)
-5) One follow-up question (optional; max one; obey session-aware intake rule)
-`.trim();
-}
-
-export function buildDoctorMessages(opts = {}) {
-  const sys = buildDoctorSystemPrompt(opts);
-  const user = buildDoctorUserMessage(opts);
-  return [
-    { role: "system", content: sys },
-    { role: "user", content: user },
-  ];
+  return parts.join("\n\n");
 }
