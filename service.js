@@ -1,9 +1,7 @@
-// service.js — FixLens Brain API (PRO, multimodal + efficient search)
-// ✅ Matches your doctorPrompt.js exactly
-// ✅ Moves AUTO_KNOWLEDGE / WEB_SEARCH / AUDIO_INFO into SYSTEM (fixes EMPTY_OUTPUT)
-// ✅ English-only code. Replies in user's language via doctorPrompt hard rule.
-// ✅ Uses autoKnowledge.js via buildKnowledgeSnippets()
-// ✅ Uses search.js via webSearchSerper()
+// service.js — FixLens Brain API (PRO, stable NOW)
+// Uses Chat Completions with gpt-4o-mini/gpt-4o (stable) to avoid EMPTY_OUTPUT.
+// Matches doctorPrompt.js buildDoctorMessages() exactly.
+// English-only code. Replies in user's language via doctorPrompt hard rule.
 
 import OpenAI from "openai";
 import { toFile } from "openai/uploads";
@@ -14,8 +12,9 @@ import { webSearchSerper } from "./lib/search.js";
 
 const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
+// ✅ IMPORTANT: Use GPT-4o family with chat.completions (stable)
 const DEFAULT_TEXT_MODEL =
-  process.env.FIXLENS_TEXT_MODEL || process.env.FIXLENS_MODEL || "gpt-5-mini";
+  process.env.FIXLENS_TEXT_MODEL || process.env.FIXLENS_MODEL || "gpt-4o-mini";
 const DEFAULT_VISION_MODEL =
   process.env.FIXLENS_VISION_MODEL || process.env.FIXLENS_MODEL || "gpt-4o";
 const DEFAULT_AUDIO_MODEL =
@@ -56,7 +55,6 @@ function normalizeHistory(history = []) {
   const arr = Array.isArray(history) ? history : [];
   const last = arr.slice(-MAX_TURNS);
 
-  // Flutter sometimes stores {role, content} or {role, text}
   return last
     .map((m) => {
       const role = m?.role === "assistant" ? "assistant" : "user";
@@ -73,17 +71,11 @@ function normalizeHistory(history = []) {
     .filter(Boolean);
 }
 
-/**
- * Efficient search intent:
- * - runs search only when useful (places/addresses, prices, parts, recalls/TSBs, specs, quick factual Qs)
- * - includes language-agnostic signals (currency, short question, URL-like)
- */
 function shouldUseSearch(text) {
   const t = safeStr(text).trim();
   if (!t) return false;
 
   const lower = t.toLowerCase();
-
   const triggers = [
     "near me",
     "nearby",
@@ -129,11 +121,6 @@ function shouldUseSearch(text) {
   return hasCurrency || looksLikeLookup || shortQuestion;
 }
 
-/**
- * Detect "nearby shops/addresses" to enforce your doctorPrompt rule:
- * - Provide EXACTLY 3 options formatted as: Name — Address — (optional phone/website)
- * We help the model by passing only top 3 results for these queries.
- */
 function isNearbyShopsQuery(text) {
   const lower = safeStr(text).toLowerCase();
   if (!lower) return false;
@@ -162,7 +149,6 @@ async function tryWebSearch(query, locale, { forceTop3 = false } = {}) {
 
     const results = (r.results || []).slice(0, num);
 
-    // Compact, model-friendly snippets
     return results
       .map((x) => {
         const title = safeStr(x.title);
@@ -210,7 +196,6 @@ function bufToDataUrl(buffer, mime = "image/jpeg") {
   return `data:${mime};base64,${buffer.toString("base64")}`;
 }
 
-// Robust: try max_completion_tokens first, fallback to max_tokens if needed
 async function createChatCompletionWithFallback(req) {
   try {
     return await client.chat.completions.create(req);
@@ -239,11 +224,7 @@ async function createChatCompletionWithFallback(req) {
   }
 }
 
-/**
- * IMPORTANT FIX:
- * Move heavy context (knowledge/search/audio) into SYSTEM injection,
- * keep USER message small to prevent empty outputs.
- */
+// ✅ Move heavy context into SYSTEM injection
 function buildSystemInjection({ knowledgeSnippets, searchSnippets, audioTranscript }) {
   let injected = "";
 
@@ -268,10 +249,8 @@ function buildSystemInjection({ knowledgeSnippets, searchSnippets, audioTranscri
   return injected.trim();
 }
 
-// MAIN
 export async function handleFixLensRequest(payload = {}) {
   const locale = normalizeLocale(payload.locale || payload.language || "en");
-
   const text = safeStr(payload.text || payload.userText || payload.message || "").trim();
 
   const hasImage = Boolean(payload.hasImage);
@@ -284,7 +263,6 @@ export async function handleFixLensRequest(payload = {}) {
 
   const intakeAlreadyAsked = Boolean(payload.intakeAlreadyAsked);
 
-  // Model routing
   const capability = safeStr(payload.capability || "");
   const chosenModel =
     safeStr(payload.model) ||
@@ -295,11 +273,9 @@ export async function handleFixLensRequest(payload = {}) {
      DEFAULT_TEXT_MODEL);
 
   try {
-    // 1) Auto knowledge (autoKnowledge.js)
     const kb = buildKnowledgeSnippets(text, { locale });
     const knowledgeSnippets = Array.isArray(kb) ? kb : kb ? [String(kb)] : [];
 
-    // 2) Audio transcript (sequential)
     const audioTranscript = await transcribeAudioIfNeeded({
       hasAudio,
       audioBuffer,
@@ -307,37 +283,27 @@ export async function handleFixLensRequest(payload = {}) {
       audioTranscript: payload.audioTranscript,
     });
 
-    // 3) Web search (efficient + top3 when nearby shops query)
     const doSearch = shouldUseSearch(text);
     const needTop3 = doSearch && isNearbyShopsQuery(text);
-    const searchSnippets = doSearch
-      ? await tryWebSearch(text, locale, { forceTop3: needTop3 })
-      : [];
+    const searchSnippets = doSearch ? await tryWebSearch(text, locale, { forceTop3: needTop3 }) : [];
 
-    // 4) Doctor prompts (MATCH your doctorPrompt.js exactly)
-    // We DO NOT pass knowledge/search/audio to user message anymore.
+    // Build base doctor prompts (keep user small)
     const doctorMsgs = buildDoctorMessages({
       locale,
       text,
       hasImage,
       hasAudio,
-      audioTranscript: "", // keep user small
-      knowledgeSnippets: [], // keep user small
-      searchSnippets: [], // keep user small
       alreadyAskedIntake: intakeAlreadyAsked,
+      knowledgeSnippets: [],
+      searchSnippets: [],
+      audioTranscript: "",
     });
 
     const systemBase = safeStr(doctorMsgs?.[0]?.content).trim();
     const userMessageText = safeStr(doctorMsgs?.[1]?.content).trim();
 
-    // Inject heavy context into SYSTEM
-    const injected = buildSystemInjection({
-      knowledgeSnippets,
-      searchSnippets,
-      audioTranscript,
-    });
+    const injected = buildSystemInjection({ knowledgeSnippets, searchSnippets, audioTranscript });
 
-    // 5) Assemble messages with history continuity
     const messages = [];
     messages.push({
       role: "system",
@@ -347,7 +313,6 @@ export async function handleFixLensRequest(payload = {}) {
     const historyMsgs = normalizeHistory(payload.history || []);
     for (const h of historyMsgs) messages.push({ role: h.role, content: h.content });
 
-    // Current user message with optional image
     if (hasImage && imageBuffer) {
       const dataUrl = bufToDataUrl(imageBuffer, imageMime);
 
@@ -360,13 +325,9 @@ export async function handleFixLensRequest(payload = {}) {
         content: parts.length ? parts : [{ type: "text", text: userMessageText || "Analyze the image." }],
       });
     } else {
-      messages.push({
-        role: "user",
-        content: userMessageText || text || "Describe the issue.",
-      });
+      messages.push({ role: "user", content: userMessageText || text || "Describe the issue." });
     }
 
-    // 6) OpenAI call
     const req = {
       model: chosenModel,
       messages,
