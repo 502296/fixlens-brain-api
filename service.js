@@ -1,22 +1,22 @@
-// service.js (FixLens Brain API) — PRO, robust, no crashes
+// service.js — FixLens Brain API (PRO, stable)
 import OpenAI from "openai";
 import { toFile } from "openai/uploads";
 
 import { buildKnowledgeSnippets } from "./lib/autoKnowledge.js";
-import { buildDoctorMessages } from "./doctorPrompt.js"; // ✅ matches your latest doctorPrompt
-import { webSearchSerper } from "./lib/search.js"; // optional (SERPER_API_KEY)
+import { buildDoctorMessages } from "./doctorPrompt.js";
+import { webSearchSerper } from "./lib/search.js";
 
 const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-// Defaults
+// Models
 const DEFAULT_TEXT_MODEL =
-  process.env.FIXLENS_TEXT_MODEL || process.env.FIXLENS_MODEL || "gpt-5-mini";
+  process.env.FIXLENS_TEXT_MODEL || process.env.FIXLENS_MODEL || "gpt-4o-mini";
 const DEFAULT_VISION_MODEL =
   process.env.FIXLENS_VISION_MODEL || process.env.FIXLENS_MODEL || "gpt-4o";
 const DEFAULT_AUDIO_MODEL =
-  process.env.FIXLENS_AUDIO_MODEL || process.env.FIXLENS_MODEL || "gpt-4o";
+  process.env.FIXLENS_AUDIO_MODEL || process.env.FIXLENS_MODEL || "gpt-4o-mini";
 
-const MAX_OUTPUT_TOKENS = Number(process.env.FIXLENS_MAX_OUTPUT_TOKENS || 650);
+const MAX_OUTPUT_TOKENS = Number(process.env.FIXLENS_MAX_OUTPUT_TOKENS || 700);
 const MAX_TURNS = Number(process.env.FIXLENS_MAX_TURNS || 20);
 
 function safeStr(x) {
@@ -29,14 +29,20 @@ function normalizeLocale(locale = "en") {
   return l.split("-")[0].toLowerCase();
 }
 
-function bufToDataUrl(buffer, mime = "image/jpeg") {
-  if (!buffer || !Buffer.isBuffer(buffer) || buffer.length < 10) return null;
-  const b64 = buffer.toString("base64");
-  return `data:${mime};base64,${b64}`;
+function openAIErrorToJSON(err) {
+  const status = err?.status || err?.response?.status || err?.error?.status || 500;
+  const message = safeStr(err?.message) || safeStr(err?.error?.message) || "Unknown error";
+  const code = safeStr(err?.code) || safeStr(err?.error?.code) || "";
+  const param = safeStr(err?.param) || safeStr(err?.error?.param) || "";
+  const request_id =
+    safeStr(err?.request_id) ||
+    safeStr(err?.response?.headers?.["x-request-id"]) ||
+    safeStr(err?.headers?.["x-request-id"]) ||
+    "";
+  return { status, message, code, param, request_id };
 }
 
 function pickBestOutputText(resp) {
-  // Responses API: gather all output_text
   try {
     const out = resp?.output || [];
     const chunks = [];
@@ -50,26 +56,6 @@ function pickBestOutputText(resp) {
   } catch {
     return "";
   }
-}
-
-function openAIErrorToJSON(err) {
-  // Never depend on err.status only
-  const status =
-    err?.status || err?.response?.status || err?.error?.status || 500;
-
-  const message =
-    safeStr(err?.message) || safeStr(err?.error?.message) || "Unknown error";
-
-  const code = safeStr(err?.code) || safeStr(err?.error?.code) || "";
-  const param = safeStr(err?.param) || safeStr(err?.error?.param) || "";
-
-  const request_id =
-    safeStr(err?.request_id) ||
-    safeStr(err?.response?.headers?.["x-request-id"]) ||
-    safeStr(err?.headers?.["x-request-id"]) ||
-    "";
-
-  return { status, message, code, param, request_id };
 }
 
 function looksLikeSearchIntent(text) {
@@ -99,32 +85,22 @@ async function tryWebSearch(query, locale) {
     const gl = "us";
     const r = await webSearchSerper(query, { gl, hl, num: 5 });
     if (!r?.ok) return [];
-
-    const items = (r.results || []).slice(0, 5).map((x) => {
+    return (r.results || []).slice(0, 5).map((x) => {
       const title = safeStr(x.title);
       const link = safeStr(x.link);
       const snippet = safeStr(x.snippet);
       return `${title}\n${link}\n${snippet}`.trim();
     });
-
-    return items;
   } catch {
     return [];
   }
 }
 
-async function transcribeAudioIfNeeded({
-  hasAudio,
-  audioBuffer,
-  audioMime,
-  audioTranscript,
-}) {
-  const pre = safeStr(audioTranscript).trim();
-  if (pre) return pre;
-
+async function transcribeAudioIfNeeded({ hasAudio, audioBuffer, audioMime, audioTranscript }) {
+  const existing = safeStr(audioTranscript).trim();
+  if (existing) return existing;
   if (!hasAudio) return "";
-  if (!audioBuffer || !Buffer.isBuffer(audioBuffer) || audioBuffer.length < 2000)
-    return "";
+  if (!audioBuffer || !Buffer.isBuffer(audioBuffer) || audioBuffer.length < 2000) return "";
 
   const mime = safeStr(audioMime) || "audio/mp4";
   const ext =
@@ -145,27 +121,27 @@ async function transcribeAudioIfNeeded({
   return safeStr(tr?.text).trim();
 }
 
-function buildHistoryInput(history = []) {
-  // expects history items: { role:"user"/"assistant", content:"..." } or {text:"..."}
-  const arr = Array.isArray(history) ? history : [];
-  const last = arr.slice(-MAX_TURNS);
-
-  const out = [];
-  for (const m of last) {
-    const role = m?.role === "assistant" ? "assistant" : "user";
-    const text = safeStr(m?.content || m?.text || "");
-    if (!text) continue;
-    out.push({
-      role,
-      content: [{ type: "input_text", text }], // ✅ always has type
-    });
-  }
-  return out;
+function bufToDataUrl(buffer, mime = "image/jpeg") {
+  if (!buffer || !Buffer.isBuffer(buffer) || buffer.length < 10) return null;
+  return `data:${mime};base64,${buffer.toString("base64")}`;
 }
 
+function buildHistoryParts(history = []) {
+  const arr = Array.isArray(history) ? history : [];
+  const last = arr.slice(-MAX_TURNS);
+  return last
+    .map((m) => {
+      const role = m?.role === "assistant" ? "assistant" : "user";
+      const text = safeStr(m?.content || m?.text || "").trim();
+      if (!text) return null;
+      return { role, content: [{ type: "input_text", text }] };
+    })
+    .filter(Boolean);
+}
+
+// ✅ MAIN
 export async function handleFixLensRequest(payload = {}) {
   const locale = normalizeLocale(payload.locale || payload.language || "en");
-
   const text = safeStr(payload.text || payload.userText || payload.message || "").trim();
 
   const hasImage = Boolean(payload.hasImage);
@@ -191,7 +167,6 @@ export async function handleFixLensRequest(payload = {}) {
   try {
     // 1) Knowledge
     const kb = buildKnowledgeSnippets(text, { locale });
-    const knowledgeSnippets = Array.isArray(kb) ? kb : (kb ? [String(kb)] : []);
 
     // 2) Audio transcript
     const audioTranscript = await transcribeAudioIfNeeded({
@@ -202,51 +177,39 @@ export async function handleFixLensRequest(payload = {}) {
     });
 
     // 3) Web search snippets (optional)
-    const searchSnippets = looksLikeSearchIntent(text)
-      ? await tryWebSearch(text, locale)
-      : [];
+    const searchSnippets = looksLikeSearchIntent(text) ? await tryWebSearch(text, locale) : [];
 
-    // 4) Build doctor prompt text (system+user) using your doctorPrompt.js
+    // 4) Build doctor sys+user text (from doctorPrompt.js)
     const msgs = buildDoctorMessages({
       locale,
       text,
-      knowledgeSnippets,
+      knowledgeSnippets: Array.isArray(kb) ? kb : (kb ? [String(kb)] : []),
       searchSnippets,
       hasImage,
       hasAudio,
       audioTranscript,
       alreadyAskedIntake: intakeAlreadyAsked,
-      history: Array.isArray(history) ? history : [],
+      history: history.map((m) => ({ role: m.role, content: m.content })),
     });
 
-    const systemText = safeStr(msgs?.[0]?.content);
-    const userText = safeStr(msgs?.[1]?.content);
+    const systemText = safeStr(msgs?.[0]?.content).trim();
+    const userText = safeStr(msgs?.[1]?.content).trim();
 
-    // 5) Build Responses API input (✅ every part has type)
+    // ✅ Responses API input (كل part بيه type صحيح)
     const input = [];
 
     if (systemText) {
-      input.push({
-        role: "system",
-        content: [{ type: "input_text", text: systemText }],
-      });
+      input.push({ role: "system", content: [{ type: "input_text", text: systemText }] });
     }
 
-    // include history as plain text (safe)
-    input.push(...buildHistoryInput(history));
+    input.push(...buildHistoryParts(history));
 
-    // current user with text + optional image
     const userParts = [];
     if (userText) userParts.push({ type: "input_text", text: userText });
 
     if (hasImage && imageBuffer) {
       const dataUrl = bufToDataUrl(imageBuffer, imageMime);
-      if (dataUrl) {
-        userParts.push({
-          type: "input_image",
-          image_url: { url: dataUrl },
-        });
-      }
+      if (dataUrl) userParts.push({ type: "input_image", image_url: { url: dataUrl } });
     }
 
     input.push({
@@ -254,7 +217,6 @@ export async function handleFixLensRequest(payload = {}) {
       content: userParts.length ? userParts : [{ type: "input_text", text: "" }],
     });
 
-    // 6) Call OpenAI Responses
     const resp = await client.responses.create({
       model: chosenModel,
       input,
@@ -262,14 +224,10 @@ export async function handleFixLensRequest(payload = {}) {
     });
 
     const reply = pickBestOutputText(resp);
-
     if (!reply) {
       return {
         ok: false,
-        reply:
-          locale === "ar"
-            ? "صار خطأ بسيط بتوليد الرد. جرّب مرة ثانية."
-            : "There was a small issue generating a reply. Please try again.",
+        reply: locale === "ar" ? "صار خطأ بسيط بتوليد الرد. جرّب مرة ثانية." : "Small issue generating reply. Try again.",
         language: locale,
         error: { status: 500, message: "EMPTY_OUTPUT" },
       };
@@ -281,8 +239,8 @@ export async function handleFixLensRequest(payload = {}) {
       language: locale,
       meta: {
         model: chosenModel,
-        hasAudio: Boolean(audioTranscript),
         hasImage,
+        hasAudio: Boolean(audioTranscript),
         usedSearch: Boolean(searchSnippets?.length),
       },
     };
@@ -292,7 +250,6 @@ export async function handleFixLensRequest(payload = {}) {
       locale === "ar"
         ? "صار خطأ أثناء التحليل. جرّب مرة ثانية بعد لحظة."
         : "Something went wrong while analyzing. Please try again in a moment.";
-
     return { ok: false, reply: fallback, language: locale, error: e };
   }
 }
