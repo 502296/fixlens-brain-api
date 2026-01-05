@@ -5,14 +5,14 @@ import { handleFixLensRequest } from "./service.js";
 
 const app = express();
 
-// Railway/Prod friendly
+// Railway / production friendly
 app.set("trust proxy", 1);
 
 app.use(cors());
 app.use(morgan("combined"));
 app.use(express.json({ limit: "25mb" }));
 
-// Health
+// Health check
 app.get("/health", (req, res) => {
   res.json({
     ok: true,
@@ -21,17 +21,16 @@ app.get("/health", (req, res) => {
   });
 });
 
-// ✅ Main endpoint
+// Main endpoint
 app.post("/api/fixlens", async (req, res) => {
   try {
     const out = await handleFixLensRequest(req);
     res.status(200).json(out);
   } catch (err) {
     const status = Number(err?.status || err?.statusCode || 500);
-    const message =
-      err?.message || "Unexpected error in /api/fixlens";
+    const message = err?.message || "Unexpected error";
 
-    console.error("API /api/fixlens error:", { status, message });
+    console.error("API /api/fixlens error:", err);
     res.status(status).json({
       ok: false,
       error: message,
@@ -40,14 +39,25 @@ app.post("/api/fixlens", async (req, res) => {
   }
 });
 
-// ✅ Alias endpoint (fix your Flutter 404 without touching Flutter)
-app.post("/api/chat", (req, res, next) => {
-  // Route the same request to the main handler
-  req.url = "/api/fixlens";
-  next();
+// Alias for Flutter (NO 404 anymore)
+app.post("/api/chat", async (req, res) => {
+  try {
+    const out = await handleFixLensRequest(req);
+    res.status(200).json(out);
+  } catch (err) {
+    const status = Number(err?.status || err?.statusCode || 500);
+    const message = err?.message || "Unexpected error";
+
+    console.error("API /api/chat error:", err);
+    res.status(status).json({
+      ok: false,
+      error: message,
+      status,
+    });
+  }
 });
 
-// Fallback 404
+// Fallback
 app.use((req, res) => {
   res.status(404).json({
     ok: false,
@@ -59,4 +69,9 @@ app.use((req, res) => {
 const PORT = process.env.PORT || 8080;
 app.listen(PORT, () => {
   console.log(`FixLens Brain API running on port ${PORT}`);
+});
+
+// Safety net
+process.on("unhandledRejection", (err) => {
+  console.error("UNHANDLED PROMISE:", err);
 });
