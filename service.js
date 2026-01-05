@@ -1,7 +1,9 @@
-// service.js — FixLens Brain API (PRO, stable NOW)
-// Uses Chat Completions with gpt-4o-mini/gpt-4o (stable) to avoid EMPTY_OUTPUT.
-// Matches doctorPrompt.js buildDoctorMessages() exactly.
-// English-only code. Replies in user's language via doctorPrompt hard rule.
+// service.js — FixLens Brain API (GPT-5 via Responses API)
+// ✅ Uses Responses API (required for GPT-5 stability)
+// ✅ Matches doctorPrompt.js buildDoctorMessages() exactly
+// ✅ Multimodal: text + image (input_image) + audio (whisper transcript)
+// ✅ Efficient web search via Serper
+// ✅ English-only code. Replies in user's language via doctorPrompt hard rule.
 
 import OpenAI from "openai";
 import { toFile } from "openai/uploads";
@@ -12,15 +14,11 @@ import { webSearchSerper } from "./lib/search.js";
 
 const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-// ✅ IMPORTANT: Use GPT-4o family with chat.completions (stable)
-const DEFAULT_TEXT_MODEL =
-  process.env.FIXLENS_TEXT_MODEL || process.env.FIXLENS_MODEL || "gpt-4o-mini";
-const DEFAULT_VISION_MODEL =
-  process.env.FIXLENS_VISION_MODEL || process.env.FIXLENS_MODEL || "gpt-4o";
-const DEFAULT_AUDIO_MODEL =
-  process.env.FIXLENS_AUDIO_MODEL || process.env.FIXLENS_MODEL || "gpt-4o";
+// ✅ GPT-5 default (Responses API)
+const DEFAULT_MODEL = process.env.FIXLENS_MODEL || "gpt-5";
 
-const MAX_COMPLETION_TOKENS = Number(process.env.FIXLENS_MAX_OUTPUT_TOKENS || 750);
+// Output tokens for Responses API
+const MAX_OUTPUT_TOKENS = Number(process.env.FIXLENS_MAX_OUTPUT_TOKENS || 750);
 const MAX_TURNS = Number(process.env.FIXLENS_MAX_TURNS || 20);
 
 // Search tuning
@@ -196,35 +194,6 @@ function bufToDataUrl(buffer, mime = "image/jpeg") {
   return `data:${mime};base64,${buffer.toString("base64")}`;
 }
 
-async function createChatCompletionWithFallback(req) {
-  try {
-    return await client.chat.completions.create(req);
-  } catch (err) {
-    const msg = safeStr(err?.message).toLowerCase();
-    const code = safeStr(err?.code);
-
-    const needsSwap =
-      msg.includes("max_tokens") ||
-      msg.includes("max_completion_tokens") ||
-      code === "unsupported_parameter";
-
-    if (!needsSwap) throw err;
-
-    const cloned = { ...req };
-
-    if ("max_tokens" in cloned) {
-      cloned.max_completion_tokens = cloned.max_tokens;
-      delete cloned.max_tokens;
-    } else if ("max_completion_tokens" in cloned) {
-      cloned.max_tokens = cloned.max_completion_tokens;
-      delete cloned.max_completion_tokens;
-    }
-
-    return await client.chat.completions.create(cloned);
-  }
-}
-
-// ✅ Move heavy context into SYSTEM injection
 function buildSystemInjection({ knowledgeSnippets, searchSnippets, audioTranscript }) {
   let injected = "";
 
@@ -249,8 +218,39 @@ function buildSystemInjection({ knowledgeSnippets, searchSnippets, audioTranscri
   return injected.trim();
 }
 
+// Robust extraction for Responses API
+function extractResponseText(resp) {
+  const direct = safeStr(resp?.output_text).trim();
+  if (direct) return direct;
+
+  const out = resp?.output;
+  if (!Array.isArray(out)) return "";
+
+  for (const item of out) {
+    // Typical: {type:"message", content:[{type:"output_text", text:"..."}]}
+    if (item?.type === "message" && Array.isArray(item?.content)) {
+      for (const c of item.content) {
+        const t = safeStr(c?.text).trim();
+        if (t) return t;
+      }
+    }
+
+    // Fallback: any nested text
+    if (Array.isArray(item?.content)) {
+      for (const c of item.content) {
+        const t = safeStr(c?.text).trim();
+        if (t) return t;
+      }
+    }
+  }
+
+  return "";
+}
+
+// MAIN (Responses API)
 export async function handleFixLensRequest(payload = {}) {
   const locale = normalizeLocale(payload.locale || payload.language || "en");
+
   const text = safeStr(payload.text || payload.userText || payload.message || "").trim();
 
   const hasImage = Boolean(payload.hasImage);
@@ -263,19 +263,15 @@ export async function handleFixLensRequest(payload = {}) {
 
   const intakeAlreadyAsked = Boolean(payload.intakeAlreadyAsked);
 
-  const capability = safeStr(payload.capability || "");
-  const chosenModel =
-    safeStr(payload.model) ||
-    (capability === "vision" ? DEFAULT_VISION_MODEL :
-     capability === "audio" ? DEFAULT_AUDIO_MODEL :
-     hasImage ? DEFAULT_VISION_MODEL :
-     hasAudio ? DEFAULT_AUDIO_MODEL :
-     DEFAULT_TEXT_MODEL);
+  // Model routing: for GPT-5, keep one model stable
+  const chosenModel = safeStr(payload.model) || DEFAULT_MODEL;
 
   try {
+    // 1) Auto knowledge
     const kb = buildKnowledgeSnippets(text, { locale });
     const knowledgeSnippets = Array.isArray(kb) ? kb : kb ? [String(kb)] : [];
 
+    // 2) Audio transcript
     const audioTranscript = await transcribeAudioIfNeeded({
       hasAudio,
       audioBuffer,
@@ -283,11 +279,13 @@ export async function handleFixLensRequest(payload = {}) {
       audioTranscript: payload.audioTranscript,
     });
 
+    // 3) Web search
     const doSearch = shouldUseSearch(text);
     const needTop3 = doSearch && isNearbyShopsQuery(text);
     const searchSnippets = doSearch ? await tryWebSearch(text, locale, { forceTop3: needTop3 }) : [];
 
-    // Build base doctor prompts (keep user small)
+    // 4) Doctor prompts (match doctorPrompt.js)
+    // Keep user small; inject heavy context into system
     const doctorMsgs = buildDoctorMessages({
       locale,
       text,
@@ -303,40 +301,53 @@ export async function handleFixLensRequest(payload = {}) {
     const userMessageText = safeStr(doctorMsgs?.[1]?.content).trim();
 
     const injected = buildSystemInjection({ knowledgeSnippets, searchSnippets, audioTranscript });
+    const systemText = injected ? `${systemBase}\n\n${injected}` : systemBase;
 
-    const messages = [];
-    messages.push({
+    // 5) Build Responses input with history + multimodal user message
+    const input = [];
+
+    // system
+    input.push({
       role: "system",
-      content: injected ? `${systemBase}\n\n${injected}` : systemBase,
+      content: [{ type: "input_text", text: systemText }],
     });
 
+    // history
     const historyMsgs = normalizeHistory(payload.history || []);
-    for (const h of historyMsgs) messages.push({ role: h.role, content: h.content });
+    for (const h of historyMsgs) {
+      input.push({
+        role: h.role,
+        content: [{ type: "input_text", text: h.content }],
+      });
+    }
 
+    // current user (with optional image)
     if (hasImage && imageBuffer) {
       const dataUrl = bufToDataUrl(imageBuffer, imageMime);
 
-      const parts = [];
-      if (userMessageText) parts.push({ type: "text", text: userMessageText });
-      if (dataUrl) parts.push({ type: "image_url", image_url: { url: dataUrl } });
+      const contentParts = [];
+      contentParts.push({ type: "input_text", text: userMessageText || text || "Describe the issue." });
 
-      messages.push({
-        role: "user",
-        content: parts.length ? parts : [{ type: "text", text: userMessageText || "Analyze the image." }],
-      });
+      if (dataUrl) {
+        contentParts.push({ type: "input_image", image_url: dataUrl });
+      }
+
+      input.push({ role: "user", content: contentParts });
     } else {
-      messages.push({ role: "user", content: userMessageText || text || "Describe the issue." });
+      input.push({
+        role: "user",
+        content: [{ type: "input_text", text: userMessageText || text || "Describe the issue." }],
+      });
     }
 
-    const req = {
+    // 6) Responses API call (GPT-5)
+    const resp = await client.responses.create({
       model: chosenModel,
-      messages,
-      max_completion_tokens: MAX_COMPLETION_TOKENS,
-    };
+      input,
+      max_output_tokens: MAX_OUTPUT_TOKENS,
+    });
 
-    const resp = await createChatCompletionWithFallback(req);
-
-    const reply = safeStr(resp?.choices?.[0]?.message?.content).trim();
+    const reply = extractResponseText(resp);
 
     if (!reply) {
       return {
