@@ -11,9 +11,14 @@ import { toFile } from "openai/uploads";
 const OPENAI_KEY = process.env.OPENAI_API_KEY || process.env.OPENAI_KEY || "";
 const openai = new OpenAI({ apiKey: OPENAI_KEY });
 
-// ✅ Recommended defaults
-const MODEL_TEXT = process.env.MODEL_TEXT || "gpt-4o-mini";
-const MODEL_VISION = process.env.MODEL_VISION || "gpt-4o"; // better on images
+// ✅ Models (as you requested)
+const MODEL_TEXT = process.env.MODEL_TEXT || "gpt-5-mini";
+const MODEL_VISION = process.env.MODEL_VISION || "gpt-5-mini";
+
+// ✅ Audio transcription model (leave audio “best” path)
+// You asked: keep audio on 4o. The reliable approach is: transcribe with a 4o transcriber.
+const MODEL_TRANSCRIBE =
+  process.env.MODEL_TRANSCRIBE || "gpt-4o-mini-transcribe";
 
 const MAX_KNOWLEDGE_SNIPS = Number(process.env.MAX_KNOWLEDGE_SNIPS || 7);
 const MAX_SEARCH_RESULTS = Number(process.env.MAX_SEARCH_RESULTS || 5);
@@ -39,9 +44,26 @@ function hasSerperKey() {
 }
 
 // ------------------------
-// Search intent detection
+// History normalize (IMPORTANT)
+// Flutter sends: {role, text}
+// OpenAI messages expect: {role, content}
 // ------------------------
-// English-only keyword set.
+function normalizeHistory(history = []) {
+  if (!Array.isArray(history)) return [];
+  const out = [];
+  for (const m of history) {
+    const role = safeText(m?.role);
+    const content = safeText(m?.content ?? m?.text);
+    if (!role || !content) continue;
+    if (role !== "user" && role !== "assistant" && role !== "system") continue;
+    out.push({ role, content });
+  }
+  return out;
+}
+
+// ------------------------
+// Search intent detection (English-only keyword set)
+// ------------------------
 function isSearchIntent(text = "") {
   const t = String(text || "").toLowerCase().trim();
   if (!t) return false;
@@ -143,16 +165,13 @@ function extFromMime(mime = "") {
   if (m.includes("aac")) return "aac";
   if (m.includes("ogg")) return "ogg";
   if (m.includes("webm")) return "webm";
-  // audio/mp4, audio/m4a, audio/x-m4a, audio/caf -> treat as m4a
   return "m4a";
 }
 
 function normalizeAudioMime(mime = "") {
   const m = String(mime || "").toLowerCase().trim();
   if (!m) return "audio/mp4";
-  // iOS sometimes gives audio/x-m4a or audio/m4a
   if (m === "audio/m4a" || m === "audio/x-m4a") return "audio/mp4";
-  // caf isn't accepted directly by Whisper; upload as mp4 container
   if (m.includes("caf")) return "audio/mp4";
   return m;
 }
@@ -169,7 +188,7 @@ async function transcribeAudio({ audioBuffer, audioMime = "audio/mp4" }) {
   const file = await toFile(audioBuffer, filename, { type: mime });
 
   const tx = await openai.audio.transcriptions.create({
-    model: "whisper-1",
+    model: MODEL_TRANSCRIBE,
     file,
     response_format: "json",
   });
@@ -178,21 +197,21 @@ async function transcribeAudio({ audioBuffer, audioMime = "audio/mp4" }) {
 }
 
 // ------------------------
-// FIXLENS PRO System Prompt (format + language hard clamp)
+// FIXLENS PRO System Prompt (language + “smartness”)
 // ------------------------
 function buildProSystemPrompt(lang) {
-  // English-only code. The model will answer in the user's language via instructions.
   return [
     "You are FixLens Doctor Mechanic Pro — a calm, practical second-opinion mechanic.",
     "HARD RULE: Reply fully in the user's language. Never mix languages.",
+    `The user's language code is: ${lang}. Reply in that language.`,
     "Be professional, calm, and practical. Not dramatic. Not medical.",
     "Never give a final/absolute diagnosis; use probability language (likely/common/often).",
     "Provide at most 3 likely causes, ranked.",
-    'Always include a clearly labeled line: "Safe to drive?" with Yes/No + short reason + rule (short trip ok / avoid driving).',
+    "Always include one clear safety line (in the user's language): safe to drive or avoid driving + short reason.",
     "Give a practical next-step plan (3–6 steps) including ONE discriminating check.",
     "Ask at most ONE follow-up question, only if it truly changes the next step.",
-    "If the user asks for shops/addresses, use search snippets and provide EXACTLY 3 options formatted: Name — Address — (optional phone/website). Do not refuse.",
-    "Output format must be numbered and structured, not a single paragraph.",
+    "Avoid repeating the same phrasing every time; vary wording while keeping the structure.",
+    "Output must be numbered and structured, not a single paragraph.",
   ].join("\n");
 }
 
@@ -210,20 +229,14 @@ async function runDoctor({
   audioBuffer = null,
   audioMime = "audio/mp4",
   audioTranscript = "",
+  intakeAlreadyAsked = false, // ✅ NEW: passed from Flutter
 } = {}) {
   if (!OPENAI_KEY) return { ok: false, error: "NO_OPENAI_KEY", reply: "" };
 
   const lang = normalizeLocale(locale);
   const userText = safeText(text);
 
-  // 0) Session flag: did we already ask intake once?
-  const alreadyAskedIntake = Array.isArray(history)
-    ? history.some(
-        (m) =>
-          typeof m?.content === "string" &&
-          m.content.includes("[INTAKE_ALREADY_ASKED]")
-      )
-    : false;
+  const normHistory = normalizeHistory(history);
 
   // 1) Internal knowledge
   let knowledgeSnippets = [];
@@ -247,6 +260,15 @@ async function runDoctor({
 
   // 3) Transcribe audio if needed
   let transcript = safeText(audioTranscript);
+
+  // ✅ Force audio context to NOT become “car stereo”
+  const audioContextHint =
+    hasAudio
+      ? (lang === "ar"
+          ? "ملاحظة: هذا تسجيل لصوت/ضجة ميكانيكية من السيارة (وليس مشكلة نظام الصوت/الراديو)."
+          : "Note: this is a recording of mechanical/vehicle noise (NOT a stereo/speaker/radio issue).")
+      : "";
+
   if (hasAudio && !transcript && audioBuffer) {
     try {
       transcript = await transcribeAudio({ audioBuffer, audioMime });
@@ -255,37 +277,29 @@ async function runDoctor({
     }
   }
 
-  // 🔒 Language hard-hint (prevents mixed language especially in multimodal)
-  const languageHint =
-    lang === "ar"
-      ? "IMPORTANT: Respond fully in Arabic only. Do not use English words or headings."
-      : `IMPORTANT: Respond fully in ${lang}. Do not switch languages.`;
-
-  // 4) Build unified messages (doctorPrompt handles structure + intake logic)
+  // 4) Build unified messages
   const messagesFromPrompt = buildDoctorMessages({
-    history,
+    history: normHistory,
     locale: lang,
     text: userText,
     knowledgeSnippets: knowledgeClamped,
     searchSnippets: searchSnips,
     hasImage: Boolean(hasImage),
     hasAudio: Boolean(hasAudio),
-    audioTranscript: transcript,
-    alreadyAskedIntake,
+    audioTranscript: transcript ? `${audioContextHint}\n${transcript}` : audioContextHint,
+    alreadyAskedIntake: Boolean(intakeAlreadyAsked),
   });
 
-  // ✅ Inject our hard system prompt first
   const messages = [
     { role: "system", content: buildProSystemPrompt(lang) },
-    { role: "system", content: languageHint },
     ...messagesFromPrompt,
   ];
 
-  // 5) Call OpenAI (Vision if image exists)
   try {
     const modelToUse = hasImage && imageBuffer ? MODEL_VISION : MODEL_TEXT;
 
     let completion;
+
     if (
       hasImage &&
       imageBuffer &&
@@ -295,14 +309,15 @@ async function runDoctor({
       const b64 = imageBuffer.toString("base64");
       const mime = imageMime || "image/jpeg";
 
+      // keep the final user prompt + image
       const lastUser = messages[messages.length - 1];
       const userTextBlock =
         typeof lastUser?.content === "string" ? lastUser.content : userText;
 
       completion = await openai.chat.completions.create({
         model: modelToUse,
-        temperature: 0.35,
-        max_tokens: 700,
+        temperature: 0.55, // ✅ smarter / less repetitive
+        max_tokens: 850,
         messages: [
           ...messages.slice(0, -1),
           {
@@ -320,30 +335,16 @@ async function runDoctor({
     } else {
       completion = await openai.chat.completions.create({
         model: modelToUse,
-        temperature: 0.35,
-        max_tokens: 700,
+        temperature: 0.55, // ✅ smarter / less repetitive
+        max_tokens: 850,
         messages,
       });
     }
 
     let reply = safeText(completion?.choices?.[0]?.message?.content);
 
-    // ✅ extra guard: remove "I can't" style if it slips
-    if (/i can[’']?t|i cannot|unable to/i.test(reply)) {
-      reply = reply.replace(/i can[’']?t|i cannot|unable to/gi, "I");
-    }
-
-    // ✅ Mark intake as asked ONCE if the assistant asked it now
-    // (This prevents repeating the same intake question in every message.)
-    const askedIntakeNow =
-      /\b(year|make|model)\b/i.test(reply) ||
-      /when does it happen/i.test(reply) ||
-      /idle|accelerat|brak|turn|bump|highway/i.test(reply) ||
-      /سنة|موديل|طراز|متى يحدث|متى يصير|وقت ما يصير/i.test(reply);
-
-    if (askedIntakeNow && !alreadyAskedIntake) {
-      reply = `${reply}\n\n[INTAKE_ALREADY_ASKED]`;
-    }
+    // ✅ absolutely remove any accidental internal tags
+    reply = reply.replace(/\[INTAKE_ALREADY_ASKED\]/g, "").trim();
 
     return {
       ok: true,
@@ -359,7 +360,6 @@ async function runDoctor({
         hasAudio: Boolean(hasAudio),
         hasTranscript: Boolean(transcript),
         model: modelToUse,
-        alreadyAskedIntake: Boolean(alreadyAskedIntake),
       },
       transcript,
     };
@@ -371,6 +371,8 @@ async function runDoctor({
 export async function handleFixLensRequest(input = {}) {
   const locale = normalizeLocale(input?.locale || "en");
   const text = safeText(input?.text || input?.message || "");
+
+  // ✅ IMPORTANT: accept either normalized or raw history
   const history = Array.isArray(input?.history) ? input.history : [];
 
   const imageBuffer = input?.imageBuffer || null;
@@ -388,6 +390,9 @@ export async function handleFixLensRequest(input = {}) {
       (audioBuffer && Buffer.isBuffer(audioBuffer) && audioBuffer.length > 2000)
   );
 
+  // ✅ NEW: intake flag from Flutter (no server memory needed)
+  const intakeAlreadyAsked = Boolean(input?.intakeAlreadyAsked);
+
   const out = await runDoctor({
     locale,
     text,
@@ -399,6 +404,7 @@ export async function handleFixLensRequest(input = {}) {
     audioBuffer,
     audioMime,
     audioTranscript,
+    intakeAlreadyAsked,
   });
 
   if (!out?.ok) return { ok: false, error: out?.error || "UNKNOWN_ERROR", reply: "" };
