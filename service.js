@@ -1,52 +1,47 @@
-// استبدل دالة analyzeWithText بهذه النسخة المستقرة
+// ... (البداية كما هي: الاستيراد والإعدادات)
+
+// تأكد من وجود كلمة export هنا ليراها ملف server.js
+export async function handleFixLensRequest(req) {
+// الكود الذي أرسلته سابقاً...
+// تأكد من استدعاء الدوال الجديدة التي تستخدم Chat Completions
+if (imageFile?.buffer?.length) {
+const reply = await analyzeWithVision({ userText, locale, imageFile });
+return { ok: true, reply, locale, meta: { usedVision: true } };
+}
+
+const reply = await analyzeWithText({ userText, locale });
+return { ok: true, reply, locale, meta: { usedVision: false } };
+}
+
+// دالة النص (استخدم gpt-4o)
 async function analyzeWithText({ userText, locale }) {
 const system = buildDoctorSystemPrompt(locale);
-const model = process.env.FIXLENS_MODEL || "gpt-4o";
-
-try {
-const response = await client.chat.completions.create({
-model: model,
+const res = await client.chat.completions.create({
+model: "gpt-4o", // هذا هو المودل الأفضل حالياً
 messages: [
 { role: "system", content: system },
-{ role: "user", content: userText },
-],
-temperature: 0.7,
+{ role: "user", content: userText }
+]
 });
-
-const out = response.choices[0]?.message?.content || "";
-if (!out.trim()) throw new Error("Empty response from OpenAI");
-return out;
-} catch (err) {
-console.error("OpenAI Text Error:", err);
-throw err;
-}
+return res.choices[0].message.content;
 }
 
-// استبدل دالة analyzeWithVision بهذه النسخة
+// دالة الصور (استخدم gpt-4o)
 async function analyzeWithVision({ userText, locale, imageFile }) {
 const system = buildDoctorSystemPrompt(locale);
-const model = "gpt-4o"; // مودل 4o هو الأفضل للصور
 const b64 = imageFile.buffer.toString("base64");
-const mime = imageFile.mimetype || "image/jpeg";
-
-try {
-const response = await client.chat.completions.create({
-model: model,
+const res = await client.chat.completions.create({
+model: "gpt-4o",
 messages: [
 { role: "system", content: system },
 {
 role: "user",
 content: [
 { type: "text", text: userText },
-{ type: "image_url", image_url: { url: `data:${mime};base64,${b64}` } },
-],
-},
-],
-});
-
-return response.choices[0]?.message?.content || "";
-} catch (err) {
-console.error("OpenAI Vision Error:", err);
-throw err;
+{ type: "image_url", image_url: { url: `data:image/jpeg;base64,${b64}` } }
+]
 }
+]
+});
+return res.choices[0].message.content;
 }
