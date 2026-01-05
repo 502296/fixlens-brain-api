@@ -1,4 +1,3 @@
-// server.js
 import express from "express";
 import cors from "cors";
 import { handleFixLensRequest } from "./service.js";
@@ -62,18 +61,20 @@ async function processRequest(req, res) {
 
     const {
       text = "",
-      image = null, // { base64, mime } OR string base64
-      audio = null, // { base64, mime }
+      image = null,  // { base64, mime } OR string base64
+      audio = null,  // { base64, mime }
       locale = "en",
       history = [],
       sessionId = "",
       audioTranscript = "",
       intakeAlreadyAsked = false,
 
-      // optional model routing from Flutter
-      model = "", // preferred final model
+      // Optional model routing from Flutter
+      model = "",
       capability = "", // "text" | "vision" | "audio"
     } = body;
+
+    const normalizedLocale = normalizeLocale(locale);
 
     const imageObj =
       typeof image === "string"
@@ -87,35 +88,28 @@ async function processRequest(req, res) {
         ? { base64: audio.base64, mime: audio.mime || "audio/mp4" }
         : null;
 
-    const userText = typeof text === "string" ? text.trim() : "";
-    let safeTextFinal = userText;
-
-    // Minimal fallback prompt if user sent only image/audio without text
-    if (!safeTextFinal && audioObj) {
-      safeTextFinal =
-        "Analyze the attached engine/vehicle noise recording from a car. This is NOT a stereo/speaker/radio issue.";
-    } else if (!safeTextFinal && imageObj) {
-      safeTextFinal =
-        "Analyze the attached car photo and describe what it suggests.";
-    } else if (!safeTextFinal) {
-      safeTextFinal =
-        "Describe the problem briefly: symptoms, any warning lights, and when it happens.";
-    }
-
     const imageBuffer = imageObj ? b64ToBuffer(imageObj.base64) : null;
     const audioBuffer = audioObj ? b64ToBuffer(audioObj.base64) : null;
 
-    // avoid treating tiny/empty buffers as real audio
-    const hasAudioReal = Boolean(
-      audioBuffer && Buffer.isBuffer(audioBuffer) && audioBuffer.length > 2000
-    );
+    const hasImage = Boolean(imageBuffer && Buffer.isBuffer(imageBuffer) && imageBuffer.length > 10);
+    const hasAudioReal = Boolean(audioBuffer && Buffer.isBuffer(audioBuffer) && audioBuffer.length > 2000);
 
-    const normalizedLocale = normalizeLocale(locale);
+    let safeTextFinal = typeof text === "string" ? text.trim() : "";
 
-    // Decide defaults if client didn't send
+    // Minimal fallback prompt if user sent only image/audio without text
+    if (!safeTextFinal && hasAudioReal) {
+      safeTextFinal =
+        "Analyze the attached vehicle noise recording. This is NOT a stereo/speaker/radio issue.";
+    } else if (!safeTextFinal && hasImage) {
+      safeTextFinal = "Analyze the attached car photo and describe what it suggests.";
+    } else if (!safeTextFinal) {
+      safeTextFinal = "Describe the problem briefly: symptoms, warning lights, and when it happens.";
+    }
+
+    // Decide model if client didn't send it (safe defaults)
     const chosenCapability =
       safeStr(capability) ||
-      (hasAudioReal ? "audio" : imageBuffer ? "vision" : "text");
+      (hasAudioReal ? "audio" : hasImage ? "vision" : "text");
 
     const chosenModel =
       safeStr(model) ||
@@ -131,15 +125,15 @@ async function processRequest(req, res) {
       history: Array.isArray(history) ? history : [],
       sessionId: safeStr(sessionId),
 
-      hasImage: Boolean(imageBuffer),
+      hasImage,
       imageBuffer,
       imageMime: imageObj?.mime || "image/jpeg",
 
       hasAudio: hasAudioReal,
       audioBuffer,
       audioMime: audioObj?.mime || "audio/mp4",
-      audioTranscript: safeStr(audioTranscript),
 
+      audioTranscript: safeStr(audioTranscript),
       intakeAlreadyAsked: Boolean(intakeAlreadyAsked),
 
       model: chosenModel,
@@ -150,18 +144,16 @@ async function processRequest(req, res) {
       return res.status(500).json({
         ok: false,
         error: result?.error || "SERVER_ERROR",
-        reply: safeStr(result?.reply || ""),
+        reply: safeStr(result?.reply),
         language: normalizedLocale,
+        meta: result?.meta || {},
       });
     }
-
-    const outLanguage =
-      safeStr(result?.language) || normalizedLocale;
 
     return res.json({
       ok: true,
       reply: safeStr(result.reply),
-      language: outLanguage,
+      language: safeStr(result.language) || normalizedLocale,
       meta: {
         ...(result.meta || {}),
         model: chosenModel,
@@ -179,7 +171,7 @@ async function processRequest(req, res) {
   }
 }
 
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 8080;
 app.listen(PORT, () => {
   console.log(`FixLens Brain API running on port ${PORT}`);
 });
