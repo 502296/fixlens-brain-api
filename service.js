@@ -1,5 +1,4 @@
-
-// service.js — FixLens Brain API (FINAL, stable)
+// service.js — FixLens Brain API (PRO, stable, supports text+image+audio+search)
 import OpenAI from "openai";
 import { toFile } from "openai/uploads";
 
@@ -9,7 +8,7 @@ import { webSearchSerper } from "./lib/search.js";
 
 const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-// Models (good defaults)
+// Defaults
 const DEFAULT_TEXT_MODEL =
   process.env.FIXLENS_TEXT_MODEL || process.env.FIXLENS_MODEL || "gpt-5-mini";
 const DEFAULT_VISION_MODEL =
@@ -32,7 +31,10 @@ function normalizeLocale(locale = "en") {
 
 function openAIErrorToJSON(err) {
   const status = err?.status || err?.response?.status || err?.error?.status || 500;
-  const message = safeStr(err?.message) || safeStr(err?.error?.message) || "Unknown error";
+  const message =
+    safeStr(err?.message) ||
+    safeStr(err?.error?.message) ||
+    "Unknown error";
   const code = safeStr(err?.code) || safeStr(err?.error?.code) || "";
   const param = safeStr(err?.param) || safeStr(err?.error?.param) || "";
   const request_id =
@@ -41,22 +43,6 @@ function openAIErrorToJSON(err) {
     safeStr(err?.headers?.["x-request-id"]) ||
     "";
   return { status, message, code, param, request_id };
-}
-
-function pickBestOutputText(resp) {
-  try {
-    const out = resp?.output || [];
-    const chunks = [];
-    for (const item of out) {
-      const parts = item?.content || [];
-      for (const p of parts) {
-        if (p?.type === "output_text" && p?.text) chunks.push(p.text);
-      }
-    }
-    return chunks.join("").trim();
-  } catch {
-    return "";
-  }
 }
 
 function looksLikeSearchIntent(text) {
@@ -127,15 +113,16 @@ function bufToDataUrl(buffer, mime = "image/jpeg") {
   return `data:${mime};base64,${buffer.toString("base64")}`;
 }
 
-function buildHistoryParts(history = []) {
+function buildHistoryMessages(history = []) {
   const arr = Array.isArray(history) ? history : [];
   const last = arr.slice(-MAX_TURNS);
+
   return last
     .map((m) => {
       const role = m?.role === "assistant" ? "assistant" : "user";
-      const text = safeStr(m?.content || m?.text || "").trim();
-      if (!text) return null;
-      return { role, content: [{ type: "input_text", text }] };
+      const content = safeStr(m?.content || m?.text || "").trim();
+      if (!content) return null;
+      return { role, content };
     })
     .filter(Boolean);
 }
@@ -164,16 +151,11 @@ export async function handleFixLensRequest(payload = {}) {
      hasAudio ? DEFAULT_AUDIO_MODEL :
      DEFAULT_TEXT_MODEL);
 
-  const fallback =
-    locale === "ar"
-      ? "حصل خطأ بسيط أثناء التحليل. جرّب مرة ثانية بعد لحظة."
-      : "A small error happened while analyzing. Please try again in a moment.";
-
   try {
     // 1) Knowledge
     const kb = buildKnowledgeSnippets(text, { locale });
 
-    // 2) Audio transcript
+    // 2) Audio transcript (if any)
     const audioTranscript = await transcribeAudioIfNeeded({
       hasAudio,
       audioBuffer,
@@ -181,11 +163,12 @@ export async function handleFixLensRequest(payload = {}) {
       audioTranscript: payload.audioTranscript,
     });
 
-    // 3) Web search (optional)
+    // 3) Web search snippets (optional)
     const searchSnippets = looksLikeSearchIntent(text) ? await tryWebSearch(text, locale) : [];
 
-    // 4) Build doctor messages (no duplicated history inside prompt)
+    // 4) Build doctor sys+user from doctorPrompt.js (English prompt, multilingual output)
     const msgs = buildDoctorMessages({
+      locale,
       text,
       knowledgeSnippets: Array.isArray(kb) ? kb : (kb ? [String(kb)] : []),
       searchSnippets,
@@ -193,55 +176,53 @@ export async function handleFixLensRequest(payload = {}) {
       hasAudio,
       audioTranscript,
       alreadyAskedIntake: intakeAlreadyAsked,
-      extraRules: `
-Keep replies efficient and confident.
-Do not re-ask the intake question every message.
-If the user writes a second/third message, keep going normally.
-`,
+      history: history.map((m) => ({ role: m.role, content: m.content })),
     });
 
     const systemText = safeStr(msgs?.[0]?.content).trim();
     const userText = safeStr(msgs?.[1]?.content).trim();
 
-    const input = [];
+    // 5) Build Chat Completions messages (✅ avoids your 400 input_text error)
+    const chatMessages = [];
 
-    if (systemText) {
-      input.push({ role: "system", content: [{ type: "input_text", text: systemText }] });
-    }
+    if (systemText) chatMessages.push({ role: "system", content: systemText });
 
-    // Real conversation history (multi-turn)
-    input.push(...buildHistoryParts(history));
+    chatMessages.push(...buildHistoryMessages(history));
 
-    // Current user turn (text + image if any)
-    const userParts = [];
-    if (userText) userParts.push({ type: "input_text", text: userText });
-
+    // user message can include text + image
     if (hasImage && imageBuffer) {
       const dataUrl = bufToDataUrl(imageBuffer, imageMime);
-      if (dataUrl) userParts.push({ type: "input_image", image_url: { url: dataUrl } });
+      chatMessages.push({
+        role: "user",
+        content: [
+          { type: "text", text: userText || text || "" },
+          ...(dataUrl ? [{ type: "image_url", image_url: { url: dataUrl } }] : []),
+        ],
+      });
+    } else {
+      chatMessages.push({
+        role: "user",
+        content: userText || text || "",
+      });
     }
 
-    input.push({
-      role: "user",
-      content: userParts.length ? userParts : [{ type: "input_text", text: "" }],
-    });
-
-    // 5) OpenAI Responses API
-    const resp = await client.responses.create({
+    const completion = await client.chat.completions.create({
       model: chosenModel,
-      input,
-      max_output_tokens: MAX_OUTPUT_TOKENS,
+      messages: chatMessages,
+      max_tokens: MAX_OUTPUT_TOKENS,
+      temperature: 0.35,
     });
 
-    const reply = pickBestOutputText(resp);
+    const reply = safeStr(completion?.choices?.[0]?.message?.content).trim();
 
     if (!reply) {
       return {
         ok: false,
-        reply: fallback,
+        reply: locale === "ar"
+          ? "صار خطأ بسيط بتوليد الرد. جرّب مرة ثانية."
+          : "Small issue generating reply. Try again.",
         language: locale,
         error: { status: 500, message: "EMPTY_OUTPUT" },
-        meta: { model: chosenModel, usedSearch: Boolean(searchSnippets?.length) },
       };
     }
 
@@ -259,13 +240,10 @@ If the user writes a second/third message, keep going normally.
   } catch (err) {
     const e = openAIErrorToJSON(err);
     console.error("handleFixLensRequest error:", e);
-
-    return {
-      ok: false,
-      reply: fallback,
-      language: locale,
-      error: e,
-      meta: { model: chosenModel },
-    };
+    const fallback =
+      locale === "ar"
+        ? "حصل خطأ بسيط أثناء التحليل. جرّب مرة ثانية بعد لحظة."
+        : "Something went wrong while analyzing. Please try again in a moment.";
+    return { ok: false, reply: fallback, language: locale, error: e };
   }
 }
