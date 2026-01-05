@@ -1,259 +1,222 @@
 // service.js
-// FixLens Brain API — robust multimodal handler (text + image + audio)
-// Works with OpenAI Responses API payload format.
-
 import fs from "fs";
 import os from "os";
 import path from "path";
+import ffmpeg from "fluent-ffmpeg";
+import ffmpegPath from "ffmpeg-static";
+import OpenAI from "openai";
 
-const OPENAI_KEY = process.env.OPENAI_API_KEY;
-const FIXLENS_MODEL = process.env.FIXLENS_MODEL || "gpt-5.2-chat-latest";
+import { buildDoctorSystemPrompt, buildDoctorUserMessage } from "./doctorPrompt.js";
 
-function isArabicText(s = "") {
-  return /[\u0600-\u06FF]/.test(String(s));
+ffmpeg.setFfmpegPath(ffmpegPath);
+
+const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+
+function normalizeLocale(locale = "en") {
+  const l = String(locale || "en").trim();
+  if (!l) return "en";
+  return l.split("-")[0].toLowerCase();
 }
 
-function normalizeLocale(locale, text) {
-  const l = String(locale || "").trim().toLowerCase();
-  if (l) return l.split("-")[0];
-  if (isArabicText(text)) return "ar";
+function isProbablyArabic(s = "") {
+  return /[\u0600-\u06FF]/.test(s);
+}
+
+function stripDataUrl(b64 = "") {
+  const s = String(b64 || "");
+  const idx = s.indexOf("base64,");
+  return idx >= 0 ? s.slice(idx + "base64,".length) : s;
+}
+
+function ensureTempDir() {
+  const dir = path.join(os.tmpdir(), "fixlens");
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  return dir;
+}
+
+function writeTempFile(buffer, filenameHint = "file.bin") {
+  const dir = ensureTempDir();
+  const safe = filenameHint.replace(/[^\w.\-]+/g, "_");
+  const p = path.join(dir, `${Date.now()}_${safe}`);
+  fs.writeFileSync(p, buffer);
+  return p;
+}
+
+// Convert any audio to wav to satisfy supported formats reliably
+async function convertToWav(inputPath) {
+  const dir = ensureTempDir();
+  const outPath = path.join(dir, `${Date.now()}_audio.wav`);
+
+  await new Promise((resolve, reject) => {
+    ffmpeg(inputPath)
+      .outputOptions([
+        "-ac", "1",           // mono
+        "-ar", "16000",       // 16 kHz
+        "-f", "wav",
+      ])
+      .on("end", resolve)
+      .on("error", reject)
+      .save(outPath);
+  });
+
+  return outPath;
+}
+
+function toImageContentFromBase64(image_base64) {
+  if (!image_base64) return null;
+  const raw = stripDataUrl(image_base64);
+  if (!raw || raw.length < 50) return null;
+
+  // OpenAI chat supports "image_url" with data URL
+  // We'll assume jpeg if not specified
+  const isDataUrl = String(image_base64).startsWith("data:image/");
+  const dataUrl = isDataUrl ? String(image_base64) : `data:image/jpeg;base64,${raw}`;
+
+  return {
+    type: "image_url",
+    image_url: { url: dataUrl },
+  };
+}
+
+function safeUserLanguage({ locale, text }) {
+  // If locale is given, trust it. Else infer Arabic quickly.
+  const l = normalizeLocale(locale);
+  if (l && l !== "en") return l;
+  if (isProbablyArabic(text)) return "ar";
   return "en";
 }
 
-function safeStr(x) {
-  return typeof x === "string" ? x : "";
-}
+async function transcribeAudioFromBuffer(buffer, originalname = "audio.m4a") {
+  // Save original buffer to temp file
+  const inPath = writeTempFile(buffer, originalname);
 
-function buildDataUrl(base64, mime = "image/jpeg") {
-  // base64 may come with "data:*/*;base64,...." already
-  const b = String(base64 || "");
-  if (b.startsWith("data:")) return b;
-  return `data:${mime};base64,${b}`;
-}
+  // Convert to wav to avoid "Invalid file format"
+  const wavPath = await convertToWav(inPath);
 
-async function callOpenAIResponses({ model, input, temperature = 0.2, max_output_tokens = 600 }) {
-  const r = await fetch("https://api.openai.com/v1/responses", {
-    method: "POST",
-    headers: {
-      "Authorization": `Bearer ${OPENAI_KEY}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model,
-      input,
-      temperature,
-      max_output_tokens,
-    }),
+  // Transcribe
+  const fileStream = fs.createReadStream(wavPath);
+  const model = process.env.OPENAI_MODEL_TRANSCRIBE || "gpt-4o-transcribe";
+
+  const tr = await client.audio.transcriptions.create({
+    file: fileStream,
+    model,
   });
 
-  const json = await r.json().catch(() => ({}));
-  if (!r.ok) {
-    const msg = json?.error?.message || `OpenAI error ${r.status}`;
-    const err = new Error(msg);
-    err.status = r.status;
-    err.body = json;
-    throw err;
-  }
-  return json;
+  // Cleanup (best effort)
+  try { fs.unlinkSync(inPath); } catch {}
+  try { fs.unlinkSync(wavPath); } catch {}
+
+  return (tr?.text || "").trim();
 }
 
-function extractOutputText(respJson) {
-  // Responses API returns output items; gather output_text parts.
-  const out = respJson?.output || [];
-  let text = "";
+async function buildChatCompletion({ locale, text, transcript, imageContent }) {
+  const sys = buildDoctorSystemPrompt();
+  const userLang = safeUserLanguage({ locale, text: text || transcript || "" });
 
-  for (const item of out) {
-    const content = item?.content || [];
-    for (const c of content) {
-      if (c?.type === "output_text" && typeof c?.text === "string") {
-        text += c.text;
-      }
-    }
-  }
+  const model = process.env.OPENAI_MODEL_TEXT || "gpt-4o";
 
-  // fallback (some SDKs expose resp.output_text)
-  if (!text && typeof respJson?.output_text === "string") text = respJson.output_text;
-
-  return (text || "").trim();
-}
-
-async function transcribeAudioToText({ base64Audio, filename = "audio.m4a", mimeType = "audio/m4a" }) {
-  const clean = String(base64Audio || "").replace(/^data:.*;base64,/, "");
-  const buf = Buffer.from(clean, "base64");
-
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "fixlens-"));
-  const filePath = path.join(tmpDir, filename);
-  fs.writeFileSync(filePath, buf);
-
-  const ext = path.extname(filename).toLowerCase().replace(".", "");
-  const allowed = new Set(["flac", "m4a", "mp3", "mp4", "mpeg", "mpga", "oga", "ogg", "wav", "webm"]);
-  if (ext && !allowed.has(ext)) {
-    // cleanup
-    try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
-    const e = new Error(`UNSUPPORTED_AUDIO_FORMAT:${ext || "unknown"}`);
-    e.status = 400;
-    throw e;
-  }
-
-  // multipart/form-data (native fetch FormData in Node 18+)
-  const fd = new FormData();
-  fd.append("model", "gpt-4o-mini-transcribe"); // transcription model
-  fd.append("file", new Blob([buf], { type: mimeType }), filename);
-
-  const r = await fetch("https://api.openai.com/v1/audio/transcriptions", {
-    method: "POST",
-    headers: { "Authorization": `Bearer ${OPENAI_KEY}` },
-    body: fd,
+  const userText = buildDoctorUserMessage({
+    text,
+    transcript,
+    hasImage: !!imageContent,
+    hasAudio: !!transcript,
   });
 
-  const json = await r.json().catch(() => ({}));
-  // cleanup
-  try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
-
-  if (!r.ok) {
-    const msg = json?.error?.message || `Transcription error ${r.status}`;
-    const err = new Error(msg);
-    err.status = r.status;
-    err.body = json;
-    throw err;
-  }
-
-  return (json?.text || "").trim();
-}
-
-/**
- * Main handler used by server.js
- * Expected payload from Flutter:
- * {
- *   text: string,
- *   locale: string,
- *   image_base64?: string, image_mime?: string,
- *   image_url?: string,
- *   audio_base64?: string, audio_filename?: string, audio_mime?: string
- * }
- */
-export async function handleFixLensRequest(payload = {}) {
-  if (!OPENAI_KEY) {
-    const e = new Error("Missing OPENAI_API_KEY");
-    e.status = 500;
-    throw e;
-  }
-
-  const userText = safeStr(payload.text);
-  const locale = normalizeLocale(payload.locale, userText);
-
-  // 1) Prepare multimodal user content
   const userContent = [];
+  userContent.push({ type: "text", text: userText });
+  if (imageContent) userContent.push(imageContent);
 
-  // Always include text first (so model gets context)
-  if (userText) {
-    userContent.push({ type: "input_text", text: userText });
-  } else {
-    userContent.push({
-      type: "input_text",
-      text: locale === "ar"
-        ? "اكتب وصف المشكلة (سنة/موديل + الأعراض + متى تظهر)."
-        : "Describe the problem (year/make/model + symptoms + when it happens).",
-    });
-  }
-
-  // Image (either base64 or URL)
-  if (payload.image_base64) {
-    const mime = safeStr(payload.image_mime) || "image/jpeg";
-    const dataUrl = buildDataUrl(payload.image_base64, mime);
-    userContent.push({ type: "input_image", image_url: dataUrl, detail: "low" });
-  } else if (payload.image_url) {
-    userContent.push({ type: "input_image", image_url: safeStr(payload.image_url), detail: "low" });
-  }
-
-  // Audio → transcribe then add transcript as input_text
-  if (payload.audio_base64) {
-    try {
-      const transcript = await transcribeAudioToText({
-        base64Audio: payload.audio_base64,
-        filename: safeStr(payload.audio_filename) || "audio.m4a",
-        mimeType: safeStr(payload.audio_mime) || "audio/m4a",
-      });
-
-      if (transcript) {
-        userContent.push({
-          type: "input_text",
-          text: locale === "ar"
-            ? `تفريغ الصوت (Transcript):\n${transcript}`
-            : `Audio transcript:\n${transcript}`,
-        });
-      }
-    } catch (err) {
-      // If unsupported format (like .caf), tell user clearly instead of crashing.
-      const msg = String(err?.message || "");
-      if (msg.startsWith("UNSUPPORTED_AUDIO_FORMAT")) {
-        const ext = msg.split(":")[1] || "unknown";
-        userContent.push({
-          type: "input_text",
-          text: locale === "ar"
-            ? `ملاحظة تقنية: ملف الصوت بصيغة غير مدعومة (${ext}). سجّل الصوت بصيغة m4a أو wav ثم أعد الإرسال.`
-            : `Tech note: audio format not supported (${ext}). Please record as m4a or wav and resend.`,
-        });
-      } else {
-        userContent.push({
-          type: "input_text",
-          text: locale === "ar"
-            ? `ملاحظة: تعذر تفريغ الصوت حالياً. أكمل التشخيص بالوصف النصي.`
-            : `Note: audio transcription failed right now. We'll continue using text description.`,
-        });
-      }
-    }
-  }
-
-  // 2) System rules (FixLens Doctor style) — keep EN only, but obey user's language
-  const system = `
-You are FixLens — a calm, professional second-opinion assistant for car problems.
-
-Mission:
-Reduce confusion and unnecessary spending. Be practical, not showy.
-
-Language:
-- ALWAYS reply in the user's language.
-- If the user writes Arabic, reply in Arabic.
-- Never switch languages (do not answer in Spanish unless the user wrote Spanish).
-
-Rules:
-1) Never give an absolute diagnosis. Use probability language (likely, common, often).
-2) List at most 3 likely causes.
-3) Always say whether it seems safe to keep driving right now.
-4) Ask at most ONE follow-up question, only if it meaningfully changes next steps.
-5) If image/audio is provided, incorporate it. Do NOT say you "can't analyze photos" unless no image was actually provided to you.
-
-Style:
-Short, human, confident, calm. No long essays.
-`.trim();
-
-  // 3) Call OpenAI Responses API with correct input shape (message + content)
-  const input = [
-    { role: "system", content: [{ type: "input_text", text: system }] },
-    { role: "user", content: userContent },
-  ];
-
-  const resp = await callOpenAIResponses({
-    model: FIXLENS_MODEL,
-    input,
-    temperature: 0.25,
-    max_output_tokens: 700,
+  const resp = await client.chat.completions.create({
+    model,
+    temperature: 0.4,
+    messages: [
+      { role: "system", content: sys },
+      // Force language consistency using a small hint
+      { role: "system", content: `Reply language must be: ${userLang}` },
+      { role: "user", content: userContent },
+    ],
   });
 
-  const answer = extractOutputText(resp);
+  const reply = resp?.choices?.[0]?.message?.content?.trim() || "";
+  return { reply, language: userLang };
+}
 
-  if (!answer) {
-    const e = new Error("Empty model response");
-    e.status = 502;
-    e.body = resp;
-    throw e;
+export async function handleFixLensRequest(payload) {
+  const locale = normalizeLocale(payload?.locale || "en");
+  const text = typeof payload?.text === "string" ? payload.text : "";
+
+  // Image: multipart or base64
+  let imageContent = null;
+
+  if (payload?.image_file?.buffer) {
+    // convert multipart image buffer to base64 data url
+    const mime = payload.image_file.mimetype || "image/jpeg";
+    const b64 = payload.image_file.buffer.toString("base64");
+    imageContent = {
+      type: "image_url",
+      image_url: { url: `data:${mime};base64,${b64}` },
+    };
+  } else {
+    imageContent = toImageContentFromBase64(payload?.image_base64);
   }
+
+  // Audio: multipart or base64
+  let transcript = "";
+  try {
+    if (payload?.audio_file?.buffer) {
+      transcript = await transcribeAudioFromBuffer(
+        payload.audio_file.buffer,
+        payload.audio_file.originalname || "audio.m4a"
+      );
+    } else if (payload?.audio_base64) {
+      const raw = stripDataUrl(payload.audio_base64);
+      const buf = Buffer.from(raw, "base64");
+      const name = payload?.audio_filename || "audio.m4a";
+      transcript = await transcribeAudioFromBuffer(buf, name);
+    }
+  } catch (e) {
+    // Do not fail the whole request because audio failed
+    console.error("Audio transcribe error:", e?.message || e);
+    transcript = "";
+  }
+
+  // If nothing provided
+  if (!text.trim() && !transcript.trim() && !imageContent) {
+    return {
+      reply:
+        locale === "ar"
+          ? "اكتب المشكلة باختصار (سنة السيارة + الموديل + الأعراض + متى تظهر)."
+          : "Please type the issue (year + make/model + symptoms + when it happens).",
+      language: locale,
+      meta: { hadText: false, hadAudio: false, hadImage: false },
+    };
+  }
+
+  // Build response
+  const out = await buildChatCompletion({
+    locale,
+    text,
+    transcript,
+    imageContent,
+  });
+
+  // Safety fallback if empty
+  const finalReply =
+    out.reply && out.reply.length > 3
+      ? out.reply
+      : locale === "ar"
+      ? "صارت مشكلة بسيطة بالتحليل. اكتب الأعراض مرة ثانية بجملة واحدة وسأعطيك تشخيصًا عمليًا فورًا."
+      : "There was a small analysis issue. Please retry with one short sentence and I’ll respond immediately.";
 
   return {
-    ok: true,
-    locale,
-    model: FIXLENS_MODEL,
-    reply: answer,
+    reply: finalReply,
+    language: out.language,
+    meta: {
+      model_text: process.env.OPENAI_MODEL_TEXT || "gpt-4o",
+      model_transcribe: process.env.OPENAI_MODEL_TRANSCRIBE || "gpt-4o-transcribe",
+      hadText: !!text.trim(),
+      hadAudio: !!transcript.trim(),
+      hadImage: !!imageContent,
+    },
   };
 }
