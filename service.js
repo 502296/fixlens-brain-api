@@ -12,7 +12,7 @@ const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 * Fixes: Variable naming and supported file extensions.
 */
 async function transcribeAudio(audioBase64) {
-// استخدام امتداد .m4a لضمان التوافق العالمي
+// استخدام امتداد .m4a لضمان التوافق العالمي وقبوله في OpenAI
 const tempPath = path.join("/tmp", `voice_${Date.now()}.m4a`);
 try {
 fs.writeFileSync(tempPath, Buffer.from(audioBase64, "base64"));
@@ -34,11 +34,11 @@ if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
 */
 export async function handleFixLensRequest(req) {
 try {
-// تصحيح استلام المتغيرات لضمان التوافق مع تطبيق الموبايل
+// تصحيح استلام المتغيرات لضمان التوافق مع تطبيق الموبايل وسجلات الخطأ
 let {
 text = "",
 image_base64,
-audio_base64, // الاسم الصحيح ليتوافق مع سجلات الخطأ
+audio_base64, // تم تعديل التسمية هنا لتطابق السجلات المرسلة من Flutter
 history = [],
 user_location = "Global"
 } = req.body;
@@ -58,7 +58,7 @@ if (searchIntents.some(k => text.toLowerCase().includes(k))) {
 searchResults = await performSearch(text, user_location);
 }
 
-// 3. بناء السياق النهائي المحترف
+// 3. بناء السياق النهائي المحترف (Master Brain)
 const finalPayload = `
 [GLOBAL_PROTOCOL]: Professional Master Mechanic Analysis.
 [REGION]: ${user_location}
@@ -80,7 +80,7 @@ content: image_base64 ? [
 ] : finalPayload
 }
 ],
-temperature: 0.3, // دقة تقنية عالية
+temperature: 0.3, // دقة تقنية عالية لضمان جودة الردود المدفوعة
 max_tokens: 1000
 });
 
