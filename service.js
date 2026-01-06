@@ -7,10 +7,6 @@ import { performSearch } from "./search.js";
 
 const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-/**
-* Super Smart Voice Engine
-* Injects audio as a high-priority technical observation.
-*/
 async function transcribeAudio(audioBase64) {
 const tempPath = path.join("/tmp", `audio_${Date.now()}.mp3`);
 try {
@@ -21,16 +17,12 @@ model: "whisper-1",
 });
 return result.text;
 } catch (err) {
-console.error("Audio Engine Error:", err);
 return null;
 } finally {
 if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
 }
 }
 
-/**
-* Main FixLens Request Handler
-*/
 export async function handleFixLensRequest(req) {
 try {
 let {
@@ -42,49 +34,43 @@ history = [],
 user_location = "USA"
 } = req.body;
 
-// 1. Professional Voice Injection
-// جعلنا الصوت يظهر كـ "ملاحظة فنية مسموعة" ليعطيه النظام اهتماماً أكبر من النص العادي
+// 1. عزل الصوت وحقنه كأولوية قصوى (Priority Injection)
 if (audio_base64) {
 const voiceText = await transcribeAudio(audio_base64);
 if (voiceText) {
-text = `[AUDITORY EVIDENCE]: User described or recorded this symptom: "${voiceText}". Analyze this sound/description with priority. ${text}`.trim();
+// نضع الصوت في المقدمة ليكون هو المحرك الأساسي للتحليل
+text = `PRIMARY AUDIO EVIDENCE: "${voiceText}". ${text}`.trim();
 }
 }
 
-// 2. Knowledge & Local Search
-const internalKB = buildKnowledgeSnippets(text);
+// 2. تقليل حجم التاريخ لتسريع الشبكة (Optimization)
+const shortHistory = history.slice(-3);
 
-let searchResults = "";
-const searchKeywords = ["shop", "repair", "parts", "ورشة", "محل", "ميكانيكي"];
-if (searchKeywords.some(k => text.toLowerCase().includes(k))) {
-searchResults = await performSearch(text, user_location);
-}
-
-// 3. Smart Formatting Instructions
-// هنا نقوم بحقن تعليمات التنسيق واللغة داخل الـ Payload لضمان أناقة العناوين وترجمتها
-const smartInstructions = `
-IMPORTANT FORMATTING:
-- Translate all headers to the user's language (e.g., if the user speaks Arabic, headers must be in Arabic).
-- Style: Use a clean single dash '-' or simple bold text for headers. Avoid excessive stars '***'.
-- Header Names: "Immediate Analysis", "Recommended Action Steps", "Pro-Tip".
+// 3. تعليمات الأناقة واللغة (No Stars Policy)
+const styleGuide = `
+STRICT UI RULES:
+- Use ONLY single dashes (-) for lists.
+- Use plain bold text for headers.
+- NO excessive stars or triple bold (***).
+- Headers must be in the USER'S LANGUAGE.
+- Format: Header Name: content.
 `;
 
 const finalPayload = `
-${smartInstructions}
-Region: ${user_location}
+${styleGuide}
+Location Context: ${user_location}
 Input Analysis: ${text}
-Technical Context: ${internalKB}
-Local Availability: ${searchResults}
+Manual Data: ${buildKnowledgeSnippets(text)}
+Local Shops: ${await performSearch(text, user_location)}
 `.trim();
 
-// 4. Send to GPT-4o
 if (image_base64) {
-return await analyzeWithVision(finalPayload, locale, image_base64, history);
+return await analyzeWithVision(finalPayload, locale, image_base64, shortHistory);
 }
-return await analyzeWithText(finalPayload, locale, history);
+return await analyzeWithText(finalPayload, locale, shortHistory);
 
 } catch (error) {
-console.error("FixLens Service Exception:", error);
+console.error("FixLens Error:", error);
 throw error;
 }
 }
@@ -97,7 +83,8 @@ messages: [
 ...history,
 { role: "user", content: payload },
 ],
-temperature: 0.4,
+temperature: 0.3,
+max_tokens: 800, // تسريع وقت الاستجابة
 });
 return { ok: true, reply: response.choices[0].message.content };
 }
@@ -116,6 +103,7 @@ content: [
 ],
 },
 ],
+max_tokens: 800,
 });
 return { ok: true, reply: response.choices[0].message.content };
 }
