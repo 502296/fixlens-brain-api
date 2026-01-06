@@ -8,7 +8,8 @@ import { performSearch } from "./search.js";
 const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 /**
-* Helper: Transcribe Audio using OpenAI Whisper
+* Super Smart Voice Injection
+* Logic: Transcribes audio then injects it as a primary user observation.
 */
 async function transcribeAudio(audioBase64) {
 const tempPath = path.join("/tmp", `voice_${Date.now()}.mp3`);
@@ -20,18 +21,13 @@ model: "whisper-1",
 });
 return result.text;
 } catch (err) {
-console.error("Transcription Error:", err);
+console.error("Audio Engine Error:", err);
 return null;
 } finally {
-if (fs.existsSync(tempPath)) {
-fs.unlinkSync(tempPath);
-}
+if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
 }
 }
 
-/**
-* Core Request Handler for FixLens
-*/
 export async function handleFixLensRequest(req) {
 try {
 let {
@@ -43,52 +39,44 @@ history = [],
 user_location = "USA"
 } = req.body;
 
-// 1. Audio Processing: Convert voice to text if present
+// Smart Audio Injection: Prioritizing the sound of the engine/issue
 if (audio_base64) {
-const voiceText = await transcribeAudio(audio_base64);
-if (voiceText) {
-text = `${text} [Voice Note]: ${voiceText}`.trim();
+const voiceNoteText = await transcribeAudio(audio_base64);
+if (voiceNoteText) {
+text = `[Auditory Observation]: ${voiceNoteText}. ${text}`.trim();
 }
 }
 
-// 2. Data Retrieval: Local RAG + Intelligent Web Search
+// Knowledge Retrieval
 const internalKB = buildKnowledgeSnippets(text);
 
+// Global & Local Search Compatibility
 let searchResults = "";
-const searchKeywords = ["shop", "workshop", "parts", "repair", "محل", "ورشة", "ميكانيكي"];
-const needsSearch = searchKeywords.some(kw => text.toLowerCase().includes(kw));
+const needsLocalHelp = ["shop", "repair", "parts", "mechanic", "ورشة", "محل"].some(k => text.toLowerCase().includes(k));
 
-if (needsSearch) {
+if (needsLocalHelp) {
 searchResults = await performSearch(text, user_location);
 }
 
-// 3. Final Context Construction (No messy headers)
-const finalContext = `
-User Location: ${user_location}
-Current Query: ${text}
-
-Technical Context:
-${internalKB}
-
-Local Search Results:
-${searchResults}
+const finalPayload = `
+User Region: ${user_location}
+Input Analysis: ${text}
+Technical Database: ${internalKB}
+Local Availability: ${searchResults}
 `.trim();
 
-// 4. Execution: Select Vision or Text model based on input
+// Call GPT-4o with Neutral "Assessment" terminology for Apple compliance
 if (image_base64) {
-return await analyzeWithVision(finalContext, locale, image_base64, history);
+return await analyzeWithVision(finalPayload, locale, image_base64, history);
 }
-return await analyzeWithText(finalContext, locale, history);
+return await analyzeWithText(finalPayload, locale, history);
 
 } catch (error) {
-console.error("FixLens Service Error:", error);
+console.error("FixLens Service Exception:", error);
 throw error;
 }
 }
 
-/**
-* Text-only Diagnosis
-*/
 async function analyzeWithText(payload, locale, history) {
 const response = await client.chat.completions.create({
 model: "gpt-4o",
@@ -97,14 +85,11 @@ messages: [
 ...history,
 { role: "user", content: payload },
 ],
-temperature: 0.5, // Lower temperature for more consistent diagnostic facts
+temperature: 0.4, // Precise facts
 });
 return { ok: true, reply: response.choices[0].message.content };
 }
 
-/**
-* Image + Text Diagnosis
-*/
 async function analyzeWithVision(payload, locale, base64Image, history) {
 const response = await client.chat.completions.create({
 model: "gpt-4o",
@@ -115,11 +100,10 @@ messages: [
 role: "user",
 content: [
 { type: "text", text: payload },
-{ type: "image_url", image_url: { url: `data:image/jpeg;base64,${base64Image}`, detail: "high" } },
+{ type: "image_url", image_url: { url: `data:image/jpeg;base64,${base64Image}` } },
 ],
 },
 ],
-max_tokens: 1000,
 });
 return { ok: true, reply: response.choices[0].message.content };
 }
