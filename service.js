@@ -1,64 +1,66 @@
-// service.js - Ultra-Logic Update
+// service.js - Ultra-Logic Final Version
 import OpenAI from "openai";
 import { buildDoctorSystemPrompt } from "./doctorPrompt.js";
 import { performSearch } from "./search.js";
-// ... بقية الاستيرادات ...
+import * as autoKB from "./lib/autoKnowledge.js";
 
-async function transcribeAudio(audioBase64) {
-if (!audioBase64) return "";
-// ... كود الحفظ المؤقت ...
-const result = await client.audio.transcriptions.create({
-file: fs.createReadStream(tempPath),
-model: "whisper-1",
-// 💡 إجبار الموديل على المصطلحات الميكانيكية فقط
-prompt: "Car engine diagnostic: rod knock, fan belt squeal, lifter tick, turbo lag, misfire, suspension noise."
-});
-return result.text;
-}
+const getAutoKnowledge = autoKB.getAutoKnowledge || null;
+const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 export async function handleFixLensRequest(req) {
 try {
-const { text = "", image_base_64, audio_base_64, user_location = "Louisville, KY" } = req.body;
+const { text = "", image_base_64 = null, audio_base_64 = null, user_location = "Louisville, KY", history = [] } = req.body;
 
-const voiceText = await transcribeAudio(audio_base_64);
-const combinedInput = `${text} ${voiceText}`.trim();
+// 1. معالجة البحث - لن يتم مسحه أبداً كما طلبت
+let searchResults = "";
+if (text.includes("ورشة") || text.includes("shop") || text.includes("عنوان")) {
+searchResults = await performSearch(text, user_location);
+}
 
-// ✅ بقاء الـ Search كما هو بقوته الأصلية (لا يلمس)
-let searchResults = await (combinedInput.includes("ورشة") ? performSearch(combinedInput, user_location) : Promise.resolve(""));
-
+// 2. بناء المحتوى بذكاء خارق (Super Smart Context)
 const messageContent = [
 {
 type: "text",
-text: `STRICT MECHANICAL CONTEXT: Every input is from a CAR.
-USER_INPUT: ${combinedInput}
-LOCATION: ${user_location}
-SEARCH_DATA: ${searchResults}`
+text: `STRICT MECHANICAL IDENTITY: You are a World-Class Master Mechanic.
+Analyze all visual and auditory inputs as VEHICLE COMPONENTS only.
+USER_INPUT: ${text}
+LOCAL_SEARCH: ${searchResults}
+USER_LOCATION: ${user_location}`
 }
 ];
 
+// 3. معالجة الصورة بدقة دكتوراه ميكانيك
 if (image_base_64) {
 messageContent.push({
 type: "image_url",
 image_url: { url: `data:image/jpeg;base64,${image_base_64}`, detail: "high" }
 });
-// 💡 إجبار الموديل على رؤية الصورة كقطعة سيارة حصراً
 messageContent.push({
 type: "text",
-text: "VISUAL DIAGNOSIS: This is a car part. Identify it and find the mechanical fault (leaks, cracks, wear)."
+text: "VISUAL DIAGNOSIS TASK: This is a car part. Identify it and pinpoint leaks, cracks, or electrical faults."
 });
 }
 
+// 4. استدعاء الموديل بأقوى Prompt عالمي
 const response = await client.chat.completions.create({
 model: "gpt-4o",
 messages: [
 { role: "system", content: buildDoctorSystemPrompt() },
+...history.slice(-2),
 { role: "user", content: messageContent }
 ],
-temperature: 0.1 // 💡 دقة جراحية لمنع التخيلات
+temperature: 0.1 // دقة جراحية
 });
 
-return { ok: true, reply: response.choices[0].message.content };
+const reply = response.choices[0].message.content;
+
+// منع الرد الفارغ
+if (!reply) throw new Error("AI generated an empty response");
+
+return { ok: true, reply: reply };
+
 } catch (error) {
-return { ok: false, error: "System Error. Please retry." };
+console.error("Critical FixLens Error:", error.message);
+return { ok: false, reply: "عذراً، حدث خطأ فني في معالجة طلبك. يرجى المحاولة مرة أخرى." };
 }
 }
