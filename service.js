@@ -8,28 +8,36 @@ const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 export async function handleFixLensRequest(req) {
 try {
-let { text = "", locale, image_base64, audio_base64 } = req.body;
+// Added 'history' to the destructuring to receive past messages from your local storage
+let { text = "", locale, image_base64, audio_base64, history = [] } = req.body;
 
-// 1. أذن الدكتور (Whisper)
+// 1. Voice Transcription (Whisper)
 if (audio_base64) {
 const voiceText = await transcribeAudio(audio_base64);
 if (voiceText) text = `${text} [User Voice Note]: ${voiceText}`.trim();
 }
 
-// 2. كشف اللغة التلقائي
+// 2. Smart Language & Context Detection
+// We let GPT-4o handle the dialect, we just pass the hint
 if (!locale || locale === "auto") {
 locale = /[\u0600-\u06FF]/.test(text) ? "ar" : "en";
 }
 
-// 3. البحث العالمي والمحلي (RAG)
+// 3. RAG (Internal Database)
 const kb = buildKnowledgeSnippets(text);
-const finalPrompt = `User Query: ${text}\n\n[SYSTEM DATABASE]:\n${kb}\n\nAnalyze all inputs (Text/Voice/Image) and respond as Dr. FixLens.`;
+const finalUserPrompt = `
+[CONSULTATION DETAILS]:
+User Input: ${text}
+[INTERNAL KNOWLEDGE BASE]:
+${kb}
 
-// 4. التشخيص (Vision or Text)
+Please generate the Professional Diagnostic Report.`;
+
+// 4. Execution (Vision or Text) with History Integration
 if (image_base64) {
-return await analyzeWithVision(finalPrompt, locale, image_base64);
+return await analyzeWithVision(finalUserPrompt, locale, image_base64, history);
 }
-return await analyzeWithText(finalPrompt, locale);
+return await analyzeWithText(finalUserPrompt, locale, history);
 
 } catch (error) {
 console.error("FixLens Service Error:", error);
@@ -37,36 +45,24 @@ throw error;
 }
 }
 
-async function transcribeAudio(audioBase64) {
-const tempPath = path.join("/tmp", `voice_${Date.now()}.mp3`);
-try {
-fs.writeFileSync(tempPath, Buffer.from(audioBase64, "base64"));
-const result = await client.audio.transcriptions.create({
-file: fs.createReadStream(tempPath),
-model: "whisper-1",
-});
-return result.text;
-} finally {
-if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
-}
-}
-
-async function analyzeWithText(userText, locale) {
+async function analyzeWithText(userText, locale, history) {
 const response = await client.chat.completions.create({
 model: "gpt-4o",
 messages: [
-{ role: "system", content: buildDoctorSystemPrompt(locale) },
+{ role: "system", content: buildDoctorSystemPrompt(locale, history) },
+...history, // This inserts the local history from the mobile device
 { role: "user", content: userText },
 ],
 });
 return { ok: true, reply: response.choices[0].message.content };
 }
 
-async function analyzeWithVision(userText, locale, base64Image) {
+async function analyzeWithVision(userText, locale, base64Image, history) {
 const response = await client.chat.completions.create({
 model: "gpt-4o",
 messages: [
-{ role: "system", content: buildDoctorSystemPrompt(locale) },
+{ role: "system", content: buildDoctorSystemPrompt(locale, history) },
+...history,
 {
 role: "user",
 content: [
@@ -78,3 +74,5 @@ content: [
 });
 return { ok: true, reply: response.choices[0].message.content };
 }
+
+// TranscribeAudio remains the same as your original code...
