@@ -34,76 +34,56 @@ history = [],
 user_location = "USA"
 } = req.body;
 
-// 1. عزل الصوت وحقنه كأولوية قصوى (Priority Injection)
+// 1. معالجة وحقن الصوت في المقدمة (Priority Injection)
 if (audio_base64) {
 const voiceText = await transcribeAudio(audio_base64);
 if (voiceText) {
-// نضع الصوت في المقدمة ليكون هو المحرك الأساسي للتحليل
-text = `PRIMARY AUDIO EVIDENCE: "${voiceText}". ${text}`.trim();
+// نضع النص الصوتي في البداية ليعرف الموديل أنه أهم جزء
+text = `CRITICAL SOUND ANALYSIS: "${voiceText}". ${text}`.trim();
 }
 }
 
-// 2. تقليل حجم التاريخ لتسريع الشبكة (Optimization)
-const shortHistory = history.slice(-3);
+// 2. تحسين السرعة عبر تقليل الـ History (Speed Optimization)
+const shortHistory = history.slice(-2);
 
-// 3. تعليمات الأناقة واللغة (No Stars Policy)
-const styleGuide = `
-STRICT UI RULES:
-- Use ONLY single dashes (-) for lists.
-- Use plain bold text for headers.
-- NO excessive stars or triple bold (***).
-- Headers must be in the USER'S LANGUAGE.
-- Format: Header Name: content.
+// 3. تعليمات الأناقة واللغة (No Spanish / No Stars Policy)
+const strictStyleGuide = `
+STRICT SYSTEM RULES:
+- LANGUAGE: Respond ONLY in the language used by the user in the prompt. Do not switch to Spanish unless the user speaks Spanish.
+- VISUAL STYLE: Use a clean, elegant layout.
+- NO excessive stars (***) or heavy bolding.
+- Use simple dashes (-) for lists.
+- HEADERS: Translate headers like "Immediate Analysis" to the user's current language.
 `;
 
 const finalPayload = `
-${styleGuide}
-Location Context: ${user_location}
-Input Analysis: ${text}
-Manual Data: ${buildKnowledgeSnippets(text)}
-Local Shops: ${await performSearch(text, user_location)}
+${strictStyleGuide}
+Context: ${user_location}
+Input to Analyze: ${text}
+Technical Data: ${buildKnowledgeSnippets(text)}
+Local Services: ${await performSearch(text, user_location)}
 `.trim();
 
-if (image_base64) {
-return await analyzeWithVision(finalPayload, locale, image_base64, shortHistory);
-}
-return await analyzeWithText(finalPayload, locale, shortHistory);
-
-} catch (error) {
-console.error("FixLens Error:", error);
-throw error;
-}
-}
-
-async function analyzeWithText(payload, locale, history) {
-const response = await client.chat.completions.create({
+// 4. استدعاء الموديل (التحكم في الـ Tokens لسرعة الاستجابة)
+const modelParams = {
 model: "gpt-4o",
 messages: [
 { role: "system", content: buildDoctorSystemPrompt(locale) },
-...history,
-{ role: "user", content: payload },
+...shortHistory,
+{ role: "user", content: image_base64 ? [
+{ type: "text", text: finalPayload },
+{ type: "image_url", image_url: { url: `data:image/jpeg;base64,${image_base64}` } }
+] : finalPayload },
 ],
 temperature: 0.3,
-max_tokens: 800, // تسريع وقت الاستجابة
-});
-return { ok: true, reply: response.choices[0].message.content };
-}
+max_tokens: 700, // سقف منخفض لضمان السرعة ومنع الثقل
+};
 
-async function analyzeWithVision(payload, locale, base64Image, history) {
-const response = await client.chat.completions.create({
-model: "gpt-4o",
-messages: [
-{ role: "system", content: buildDoctorSystemPrompt(locale) },
-...history,
-{
-role: "user",
-content: [
-{ type: "text", text: payload },
-{ type: "image_url", image_url: { url: `data:image/jpeg;base64,${base64Image}` } },
-],
-},
-],
-max_tokens: 800,
-});
+const response = await client.chat.completions.create(modelParams);
 return { ok: true, reply: response.choices[0].message.content };
+
+} catch (error) {
+console.error("FixLens Service Error:", error);
+throw error;
+}
 }
