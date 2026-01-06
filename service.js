@@ -7,9 +7,11 @@ import { performSearch } from "./search.js";
 
 const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-// ✅ 1. دالة معالجة الصوت (مكتوبة بشكل صحيح لتجنب ReferenceError)
+/**
+* 🎙️ High-Fidelity Voice Transcription
+*/
 async function transcribeAudio(audioBase64) {
-const tempPath = path.join("/tmp", `audio_${Date.now()}.mp3`);
+const tempPath = path.join("/tmp", `voice_${Date.now()}.mp3`);
 try {
 fs.writeFileSync(tempPath, Buffer.from(audioBase64, "base64"));
 const result = await client.audio.transcriptions.create({
@@ -18,54 +20,57 @@ model: "whisper-1",
 });
 return result.text;
 } catch (err) {
-console.error("Whisper Error:", err);
+console.error("Whisper Engine Error:", err);
 return null;
 } finally {
 if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
 }
 }
 
-// ✅ 2. تصدير الوظيفة الرئيسية (تم إصلاح الـ Export ليعمل السيرفر)
+/**
+* 🚀 Super Smart Request Handler (The Brain)
+*/
 export async function handleFixLensRequest(req) {
 try {
 let {
 text = "",
-locale = "auto",
 image_base64,
 audio_base64,
 history = [],
 user_location = "Global"
 } = req.body;
 
-// معالجة الصوت وحقنه كدليل فني
-if (audio_base64) {
-const voiceText = await transcribeAudio(audio_base64);
+// 1. Audio Analysis (Priority Injection)
+if (audio_base_64) {
+const voiceText = await transcribeAudio(audio_base_64);
 if (voiceText) {
-text = `PRIMARY AUDIO EVIDENCE: "${voiceText}". ${text}`.trim();
+text = `[AUDITORY EVIDENCE]: "${voiceText}". ${text}`.trim();
 }
 }
 
-// تفعيل البحث العالمي بناءً على الموقع المرسل (لندن، باريس، لويفيل)
+// 2. Intelligent Global Search (Triggers for parts, shops, or locations)
 let searchResults = "";
-const intents = ["shop", "parts", "junk", "tire", "battery", "where", "ورشة", "سكراب", "إطارات", "محل"];
-if (intents.some(k => text.toLowerCase().includes(k))) {
+const searchKeywords = ["shop", "parts", "junk", "tire", "battery", "where", "cheap", "ورشة", "سكراب", "محل", "اين"];
+if (searchKeywords.some(k => text.toLowerCase().includes(k))) {
 searchResults = await performSearch(text, user_location);
 }
 
-// بناء السياق النهائي (إجبار الموديل على رؤية النتائج)
+// 3. Knowledge Base & Context Construction
+const technicalData = buildKnowledgeSnippets(text);
 const finalPayload = `
-STRICT UI RULES: No Stars (**). Use clean bold text. Translate headers.
-REGION: ${user_location}
-INPUT: ${text}
-TECHNICAL_DB: ${buildKnowledgeSnippets(text)}
-LOCAL_DATA: ${searchResults || "Searching worldwide network..."}
+[SYSTEM_RULES]: Clean UI. Respond in user language.
+[REGION]: ${user_location}
+[USER_INPUT]: ${text}
+[TECHNICAL_MANUALS]: ${technicalData}
+[LOCAL_MARKET_DATA]: ${searchResults || "Global search active..."}
 `.trim();
 
+// 4. GPT-4o Master Execution
 const response = await client.chat.completions.create({
 model: "gpt-4o",
 messages: [
-{ role: "system", content: buildDoctorSystemPrompt(locale) },
-...history.slice(-2),
+{ role: "system", content: buildDoctorSystemPrompt() },
+...history.slice(-2), // لضمان السرعة الفائقة
 {
 role: "user",
 content: image_base64 ? [
@@ -74,14 +79,14 @@ content: image_base64 ? [
 ] : finalPayload
 }
 ],
-temperature: 0.3,
+temperature: 0.3, // دقة ميكانيكية عالية
 max_tokens: 1000
 });
 
 return { ok: true, reply: response.choices[0].message.content };
 
 } catch (error) {
-console.error("FixLens Global Service Error:", error);
+console.error("FixLens Global Brain Error:", error);
 throw error;
 }
 }
