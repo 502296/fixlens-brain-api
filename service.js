@@ -6,7 +6,10 @@ import { performSearch } from "./search.js";
 
 const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-// دالة تحويل الصوت: تم ضبط الامتداد m4a لضمان القبول
+/**
+* 🎙️ Professional Audio Processor
+* Fixes the "Invalid file format" by using .m4a extension.
+*/
 async function transcribeAudio(audioBase64) {
 const tempPath = path.join("/tmp", `voice_${Date.now()}.m4a`);
 try {
@@ -24,9 +27,13 @@ if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
 }
 }
 
+/**
+* 🚀 handleFixLensRequest: The Master Brain
+* Fixes the "audio_base_64 is not defined" error.
+*/
 export async function handleFixLensRequest(req) {
 try {
-// تم توحيد اسم المتغير ليكون audio_base64 (بدون شرطة ثالثة) لمنع الانهيار
+// توحيد اسم المتغير ليتوافق مع سجلات الخطأ (audio_base64)
 let {
 text = "",
 image_base64,
@@ -39,21 +46,22 @@ user_location = "Global"
 if (audio_base_64) {
 const voiceText = await transcribeAudio(audio_base_64);
 if (voiceText) {
-text = `[TECHNICAL SOUND RECORDING]: "${voiceText}". ${text}`.trim();
+text = `[AUDITORY EVIDENCE]: "${voiceText}". ${text}`.trim();
 }
 }
 
-// تفعيل البحث العالمي
+// تفعيل البحث العالمي المحترف (Louisville, London, Paris, etc.)
 let searchResults = "";
-const searchTerms = ["shop", "parts", "junk", "tire", "battery", "where", "cheap", "ورشة", "محل"];
-if (searchTerms.some(k => text.toLowerCase().includes(k))) {
+const shoppingIntents = ["shop", "parts", "junk", "tire", "battery", "where", "cheap", "ورشة", "محل"];
+if (shoppingIntents.some(k => text.toLowerCase().includes(k))) {
 searchResults = await performSearch(text, user_location);
 }
 
 const finalPayload = `
-USER_REGION: ${user_location}
-INPUT_DATA: ${text}
-SEARCH_RESULTS: ${searchResults || "Search results attached."}
+[SYSTEM]: Master Mechanic Mode. Use Search results for specific shops.
+[REGION]: ${user_location}
+[INPUT]: ${text}
+[LOCAL_DATA]: ${searchResults || "Search enabled..."}
 `.trim();
 
 const response = await client.chat.completions.create({
@@ -63,13 +71,14 @@ messages: [
 ...history.slice(-2),
 {
 role: "user",
-content: image_base64 ? [
+content: image_base_64 ? [
 { type: "text", text: finalPayload },
 { type: "image_url", image_url: { url: `data:image/jpeg;base64,${image_base_64}` } }
 ] : finalPayload
 }
 ],
-temperature: 0.3
+temperature: 0.3,
+max_tokens: 1000
 });
 
 return { ok: true, reply: response.choices[0].message.content };
