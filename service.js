@@ -7,9 +7,7 @@ import { performSearch } from "./search.js";
 
 const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-/**
-* 🎙️ Global Voice Processing (Whisper)
-*/
+// ✅ دالة تحويل الصوت (Whisper)
 async function transcribeAudio(audioBase64) {
 const tempPath = path.join("/tmp", `audio_${Date.now()}.mp3`);
 try {
@@ -20,16 +18,14 @@ model: "whisper-1",
 });
 return result.text;
 } catch (err) {
-console.error("Transcription Error:", err);
+console.error("Whisper Engine Error:", err);
 return null;
 } finally {
 if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
 }
 }
 
-/**
-* 🧠 Global Expert Logic Handler
-*/
+// ✅ تصدير الوظيفة الرئيسية (تم إصلاح الـ Export)
 export async function handleFixLensRequest(req) {
 try {
 let {
@@ -38,10 +34,10 @@ locale = "auto",
 image_base64,
 audio_base64,
 history = [],
-user_location = "Global" // يستقبل الموقع من GPS الهاتف (مثل: Louisville, KY أو Dubai, UAE)
+user_location = "Global"
 } = req.body;
 
-// 1. Audio Injection: Priority focus on mechanical sounds
+// 1. حقن الصوت كدليل فني أساسي
 if (audio_base64) {
 const voiceText = await transcribeAudio(audio_base64);
 if (voiceText) {
@@ -49,29 +45,27 @@ text = `[AUDITORY EVIDENCE]: "${voiceText}". ${text}`.trim();
 }
 }
 
-// 2. Global Smart Search: Triggers based on intent
+// 2. البحث العالمي الذكي (يستخدم الموقع المرسل من الموبايل)
 let searchResults = "";
-const searchIntents = ["shop", "parts", "junk", "tire", "battery", "cheap", "where", "ورشة", "سكراب", "إطارات", "محل"];
-const needsSearch = searchIntents.some(k => text.toLowerCase().includes(k));
-
-if (needsSearch) {
-// البحث يتم بناءً على إحداثيات أو اسم المدينة المرسل من التطبيق
+const shoppingTerms = ["shop", "parts", "junk", "tire", "battery", "cheap", "where", "ورشة", "سكراب", "محل"];
+if (shoppingTerms.some(k => text.toLowerCase().includes(k))) {
+// البحث يعمل الآن في أي مدينة يرسلها التطبيق (Louisville, London, etc.)
 searchResults = await performSearch(text, user_location);
 }
 
-// 3. Technical Payload Construction
+// 3. بناء السياق الميكانيكي الفائق
 const finalPayload = `
-STRICT UI RULES: Translate all headers to user language. Use clean bold text. NO excessive stars.
-USER REGION: ${user_location}
-INPUT ANALYSIS: ${text}
-TECHNICAL CONTEXT: ${buildKnowledgeSnippets(text)}
-LOCAL MARKET DATA: ${searchResults || "Searching global database..."}
+INSTRUCTION: You are a Global Master Mechanic. Use the Search Results to give specific shop names.
+USER_REGION: ${user_location}
+TECHNICAL_INPUT: ${text}
+KNOWLEDGE_BASE: ${buildKnowledgeSnippets(text)}
+LOCAL_MARKET_DATA: ${searchResults || "No local data provided."}
 `.trim();
 
-// 4. Expert AI Execution
+// 4. استدعاء الموديل العالمي GPT-4o
 const messages = [
 { role: "system", content: buildDoctorSystemPrompt(locale) },
-...history.slice(-3),
+...history.slice(-2),
 {
 role: "user",
 content: image_base64 ? [
@@ -84,14 +78,14 @@ content: image_base64 ? [
 const response = await client.chat.completions.create({
 model: "gpt-4o",
 messages,
-temperature: 0.3, // للحفاظ على الدقة الميكانيكية
+temperature: 0.3,
 max_tokens: 1000
 });
 
 return { ok: true, reply: response.choices[0].message.content };
 
 } catch (error) {
-console.error("FixLens Global Service Error:", error);
+console.error("FixLens Service Error:", error);
 throw error;
 }
 }
