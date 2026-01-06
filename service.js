@@ -6,10 +6,7 @@ import { performSearch } from "./search.js";
 
 const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-/**
-* 🎙️ Professional Audio Processor
-* Fixes the "Invalid file format" by using .m4a extension.
-*/
+// ✅ دالة تحويل الصوت: تم ضبط الامتداد m4a لضمان القبول العالمي
 async function transcribeAudio(audioBase64) {
 const tempPath = path.join("/tmp", `voice_${Date.now()}.m4a`);
 try {
@@ -27,13 +24,10 @@ if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
 }
 }
 
-/**
-* 🚀 handleFixLensRequest: The Master Brain
-* Fixes the "audio_base_64 is not defined" error.
-*/
+// ✅ الوظيفة الرئيسية: تم توحيد المتغيرات لقتل خطأ ReferenceError
 export async function handleFixLensRequest(req) {
 try {
-// توحيد اسم المتغير ليتوافق مع سجلات الخطأ (audio_base64)
+// توحيد اسم المتغير ليكون audio_base64 (بدون شرطة ثالثة) ليتوافق مع سجلات الخطأ
 let {
 text = "",
 image_base64,
@@ -42,7 +36,7 @@ history = [],
 user_location = "Global"
 } = req.body;
 
-// معالجة الصوت وحقنه في التحليل
+// 1. معالجة الصوت إذا وجد
 if (audio_base_64) {
 const voiceText = await transcribeAudio(audio_base_64);
 if (voiceText) {
@@ -50,18 +44,18 @@ text = `[AUDITORY EVIDENCE]: "${voiceText}". ${text}`.trim();
 }
 }
 
-// تفعيل البحث العالمي المحترف (Louisville, London, Paris, etc.)
+// 2. تفعيل البحث العالمي المحترف (Louisville, London, Paris, etc.)
 let searchResults = "";
-const shoppingIntents = ["shop", "parts", "junk", "tire", "battery", "where", "cheap", "ورشة", "محل"];
-if (shoppingIntents.some(k => text.toLowerCase().includes(k))) {
+const intents = ["shop", "parts", "junk", "tire", "battery", "where", "cheap", "ورشة", "سكراب"];
+if (intents.some(k => text.toLowerCase().includes(k))) {
 searchResults = await performSearch(text, user_location);
 }
 
+// 3. بناء السياق النهائي (إجبار الموديل على رؤية النتائج الحقيقية)
 const finalPayload = `
-[SYSTEM]: Master Mechanic Mode. Use Search results for specific shops.
-[REGION]: ${user_location}
-[INPUT]: ${text}
-[LOCAL_DATA]: ${searchResults || "Search enabled..."}
+REGION: ${user_location}
+USER_INPUT: ${text}
+LOCAL_DATA: ${searchResults || "Search enabled..."}
 `.trim();
 
 const response = await client.chat.completions.create({
@@ -71,14 +65,13 @@ messages: [
 ...history.slice(-2),
 {
 role: "user",
-content: image_base_64 ? [
+content: image_base64 ? [
 { type: "text", text: finalPayload },
 { type: "image_url", image_url: { url: `data:image/jpeg;base64,${image_base_64}` } }
 ] : finalPayload
 }
 ],
-temperature: 0.3,
-max_tokens: 1000
+temperature: 0.3
 });
 
 return { ok: true, reply: response.choices[0].message.content };
