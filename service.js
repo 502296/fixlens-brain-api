@@ -7,13 +7,9 @@ import { performSearch } from "./search.js";
 
 const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-/**
-* 🎙️ Professional Audio Processor
-* Fixes: Variable naming and supported file extensions.
-*/
+// ✅ دالة معالجة الصوت: تم تصحيح امتداد الملف ليكون مدعوماً
 async function transcribeAudio(audioBase64) {
-// استخدام امتداد .m4a لضمان التوافق العالمي وقبوله في OpenAI
-const tempPath = path.join("/tmp", `voice_${Date.now()}.m4a`);
+const tempPath = path.join("/tmp", `voice_${Date.now()}.m4a`); // امتداد m4a لضمان التوافق
 try {
 fs.writeFileSync(tempPath, Buffer.from(audioBase64, "base64"));
 const result = await client.audio.transcriptions.create({
@@ -22,72 +18,60 @@ model: "whisper-1",
 });
 return result.text;
 } catch (err) {
-console.error("Whisper Transcription Error:", err);
+console.error("Whisper Error:", err);
 return null;
 } finally {
 if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
 }
 }
 
-/**
-* 🚀 Global Mechanical Intelligence Handler
-*/
 export async function handleFixLensRequest(req) {
 try {
-// تصحيح استلام المتغيرات لضمان التوافق مع تطبيق الموبايل وسجلات الخطأ
+// ✅ تصحيح اسم المتغير: تم تغيير audio_base_64 إلى audio_base64
 let {
 text = "",
 image_base64,
-audio_base64, // تم تعديل التسمية هنا لتطابق السجلات المرسلة من Flutter
+audio_base64,
 history = [],
 user_location = "Global"
 } = req.body;
 
-// 1. معالجة وحقن الصوت كأولوية هندسية
+// معالجة الصوت في حالة توفره
 if (audio_base_64) {
-const voiceText = await transcribeAudio(audio_base_64);
-if (voiceText) {
-text = `[AUDITORY DATA]: "${voiceText}". ${text}`.trim();
-}
+const voiceText = await transcribeAudio(audio_base64);
+if (voiceText) text = `[AUDITORY EVIDENCE]: "${voiceText}". ${text}`.trim();
 }
 
-// 2. تفعيل البحث العالمي المحترف بناءً على الموقع
+// تفعيل البحث العالمي (Louisville, London, etc.)
 let searchResults = "";
-const searchIntents = ["shop", "parts", "junk", "tire", "battery", "where", "cheap", "ورشة", "محل"];
-if (searchIntents.some(k => text.toLowerCase().includes(k))) {
+const intents = ["shop", "parts", "junk", "tire", "battery", "where", "cheap", "ورشة", "محل"];
+if (intents.some(k => text.toLowerCase().includes(k))) {
 searchResults = await performSearch(text, user_location);
 }
 
-// 3. بناء السياق النهائي المحترف (Master Brain)
 const finalPayload = `
-[GLOBAL_PROTOCOL]: Professional Master Mechanic Analysis.
-[REGION]: ${user_location}
-[TECHNICAL_ANALYSIS]: ${text}
-[LOCAL_DATA]: ${searchResults || "Search results pending..."}
+REGION: ${user_location}
+USER_INPUT: ${text}
+LOCAL_DATA: ${searchResults || "Search active..."}
 `.trim();
 
-// 4. استدعاء الموديل (GPT-4o)
 const response = await client.chat.completions.create({
 model: "gpt-4o",
 messages: [
 { role: "system", content: buildDoctorSystemPrompt() },
 ...history.slice(-2),
-{
-role: "user",
-content: image_base64 ? [
+{ role: "user", content: image_base64 ? [
 { type: "text", text: finalPayload },
 { type: "image_url", image_url: { url: `data:image/jpeg;base64,${image_base64}` } }
-] : finalPayload
-}
+] : finalPayload }
 ],
-temperature: 0.3, // دقة تقنية عالية لضمان جودة الردود المدفوعة
+temperature: 0.3,
 max_tokens: 1000
 });
 
 return { ok: true, reply: response.choices[0].message.content };
-
 } catch (error) {
-console.error("FixLens Global Brain Error:", error);
+console.error("FixLens Core Error:", error);
 throw error;
 }
 }
