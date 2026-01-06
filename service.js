@@ -6,7 +6,6 @@ import { performSearch } from "./search.js";
 
 const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-// ✅ تحسين Whisper لسماع أصوات المحرك بدقة عالية
 async function transcribeAudio(audioBase64) {
 if (!audioBase64) return null;
 const tempPath = path.join("/tmp", `voice_${Date.now()}.m4a`);
@@ -15,12 +14,13 @@ fs.writeFileSync(tempPath, Buffer.from(audioBase64, "base64"));
 const result = await client.audio.transcriptions.create({
 file: fs.createReadStream(tempPath),
 model: "whisper-1",
-prompt: "Mechanical diagnostic: knocking, squealing, grinding, ticking, engine noise."
+// تم تحسين الـ prompt ليفهم أن الصوت قد يكون محركاً فقط وليس كلاماً
+prompt: "Mechanical sound diagnostic: engine knocking, squealing, ticking. If it's speech, transcribe it. If it's noise, describe the noise."
 });
 return result.text;
 } catch (err) {
-console.error("Audio Error:", err);
-return null;
+console.error("Whisper Error:", err);
+return "Unrecognizable mechanical noise";
 } finally {
 if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
 }
@@ -30,64 +30,69 @@ export async function handleFixLensRequest(req) {
 try {
 const {
 text = "",
-image_base64 = null,
+image_base_64 = null,
 audio_base_64 = null,
 history = [],
 user_location = "Louisville, KY"
 } = req.body;
 
-// 1. معالجة الصوت ودمجه مع النص
-let combinedText = text;
+// 1. معالجة الصوت أولاً وبشكل إلزامي قبل البحث
+let audioTranscript = "";
 if (audio_base_64) {
-const voiceNote = await transcribeAudio(audio_base_64);
-if (voiceNote) {
-combinedText = `[Audio Transcript]: ${voiceNote}. ${text}`;
-}
+audioTranscript = await transcribeAudio(audio_base_64);
 }
 
-// 2. تفعيل البحث (موجود مسبقاً كما طلبت)
+const fullQuery = `${text} ${audioTranscript}`.trim();
+
+// 2. تشغيل البحث (Search) بناءً على النص المدمج (صوت + نص)
 let searchResults = "";
-const needsSearch = ["ورشة", "عنوان", "shop", "parts", "location", "قريب"].some(k => combinedText.toLowerCase().includes(k));
-if (needsSearch) {
-searchResults = await performSearch(combinedText, user_location);
+const keywords = ["ورشة", "عنوان", "shop", "repair", "parts", "location", "قريب"];
+if (keywords.some(k => fullQuery.toLowerCase().includes(k))) {
+// ننتظر نتيجة البحث لضمان ظهورها في الرد
+searchResults = await performSearch(fullQuery, user_location);
 }
 
-// 3. بناء الرسالة للموديل (إصلاح الصور واللغة)
-const userContent = [];
-// إضافة النص والبيانات المحسنة
-userContent.push({
+// 3. بناء المحتوى (إصلاح الصور والعناوين)
+const userContent = [
+{
 type: "text",
-text: `LOCATION: ${user_location}\nSEARCH_DATA: ${searchResults}\nUSER_INPUT: ${combinedText}`
-});
+text: `
+USER_LOCATION: ${user_location}
+SEARCH_RESULTS_FROM_GOOGLE: ${searchResults || "No local data found"}
+AUDIO_ANALYSIS: ${audioTranscript || "No audio provided"}
+USER_TEXT: ${text}
+`.trim()
+}
+];
 
-// ✅ إصلاح قراءة الصور: تمرير الصورة كـ URL Base64
-if (image_base64) {
+if (image_base_64) {
 userContent.push({
 type: "image_url",
 image_url: { url: `data:image/jpeg;base64,${image_base_64}` }
 });
 }
 
+// 4. استدعاء الموديل مع تقليل التاريخ (History) لتسريع الرد وحل مشكلة التعليق
 const response = await client.chat.completions.create({
 model: "gpt-4o",
 messages: [
 {
 role: "system",
 content: `${buildDoctorSystemPrompt()}
-- IMPORTANT: Translate ALL headings (like Immediate Assessment, Action Steps) to the user's language.
-- If the user speaks Arabic, headers must be in Arabic (e.g., **التقييم الفوري**).
-- Analyze the attached image or audio description with high technical precision.`
+- ALWAYS respond in the user's language.
+- Translate all headers (e.g., **التقييم الفوري**, **خطوات العمل**).
+- If SEARCH_RESULTS_FROM_GOOGLE is present, you MUST provide real addresses.`
 },
-...history.slice(-4),
+...history.slice(-2), // تقليل التاريخ لرسالتين فقط لتسريع الأداء
 { role: "user", content: userContent }
 ],
-temperature: 0.3
+temperature: 0.1 // دقة قصوى
 });
 
 return { ok: true, reply: response.choices[0].message.content };
 
 } catch (error) {
-console.error("FixLens Error:", error);
-return { ok: false, error: "حدث خطأ أثناء التحليل، يرجى المحاولة مرة أخرى." };
+console.error("Backend Error:", error);
+return { ok: false, error: "System busy. Please try again." };
 }
 }
