@@ -9,7 +9,7 @@ try {
 const params = {
 api_key: apiKey,
 engine: "google",
-// ندمج الموقع مع نص البحث لضمان نتائج محلية دقيقة
+//ندمج الموقع مع نص البحث لضمان نتائج محلية دقيقة
 q: `${query} near ${user_location}`,
 num: 3
 };
