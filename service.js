@@ -7,6 +7,9 @@ import { performSearch } from "./search.js";
 
 const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
+/**
+* 🎙️ Global Voice Processing (Whisper)
+*/
 async function transcribeAudio(audioBase64) {
 const tempPath = path.join("/tmp", `audio_${Date.now()}.mp3`);
 try {
@@ -16,60 +19,79 @@ file: fs.createReadStream(tempPath),
 model: "whisper-1",
 });
 return result.text;
-} catch (err) { return null; }
-finally { if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath); }
+} catch (err) {
+console.error("Transcription Error:", err);
+return null;
+} finally {
+if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
+}
 }
 
+/**
+* 🧠 Global Expert Logic Handler
+*/
 export async function handleFixLensRequest(req) {
 try {
-let { text = "", image_base64, audio_base64, history = [], user_location = "Louisville, KY" } = req.body;
+let {
+text = "",
+locale = "auto",
+image_base64,
+audio_base64,
+history = [],
+user_location = "Global" // يستقبل الموقع من GPS الهاتف (مثل: Louisville, KY أو Dubai, UAE)
+} = req.body;
 
-// 1. معالجة الصوت كدليل فني
-let voiceTranscript = "";
+// 1. Audio Injection: Priority focus on mechanical sounds
 if (audio_base64) {
-voiceTranscript = await transcribeAudio(audio_base64);
-if (voiceTranscript) text = `[Technical Audio Note]: ${voiceTranscript}. ${text}`.trim();
+const voiceText = await transcribeAudio(audio_base64);
+if (voiceText) {
+text = `[AUDITORY EVIDENCE]: "${voiceText}". ${text}`.trim();
+}
 }
 
-// 2. تفعيل البحث المحلي بدقة (Optimized Search)
+// 2. Global Smart Search: Triggers based on intent
 let searchResults = "";
-const searchTerms = ["shop", "repair", "parts", "ورشة", "محل", "ميكانيكي"];
-if (searchTerms.some(k => text.toLowerCase().includes(k))) {
-// نرسل فقط الكلمات المفتاحية للبحث لضمان الدقة
-const searchQuery = voiceTranscript || text;
-searchResults = await performSearch(searchQuery.substring(0, 50), user_location);
+const searchIntents = ["shop", "parts", "junk", "tire", "battery", "cheap", "where", "ورشة", "سكراب", "إطارات", "محل"];
+const needsSearch = searchIntents.some(k => text.toLowerCase().includes(k));
+
+if (needsSearch) {
+// البحث يتم بناءً على إحداثيات أو اسم المدينة المرسل من التطبيق
+searchResults = await performSearch(text, user_location);
 }
 
-// 3. البرومبت العميق (Expert Mechanic Logic)
-const masterInstructions = `
-- ROLE: Senior Master Mechanic with 30+ years of global experience.
-- TONE: Highly technical, precise, and authoritative.
-- FORMAT: Clean bold headers in the user's language. No Stars.
-- CONTENT: Provide specific mechanical causes (sensors, pressures, electrical values).
-`;
-
+// 3. Technical Payload Construction
 const finalPayload = `
-${masterInstructions}
-Location Context: ${user_location}
-User Query/Sound: ${text}
-Manual Snippets: ${buildKnowledgeSnippets(text)}
-Local Shop Data: ${searchResults}
+STRICT UI RULES: Translate all headers to user language. Use clean bold text. NO excessive stars.
+USER REGION: ${user_location}
+INPUT ANALYSIS: ${text}
+TECHNICAL CONTEXT: ${buildKnowledgeSnippets(text)}
+LOCAL MARKET DATA: ${searchResults || "Searching global database..."}
 `.trim();
+
+// 4. Expert AI Execution
+const messages = [
+{ role: "system", content: buildDoctorSystemPrompt(locale) },
+...history.slice(-3),
+{
+role: "user",
+content: image_base64 ? [
+{ type: "text", text: finalPayload },
+{ type: "image_url", image_url: { url: `data:image/jpeg;base64,${image_base64}` } }
+] : finalPayload
+}
+];
 
 const response = await client.chat.completions.create({
 model: "gpt-4o",
-messages: [
-{ role: "system", content: buildDoctorSystemPrompt("auto") },
-...history.slice(-3),
-{ role: "user", content: image_base64 ? [
-{ type: "text", text: finalPayload },
-{ type: "image_url", image_url: { url: `data:image/jpeg;base64,${image_base64}` } }
-] : finalPayload },
-],
-temperature: 0.4,
-max_tokens: 1000 // رفعنا عدد التوكنز ليعطي شرحاً فنياً أعمق
+messages,
+temperature: 0.3, // للحفاظ على الدقة الميكانيكية
+max_tokens: 1000
 });
 
 return { ok: true, reply: response.choices[0].message.content };
-} catch (error) { throw error; }
+
+} catch (error) {
+console.error("FixLens Global Service Error:", error);
+throw error;
+}
 }
