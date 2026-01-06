@@ -7,7 +7,7 @@ import { performSearch } from "./search.js";
 
 const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-// ✅ دالة الصوت: تم ضبط الامتداد m4a لضمان التوافق مع OpenAI Whisper
+// ✅ دالة الصوت: تم ضبط الامتداد m4a لضمان التوافق مع OpenAI
 async function transcribeAudio(audioBase64) {
 const tempPath = path.join("/tmp", `voice_${Date.now()}.m4a`);
 try {
@@ -18,49 +18,48 @@ model: "whisper-1",
 });
 return result.text;
 } catch (err) {
-console.error("Whisper Error:", err);
+console.error("Whisper Transcription Error:", err);
 return null;
 } finally {
 if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
 }
 }
 
+/**
+* 🚀 handleFixLensRequest: العقل المدبر العالمي
+*/
 export async function handleFixLensRequest(req) {
 try {
-// ✅ تصحيح المتغيرات لضمان عدم حدوث ReferenceError
+// توحيد المسميات لإنهاء أخطاء السجلات (ReferenceError)
 let {
 text = "",
 image_base64,
-audio_base64,
+audio_base64, // تأكد أن Flutter يرسل هذا الاسم بالضبط
 history = [],
 user_location = "Global"
 } = req.body;
 
-// 1. معالجة الصوت وحقنه في النص كدليل فني
+// معالجة الصوت إذا وجد
 if (audio_base_64) {
 const voiceText = await transcribeAudio(audio_base_64);
-if (voiceText) {
-text = `[AUDITORY EVIDENCE]: "${voiceText}". ${text}`.trim();
-}
+if (voiceText) text = `[TECHNICAL SOUND DATA]: "${voiceText}". ${text}`.trim();
 }
 
-// 2. تفعيل البحث العالمي (في أي مدينة بالعالم يرسلها الموبايل)
+// تفعيل البحث العالمي المحترف (Louisville, London, Paris, etc.)
 let searchResults = "";
-const shoppingIntents = ["shop", "parts", "junk", "tire", "battery", "where", "cheap", "ورشة", "سكراب", "إطارات"];
-if (shoppingIntents.some(k => text.toLowerCase().includes(k))) {
+const searchIntents = ["shop", "parts", "junk", "tire", "battery", "where", "cheap", "ورشة", "سكراب"];
+if (searchIntents.some(k => text.toLowerCase().includes(k))) {
 searchResults = await performSearch(text, user_location);
 }
 
-// 3. بناء Payload احترافي (إجبار الموديل على رؤية النتائج)
+// بناء السياق النهائي (إجبار الموديل على رؤية النتائج)
 const finalPayload = `
-STRICT UI: Clean bold headers. NO STARS. Respond in user language.
-REGION: ${user_location}
-INPUT: ${text}
-LOCAL_MARKET_DATA: ${searchResults || "No local data needed for this query."}
-KNOWLEDGE_BASE: ${buildKnowledgeSnippets(text)}
+[SYSTEM]: Master Mechanic Mode. Use Search results for specific shops.
+[REGION]: ${user_location}
+[INPUT]: ${text}
+[LOCAL_DATA]: ${searchResults || "Search enabled..."}
 `.trim();
 
-// 4. استدعاء الموديل بذكاء Master Mechanic
 const response = await client.chat.completions.create({
 model: "gpt-4o",
 messages: [
@@ -74,7 +73,7 @@ content: image_base64 ? [
 ] : finalPayload
 }
 ],
-temperature: 0.3, // دقة تقنية عالية
+temperature: 0.3,
 max_tokens: 1000
 });
 
