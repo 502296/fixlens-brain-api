@@ -4,75 +4,73 @@ import path from "path";
 import { buildDoctorSystemPrompt } from "./doctorPrompt.js";
 import { performSearch } from "./search.js";
 
-// ✅ إصلاح مشكلة استيراد autoKnowledge لمنع SyntaxError
 import * as autoKB from "./lib/autoKnowledge.js";
 const getAutoKnowledge = autoKB.getAutoKnowledge || null;
 
 const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-/**
-* ✅ دالة تحويل الصوت: يجب أن تكون هنا في الأعلى
-* لكي لا يعطي السيرفر خطأ "not defined"
-*/
 async function transcribeAudio(audioBase64) {
-if (!audioBase64 || audioBase64.length < 50) return null;
+if (!audioBase64 || audioBase64.length < 50) return "";
 const tempPath = path.join("/tmp", `voice_${Date.now()}.m4a`);
 try {
 fs.writeFileSync(tempPath, Buffer.from(audioBase64, "base64"));
 const result = await client.audio.transcriptions.create({
 file: fs.createReadStream(tempPath),
 model: "whisper-1",
-prompt: "Mechanical sound: engine knocking, squealing, ticking, or car issue description."
+// ✅ تعديل الـ Prompt لإجبار Whisper على التركيز على ميكانيكا السيارات
+prompt: "Car engine sounds, knocking, diagnostic description, automotive repair."
 });
 return result.text;
 } catch (err) {
-console.error("Whisper Error:", err.message);
-return null;
+return "";
 } finally {
 if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
 }
 }
 
-/**
-* ✅ الوظيفة الرئيسية لمعالجة طلبات FixLens
-*/
 export async function handleFixLensRequest(req) {
 try {
-// استلام البيانات مع قيم افتراضية لمنع ReferenceError
 const {
 text = "",
-image_base64 = null,
+image_base_64 = null,
 audio_base_64 = null,
 history = [],
 user_location = "Louisville, KY"
 } = req.body;
 
-// 1. معالجة الصوت والبحث في وقت واحد لسرعة الاستجابة
-const [voiceText, searchResults] = await Promise.all([
-transcribeAudio(audio_base_64),
-(text.includes("ورشة") || text.includes("عنوان") || text.includes("shop"))
-? performSearch(text, user_location)
-: Promise.resolve("")
-]);
+// 1. تحويل الصوت أولاً لنعرف ماذا يريد المستخدم
+const voiceText = await transcribeAudio(audio_base_64);
 
-const fullQuery = `${voiceText || ""} ${text}`.trim();
+// 2. دمج النص المكتوب مع النص المسموع للبحث الشامل
+const combinedInput = `${text} ${voiceText}`.trim();
 
-// 2. جلب المعرفة المحلية إذا كانت الدالة موجودة
-const kbData = getAutoKnowledge ? getAutoKnowledge(fullQuery) : "";
+// 3. تفعيل البحث إذا وجد طلب لورشة في (النص المكتوب أو المسموع)
+let searchResults = "";
+const searchKeywords = ["ورشة", "عنوان", "موقع", "قريب", "shop", "near", "location", "address"];
+const needsSearch = searchKeywords.some(kw => combinedInput.toLowerCase().includes(kw));
 
-// 3. بناء الرسالة الموجهة لـ GPT-4o
+if (needsSearch) {
+console.log("🔍 Triggering Local Search for:", user_location);
+searchResults = await performSearch(combinedInput, user_location);
+}
+
+const kbData = getAutoKnowledge ? getAutoKnowledge(combinedInput) : "";
+
+// 4. بناء محتوى الرسالة لـ GPT-4o (Vision + Text)
 const messageContent = [
 {
 type: "text",
-text: `LOCATION: ${user_location}\nSEARCH: ${searchResults}\nKB: ${kbData}\nINPUT: ${fullQuery}`
+text: `USER_LOCATION: ${user_location}\nLOCAL_SEARCH_RESULTS: ${searchResults}\nTECHNICAL_KB: ${kbData}\nUSER_INPUT: ${combinedInput}`
 }
 ];
 
-// إضافة الصورة إذا وجدت
-if (image_base64) {
+if (image_base_64) {
 messageContent.push({
 type: "image_url",
-image_url: { url: `data:image/jpeg;base64,${image_base_64}`, detail: "low" }
+image_url: {
+url: `data:image/jpeg;base64,${image_base_64}`,
+detail: "high" // ✅ رفع الدقة لتحليل أعطال المحرك بدقة
+}
 });
 }
 
@@ -81,18 +79,21 @@ model: "gpt-4o",
 messages: [
 {
 role: "system",
-content: `${buildDoctorSystemPrompt()} \n- Respond in the user's language. \n- Use professional mechanical headings in their language.`
+content: `${buildDoctorSystemPrompt()}
+- IMPORTANT: If images are provided, prioritize visual evidence of leaks, cracks, or wear.
+- If SEARCH_RESULTS are provided, you MUST list the top 3 workshops with their addresses and distances.
+- Current Location is ${user_location}.`
 },
-...history.slice(-2),
+...history.slice(-4), // زيادة السياق قليلاً
 { role: "user", content: messageContent }
 ],
-temperature: 0.2
+temperature: 0.1 // تقليل العشوائية ليكون التشخيص دقيقاً
 });
 
 return { ok: true, reply: response.choices[0].message.content };
 
 } catch (error) {
-console.error("FixLens Global Brain Error:", error.message);
-return { ok: false, error: "Server encountered an error. Please try again." };
+console.error("FixLens Error:", error.message);
+return { ok: false, error: "Server error." };
 }
 }
