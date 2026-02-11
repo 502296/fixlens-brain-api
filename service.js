@@ -10,120 +10,96 @@ const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 async function transcribeAudio(audioBase64) {
   if (!audioBase64 || audioBase64.length < 50) return "";
   const tempPath = path.join("/tmp", `v_${Date.now()}.m4a`);
-
   try {
     fs.writeFileSync(tempPath, Buffer.from(audioBase64, "base64"));
     const result = await client.audio.transcriptions.create({
       file: fs.createReadStream(tempPath),
       model: "whisper-1",
-      prompt:
-        "Vehicle diagnostic sounds: knocking, squealing, ticking, misfire, belt slip, bearing, wheel hub, brake squeal, injector tick, turbo whine.",
+      prompt: "Automotive diagnostic audio: knocking, squealing, ticking, rattling, misfire, bearing noise, belt noise.",
     });
-    return (result.text || "").trim();
+    return result.text || "";
   } catch (err) {
     console.error("Audio Error:", err?.message || err);
     return "";
   } finally {
-    try {
-      if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
-    } catch {}
+    if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
   }
 }
 
-function safeText(v) {
-  return (v ?? "").toString().trim();
-}
-
-function mapHistoryTurns(history = []) {
-  // Flutter sends: {role:'user'|'assistant', content:'...'}
-  // OpenAI expects: {role:'user'|'assistant'|'system', content:'...'}
-  if (!Array.isArray(history)) return [];
-  return history
-    .filter((t) => t && (t.role === "user" || t.role === "assistant") && typeof t.content === "string")
-    .slice(-6)
-    .map((t) => ({ role: t.role, content: safeText(t.content) }));
-}
-
-function detectIfUserAskedLocal(userText) {
-  const t = (userText || "").toLowerCase();
-  return (
-    t.includes("near me") ||
-    t.includes("nearest") ||
-    t.includes("workshop") ||
-    t.includes("garage") ||
-    t.includes("mechanic") ||
-    t.includes("ورشة") ||
-    t.includes("ميكانيك") ||
-    t.includes("قريب") ||
-    t.includes("بالقرب")
-  );
+function inferLocale({ locale, text }) {
+  if (locale && String(locale).trim()) return String(locale).trim();
+  // quick Arabic detection
+  if (text && /[\u0600-\u06FF]/.test(text)) return "ar";
+  return "en";
 }
 
 export async function handleFixLensRequest(req) {
   try {
     const body = req.body || {};
 
-    const text = safeText(body.text);
-    const imageBase64 = body.image_base64 || body.image_base_64 || null;
-    const audioBase64 = body.audio_base_64 || body.audio_base64 || null;
+    // IMPORTANT: accept both keys to avoid mismatch
+    const text = body.text || "";
+    const locale = inferLocale({ locale: body.locale, text });
+    const user_location = body.user_location || "Global";
 
-    const userLocation = safeText(body.user_location) || "Global";
-    const history = mapHistoryTurns(body.history || []);
+    // image key fix (accept both)
+    const image_base_64 = body.image_base_64 || body.image_base64 || body.image_base_64;
+    const audio_base_64 = body.audio_base_64 || body.audio_base64 || body.audio_base_64;
+    const history = Array.isArray(body.history) ? body.history : [];
 
-    // 1) Audio -> text
-    const voiceText = await transcribeAudio(audioBase64);
-    const fullInput = safeText(`${text} ${voiceText}`).trim();
+    // 1) transcribe audio (if any)
+    const voiceText = await transcribeAudio(audio_base_64);
+    const fullInput = `${text} ${voiceText}`.trim();
 
-    // 2) Local data search (cheap) ALWAYS first if we have meaningful input
-    let searchResults = "";
-    if (fullInput.length >= 3) {
-      searchResults = await performSearch(fullInput, userLocation);
-    }
+    // 2) Local verified search from /data
+    const searchPack = await performSearch(fullInput, user_location);
+    const VERIFIED_DATA = searchPack.verified_data || [];
+    const VERIFIED_WORKSHOPS = searchPack.verified_workshops || [];
 
-    // 3) Web search (Pro feature) — OFF by default
-    // Later: only enable when PRO + user asked local + local data insufficient
-    // Example toggle:
-    // const isPro = body.isPro === true;
-    // if (isPro && detectIfUserAskedLocal(fullInput) && !searchResults) { ... call external Web Search ... }
-    //
-    // IMPORTANT: Do NOT invent workshops without verified web/place results.
-
+    // 3) Build user message content
     const messageContent = [];
 
     messageContent.push({
       type: "text",
       text:
-        `[STRICT_GLOBAL_CONTEXT]\n` +
-        `LOCATION: ${userLocation}\n` +
-        `SEARCH_RESULTS: ${searchResults || ""}\n` +
-        `USER_INPUT: ${fullInput || ""}`,
+`STRICT_CONTEXT
+LOCALE: ${locale}
+LOCATION: ${user_location}
+
+VERIFIED_DATA_JSON: ${JSON.stringify(VERIFIED_DATA)}
+VERIFIED_WORKSHOPS_JSON: ${JSON.stringify(VERIFIED_WORKSHOPS)}
+
+USER_INPUT: ${fullInput}`
     });
 
-    if (imageBase64) {
+    if (image_base_64) {
       messageContent.push({
         type: "image_url",
-        image_url: { url: `data:image/jpeg;base64,${imageBase64}`, detail: "high" },
+        image_url: { url: `data:image/jpeg;base64,${image_base_64}`, detail: "high" },
       });
       messageContent.push({
         type: "text",
-        text: "DIAGNOSTIC TASK: Identify the exact vehicle component and failure mechanism from the photo.",
+        text: "Image task: identify the car part or fault evidence visible in the photo.",
       });
     }
 
     const response = await client.chat.completions.create({
-      model: "gpt-4o",
+      model: process.env.FIXLENS_MODEL || "gpt-4o",
       messages: [
         { role: "system", content: buildDoctorSystemPrompt() },
-        ...history,
+
+        // keep last turns for continuity, but not too many
+        ...history.slice(-6),
+
         { role: "user", content: messageContent },
       ],
       temperature: 0.1,
     });
 
-    const reply = response?.choices?.[0]?.message?.content || "";
-    return { ok: true, reply };
+    const out = response.choices?.[0]?.message?.content || "";
+    return { ok: true, reply: out, locale };
   } catch (error) {
-    console.error("FixLens Brain Error:", error?.message || error);
-    return { ok: false, reply: "Sorry — FixLens is under load. Please try again." };
+    console.error("FixLens Error:", error?.message || error);
+    return { ok: false, reply: "System is under load. Please try again.", locale: "en" };
   }
 }
