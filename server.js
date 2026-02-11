@@ -1,21 +1,14 @@
 // server.js
 import "dotenv/config";
-
 import express from "express";
 import cors from "cors";
 import morgan from "morgan";
-import path from "path";
-import { fileURLToPath } from "url";
-
 import { handleFixLensRequest } from "./service.js";
 
 const app = express();
-
-// =====================
-// ✅ Core config
-// =====================
 app.set("trust proxy", 1);
 
+// CORS allowlist (optional)
 const allowedOrigins = (process.env.ALLOWED_ORIGINS || "")
   .split(",")
   .map((s) => s.trim())
@@ -26,9 +19,7 @@ app.use(
     origin: (origin, cb) => {
       if (!origin) return cb(null, true);
       if (allowedOrigins.length === 0) return cb(null, true);
-      return allowedOrigins.includes(origin)
-        ? cb(null, true)
-        : cb(new Error("CORS_NOT_ALLOWED"));
+      return allowedOrigins.includes(origin) ? cb(null, true) : cb(new Error("CORS_NOT_ALLOWED"));
     },
     credentials: true,
   })
@@ -37,21 +28,15 @@ app.use(
 app.use(morgan("combined"));
 app.use(express.json({ limit: "25mb" }));
 
-// =====================
-// ✅ Static files (privacy/terms/support pages)
-// =====================
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-// Serve current folder as static (so /privacy.html works)
-app.use(express.static(__dirname, { extensions: ["html"] }));
-
-// Home (so Render doesn't show 404 on /)
+// Root (optional) so browser doesn't show NOT_FOUND
 app.get("/", (req, res) => {
-  res.status(200).send("FixLens Brain API is running ✅");
+  res.status(200).json({
+    ok: true,
+    service: "fixlens-brain-api",
+    hint: "Use POST /api/chat or POST /api/fixlens, and GET /health",
+  });
 });
 
-// Health
 app.get("/health", (req, res) => {
   res.status(200).json({
     ok: true,
@@ -60,17 +45,14 @@ app.get("/health", (req, res) => {
   });
 });
 
-// =====================
-// ✅ API Handler
-// =====================
-const apiHandler = async (req, res, endpointName) => {
+const apiHandler = async (req, res, name) => {
   try {
     const out = await handleFixLensRequest(req);
     return res.status(200).json(out);
   } catch (err) {
     const status = Number(err?.status || err?.statusCode || 500);
-    const message = err?.message || `Unexpected error in ${endpointName}`;
-    console.error(`${endpointName} error:`, { status, message });
+    const message = err?.message || `Unexpected error in ${name}`;
+    console.error(`${name} error:`, { status, message });
     return res.status(status).json({ ok: false, error: message, status });
   }
 };
@@ -80,15 +62,10 @@ app.post("/api/chat", (req, res) => apiHandler(req, res, "/api/chat"));
 
 // 404
 app.use((req, res) => {
-  res.status(404).json({
-    ok: false,
-    error: "NOT_FOUND",
-    path: req.path,
-    method: req.method,
-  });
+  res.status(404).json({ ok: false, error: "NOT_FOUND", path: req.path, method: req.method });
 });
 
-// Error handler
+// error handler
 app.use((err, req, res, next) => {
   const message = err?.message || "INTERNAL_ERROR";
   const status = message === "CORS_NOT_ALLOWED" ? 403 : 500;
@@ -96,9 +73,6 @@ app.use((err, req, res, next) => {
   res.status(status).json({ ok: false, error: message, status });
 });
 
-// =====================
-// ✅ Start server (Render uses PORT)
-// =====================
 const PORT = Number(process.env.PORT || 8080);
 const server = app.listen(PORT, () => {
   console.log(`FixLens Brain API running on port ${PORT}`);
