@@ -1,191 +1,112 @@
-// search.js
+// search.js — Local verified search using /data JSON files (no web by default)
 import fs from "fs";
 import path from "path";
-import { fileURLToPath } from "url";
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+const DATA_DIR = path.join(process.cwd(), "data");
 
-// =====================
-// ✅ Load + cache local JSON data (once)
-// =====================
-const DATA_DIR = path.join(__dirname, "data");
+// Load all json files into memory once
+let KB = [];
+try {
+  if (fs.existsSync(DATA_DIR)) {
+    const files = fs.readdirSync(DATA_DIR).filter((f) => f.endsWith(".json"));
+    for (const f of files) {
+      const p = path.join(DATA_DIR, f);
+      const raw = fs.readFileSync(p, "utf-8");
+      const parsed = JSON.parse(raw);
 
-// We'll keep: { fileName: jsonObject }
-let DATA_CACHE = null;
-
-function safeJsonParse(text, fallback = null) {
-  try {
-    return JSON.parse(text);
-  } catch {
-    return fallback;
-  }
-}
-
-function loadAllData() {
-  if (DATA_CACHE) return DATA_CACHE;
-
-  const out = {};
-  if (!fs.existsSync(DATA_DIR)) {
-    console.warn("DATA_DIR not found:", DATA_DIR);
-    DATA_CACHE = out;
-    return DATA_CACHE;
-  }
-
-  const files = fs.readdirSync(DATA_DIR).filter((f) => f.endsWith(".json"));
-  for (const f of files) {
-    const full = path.join(DATA_DIR, f);
-    const raw = fs.readFileSync(full, "utf8");
-    const json = safeJsonParse(raw, null);
-    if (json) out[f] = json;
-  }
-
-  DATA_CACHE = out;
-  return DATA_CACHE;
-}
-
-// =====================
-// ✅ Helpers
-// =====================
-function normalize(s) {
-  return (s || "")
-    .toString()
-    .toLowerCase()
-    .replace(/[^\p{L}\p{N}\s]/gu, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-function tokenize(s) {
-  const t = normalize(s);
-  if (!t) return [];
-  // keep short tokens too (e.g. "ev", "vvt") but drop 1-char noise
-  return t.split(" ").filter((w) => w.length >= 2);
-}
-
-function flattenStrings(obj, limit = 6000) {
-  // Collect strings from any JSON shape, but cap to keep speed
-  const acc = [];
-  const stack = [obj];
-  while (stack.length) {
-    const cur = stack.pop();
-    if (cur == null) continue;
-
-    if (typeof cur === "string") {
-      acc.push(cur);
-    } else if (typeof cur === "number" || typeof cur === "boolean") {
-      acc.push(String(cur));
-    } else if (Array.isArray(cur)) {
-      for (let i = 0; i < cur.length; i++) stack.push(cur[i]);
-    } else if (typeof cur === "object") {
-      for (const k of Object.keys(cur)) {
-        stack.push(cur[k]);
+      // normalize into array of records
+      if (Array.isArray(parsed)) {
+        KB.push(...parsed.map((x) => ({ ...x, __source: f })));
+      } else if (parsed && typeof parsed === "object") {
+        // if object contains items array
+        if (Array.isArray(parsed.items)) KB.push(...parsed.items.map((x) => ({ ...x, __source: f })));
+        else KB.push({ ...parsed, __source: f });
       }
     }
-
-    if (acc.join(" ").length > limit) break;
   }
-  return acc.join(" ");
+} catch (e) {
+  console.error("KB load error:", e?.message || e);
+  KB = [];
 }
 
-function scoreText(queryTokens, text) {
-  if (!text) return 0;
-  const hay = normalize(text);
+function toText(record) {
+  // try common fields, but fallback to full JSON string
+  const fields = [
+    record.title,
+    record.name,
+    record.symptom,
+    record.symptoms,
+    record.problem,
+    record.description,
+    record.causes,
+    record.checks,
+    record.steps,
+    record.tags,
+  ];
+
+  let s = "";
+  for (const v of fields) {
+    if (!v) continue;
+    if (Array.isArray(v)) s += " " + v.join(" ");
+    else if (typeof v === "object") s += " " + JSON.stringify(v);
+    else s += " " + String(v);
+  }
+  if (!s.trim()) s = JSON.stringify(record);
+  return s.toLowerCase();
+}
+
+function scoreMatch(query, text) {
+  // simple token scoring (fast + no dependencies)
+  const q = query.toLowerCase().replace(/[^a-z0-9\u0600-\u06FF\s]/g, " ");
+  const tokens = q.split(/\s+/).filter(Boolean);
+
+  if (tokens.length === 0) return 0;
+
   let score = 0;
-  for (const tok of queryTokens) {
-    if (!tok) continue;
-    if (hay.includes(tok)) score += 1;
+  for (const t of tokens) {
+    if (t.length < 2) continue;
+    if (text.includes(t)) score += 2;
+    // bonus for exact phrase fragments
+    if (t.length >= 4 && text.includes(" " + t + " ")) score += 1;
   }
   return score;
 }
 
-function pickCategoryFiles(query) {
-  const q = normalize(query);
+export async function performSearch(userQuery, userLocation, opts = {}) {
+  const { maxResults = 3 } = opts;
 
-  // Map intents to files in /data
-  const rules = [
-    { match: ["diesel", "dpf", "adblue", "def", "egr", "turbo diesel"], files: ["diesel_engine.json", "diesel_aftertreatment.json"] },
-    { match: ["ev", "electric", "battery", "inverter", "charging", "hybrid"], files: ["hybrid_ev.json", "electrical.json", "network_can.json"] },
-    { match: ["abs", "brake", "braking"], files: ["brakes.json", "adas.json"] },
-    { match: ["airbag", "srs"], files: ["airbags_srs.json"] },
-    { match: ["coolant", "overheat", "radiator", "thermostat"], files: ["cooling.json", "hvac.json", "heavy_duty_cooling.json"] },
-    { match: ["transmission", "gear", "shift"], files: ["transmission.json", "driveline.json"] },
-    { match: ["suspension", "steering", "alignment"], files: ["suspension.json"] },
-    { match: ["fuel", "injector", "pump", "pressure"], files: ["fuel.json", "engine.json", "diesel_engine.json"] },
-    { match: ["can", "network", "u0100", "communication"], files: ["network_can.json", "electrical.json"] },
-  ];
-
-  const chosen = new Set(["auto_common_issues.json", "engine.json", "electrical.json"]); // good defaults
-
-  for (const r of rules) {
-    if (r.match.some((m) => q.includes(m))) {
-      r.files.forEach((f) => chosen.add(f));
-    }
+  if (!userQuery || userQuery.trim().length < 2) {
+    return { verified_data: [], verified_workshops: [] };
   }
 
-  return [...chosen];
-}
+  // local KB search
+  const scored = KB
+    .map((r) => {
+      const t = toText(r);
+      const s = scoreMatch(userQuery, t);
+      return { r, s };
+    })
+    .filter((x) => x.s > 0)
+    .sort((a, b) => b.s - a.s)
+    .slice(0, maxResults);
 
-function summarizeMatch(obj, maxLen = 500) {
-  // Return a short summary from the object
-  const raw = flattenStrings(obj, 2000);
-  const clean = raw.replace(/\s+/g, " ").trim();
-  if (clean.length <= maxLen) return clean;
-  return clean.slice(0, maxLen).trim() + "…";
-}
+  const verified_data = scored.map(({ r, s }) => {
+    const title = r.title || r.name || r.problem || "Verified item";
+    const causes = r.causes || r.cause || "";
+    const steps = r.steps || r.action_steps || r.actions || "";
+    const tags = r.tags || r.category || "";
+    return {
+      title: String(title),
+      score: s,
+      source: r.__source || "data",
+      causes,
+      steps,
+      tags,
+    };
+  });
 
-// =====================
-// ✅ Main: performSearch (local-first)
-// =====================
-export async function performSearch(userQuery, userLocation = "Global") {
-  const data = loadAllData();
-  const queryTokens = tokenize(userQuery);
-  if (queryTokens.length === 0) return "";
+  // Workshops: by default none (no web). We'll add web later for Pro.
+  const verified_workshops = [];
 
-  const filesToScan = pickCategoryFiles(userQuery);
-
-  const hits = [];
-
-  for (const file of filesToScan) {
-    const json = data[file];
-    if (!json) continue;
-
-    // If JSON is array -> each item is candidate
-    if (Array.isArray(json)) {
-      for (const item of json) {
-        const text = flattenStrings(item, 2500);
-        const s = scoreText(queryTokens, text);
-        if (s >= 2) {
-          hits.push({ file, score: s, item });
-        }
-      }
-    } else {
-      // object
-      const text = flattenStrings(json, 6000);
-      const s = scoreText(queryTokens, text);
-      if (s >= 2) {
-        hits.push({ file, score: s, item: json });
-      }
-    }
-  }
-
-  hits.sort((a, b) => b.score - a.score);
-
-  // Build a compact result (cap count + length)
-  const top = hits.slice(0, 6);
-
-  if (top.length === 0) return "";
-
-  let out = `LOCAL_DATA_MATCHES (Location: ${userLocation})\n`;
-  out += `Query: ${userQuery}\n`;
-
-  for (let i = 0; i < top.length; i++) {
-    const h = top[i];
-    out += `\n#${i + 1} [${h.file}] score=${h.score}\n`;
-    out += summarizeMatch(h.item, 520);
-  }
-
-  // Hard cap
-  if (out.length > 4500) out = out.slice(0, 4500) + "…";
-  return out;
+  return { verified_data, verified_workshops };
 }
