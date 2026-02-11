@@ -1,16 +1,21 @@
+// server.js
 import "dotenv/config";
 
 import express from "express";
 import cors from "cors";
 import morgan from "morgan";
+import path from "path";
+import { fileURLToPath } from "url";
+
 import { handleFixLensRequest } from "./service.js";
 
 const app = express();
 
-// Railway/Prod friendly (so req.ip works behind proxy / load balancer)
+// =====================
+// ✅ Core config
+// =====================
 app.set("trust proxy", 1);
 
-// CORS
 const allowedOrigins = (process.env.ALLOWED_ORIGINS || "")
   .split(",")
   .map((s) => s.trim())
@@ -32,6 +37,20 @@ app.use(
 app.use(morgan("combined"));
 app.use(express.json({ limit: "25mb" }));
 
+// =====================
+// ✅ Static files (privacy/terms/support pages)
+// =====================
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Serve current folder as static (so /privacy.html works)
+app.use(express.static(__dirname, { extensions: ["html"] }));
+
+// Home (so Render doesn't show 404 on /)
+app.get("/", (req, res) => {
+  res.status(200).send("FixLens Brain API is running ✅");
+});
+
 // Health
 app.get("/health", (req, res) => {
   res.status(200).json({
@@ -41,6 +60,9 @@ app.get("/health", (req, res) => {
   });
 });
 
+// =====================
+// ✅ API Handler
+// =====================
 const apiHandler = async (req, res, endpointName) => {
   try {
     const out = await handleFixLensRequest(req);
@@ -74,6 +96,9 @@ app.use((err, req, res, next) => {
   res.status(status).json({ ok: false, error: message, status });
 });
 
+// =====================
+// ✅ Start server (Render uses PORT)
+// =====================
 const PORT = Number(process.env.PORT || 8080);
 const server = app.listen(PORT, () => {
   console.log(`FixLens Brain API running on port ${PORT}`);
