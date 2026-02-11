@@ -1,144 +1,114 @@
 // search.js
 import fs from "fs";
 import path from "path";
-import { fileURLToPath } from "url";
 
-// Cache in memory (fast + cheap)
+const DATA_DIR = path.join(process.cwd(), "data");
+
+// حمّل كل ملفات json مرة واحدة (كاش) لتسريع الأداء وتقليل الحمل
 let CACHE = null;
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 function safeReadJson(filePath) {
   try {
     const raw = fs.readFileSync(filePath, "utf8");
     return JSON.parse(raw);
-  } catch (e) {
+  } catch {
     return null;
   }
 }
 
-function loadDataOnce() {
+function walkJsonFiles(dir) {
+  const out = [];
+  if (!fs.existsSync(dir)) return out;
+  const items = fs.readdirSync(dir, { withFileTypes: true });
+  for (const it of items) {
+    const full = path.join(dir, it.name);
+    if (it.isDirectory()) out.push(...walkJsonFiles(full));
+    else if (it.isFile() && it.name.toLowerCase().endsWith(".json")) out.push(full);
+  }
+  return out;
+}
+
+function ensureCache() {
   if (CACHE) return CACHE;
 
-  const dataDir = path.join(__dirname, "data");
-  const items = [];
-
-  if (!fs.existsSync(dataDir)) {
-    CACHE = { items: [] };
-    return CACHE;
-  }
-
-  const files = fs.readdirSync(dataDir).filter((f) => f.endsWith(".json"));
+  const files = walkJsonFiles(DATA_DIR);
+  const docs = [];
 
   for (const f of files) {
-    const full = path.join(dataDir, f);
-    const json = safeReadJson(full);
+    const json = safeReadJson(f);
     if (!json) continue;
 
-    // We accept either array JSON or object JSON
-    if (Array.isArray(json)) {
-      for (const row of json) items.push({ source: f, ...row });
-    } else if (typeof json === "object") {
-      // if it has a list field, try common ones
-      const list =
-        json.items || json.issues || json.data || json.rows || json.list;
-      if (Array.isArray(list)) {
-        for (const row of list) items.push({ source: f, ...row });
-      } else {
-        items.push({ source: f, ...json });
-      }
-    }
+    // نحول أي شكل JSON إلى نص قابل للبحث
+    const text = JSON.stringify(json);
+
+    docs.push({
+      file: path.relative(process.cwd(), f),
+      text,
+      json,
+    });
   }
 
-  CACHE = { items };
+  CACHE = { docs, builtAt: Date.now() };
   return CACHE;
 }
 
-function tokenize(text) {
-  return String(text || "")
+function normalize(s) {
+  return (s || "")
+    .toString()
     .toLowerCase()
-    .replace(/[^a-z0-9\s]/g, " ")
-    .split(/\s+/)
-    .filter(Boolean);
+    .replace(/[^\p{L}\p{N}\s]/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
-function scoreItem(queryTokens, item) {
-  // Build a searchable text from common fields
-  const hay =
-    [
-      item.title,
-      item.name,
-      item.symptoms,
-      item.description,
-      item.problem,
-      item.causes,
-      item.fix,
-      item.solution,
-      item.keywords,
-      item.tags,
-      item.category,
-      item.system,
-      item.notes,
-    ]
-      .flat()
-      .filter(Boolean)
-      .join(" ")
-      .toLowerCase() || "";
-
-  if (!hay) return 0;
-
+function scoreDoc(queryTokens, docText) {
   let score = 0;
   for (const t of queryTokens) {
-    if (hay.includes(t)) score += 2;
+    if (!t || t.length < 3) continue;
+    if (docText.includes(t)) score += 2;
   }
-
-  // Bonus if title matches strongly
-  const title = String(item.title || item.name || "").toLowerCase();
-  for (const t of queryTokens) {
-    if (title.includes(t)) score += 3;
-  }
-
   return score;
 }
 
+function topSnippetsFromJson(json, maxChars = 1200) {
+  // نحاول نطلع “مقاطع” مفهومة حتى لو JSON كبير
+  // إذا الملف عندك أصلاً structured (sections, bullets...) راح يطلع مفيد جداً
+  const pretty = JSON.stringify(json, null, 2);
+  if (pretty.length <= maxChars) return pretty;
+  return pretty.slice(0, maxChars) + "\n...TRUNCATED";
+}
+
 /**
- * ✅ Local data search (no API cost)
- * Returns a short formatted string to feed the model.
+ * بحث داخلي من ملفات data فقط
+ * يعيد نص جاهز ينحط داخل البرومبت
  */
-export async function performSearch(userText, userLocation = "Global") {
-  const enabled = String(process.env.LOCAL_DATA_SEARCH || "true") === "true";
-  if (!enabled) return "";
+export async function performSearch(userInput, userLocation = "Global") {
+  const { docs } = ensureCache();
 
-  const q = String(userText || "").trim();
-  if (q.length < 2) return "";
+  const q = normalize(userInput);
+  if (!q || q.length < 3) return "";
 
-  const { items } = loadDataOnce();
-  if (!items.length) return "";
+  const tokens = q.split(" ").filter(Boolean).slice(0, 25);
 
-  const tokens = tokenize(q).slice(0, 20);
-  if (!tokens.length) return "";
-
-  const scored = items
-    .map((it) => ({ it, score: scoreItem(tokens, it) }))
+  const ranked = docs
+    .map((d) => ({
+      file: d.file,
+      score: scoreDoc(tokens, normalize(d.text)),
+      json: d.json,
+    }))
     .filter((x) => x.score > 0)
     .sort((a, b) => b.score - a.score)
-    .slice(0, 5);
+    .slice(0, 4); // أهم 4 ملفات
 
-  if (!scored.length) return "";
+  if (ranked.length === 0) return "";
 
-  // Build compact output (keep it short to reduce tokens)
-  const lines = scored.map(({ it, score }, idx) => {
-    const title = it.title || it.name || "Issue";
-    const symptoms = it.symptoms || it.problem || "";
-    const causes = it.causes || "";
-    const fix = it.fix || it.solution || "";
-    return `#${idx + 1} (${it.source}) ${title}
-Symptoms: ${String(symptoms).slice(0, 220)}
-Likely causes: ${String(causes).slice(0, 220)}
-Suggested checks/fix: ${String(fix).slice(0, 220)}`;
+  const blocks = ranked.map((r, idx) => {
+    return `SOURCE_${idx + 1}: ${r.file}\n${topSnippetsFromJson(r.json, 1200)}`;
   });
 
-  return `LOCAL_DATA_MATCHES (Location=${userLocation}):
-${lines.join("\n\n")}`;
+  return [
+    `INTERNAL_KB_SEARCH (local data only)`,
+    `USER_LOCATION: ${userLocation}`,
+    ...blocks,
+  ].join("\n\n");
 }
