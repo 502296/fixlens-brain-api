@@ -1,83 +1,144 @@
-import OpenAI from "openai";
+// search.js
 import fs from "fs";
 import path from "path";
-import { buildDoctorSystemPrompt } from "./doctorPrompt.js";
-import { performSearch } from "./search.js";
+import { fileURLToPath } from "url";
 
-const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+// Cache in memory (fast + cheap)
+let CACHE = null;
 
-async function transcribeAudio(audioBase64) {
-  if (!audioBase64 || audioBase64.length < 50) return "";
-  const tempPath = path.join("/tmp", `v_${Date.now()}.m4a`);
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+function safeReadJson(filePath) {
   try {
-    fs.writeFileSync(tempPath, Buffer.from(audioBase64, "base64"));
-    const result = await client.audio.transcriptions.create({
-      file: fs.createReadStream(tempPath),
-      model: "whisper-1",
-      prompt:
-        "Car engine diagnostic sounds: knocking, squealing, ticking, engine fault.",
-    });
-    return result.text;
-  } catch (err) {
-    console.error("Audio Error:", err.message);
-    return "";
-  } finally {
-    if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
+    const raw = fs.readFileSync(filePath, "utf8");
+    return JSON.parse(raw);
+  } catch (e) {
+    return null;
   }
 }
 
-export async function handleFixLensRequest(req) {
-  try {
-    const {
-      text = "",
-      image_base_64,
-      audio_base_64,
-      user_location = "Global",
-      history = [],
-    } = req.body;
+function loadDataOnce() {
+  if (CACHE) return CACHE;
 
-    const voiceText = await transcribeAudio(audio_base_64);
-    const fullInput = `${text} ${voiceText}`.trim();
+  const dataDir = path.join(__dirname, "data");
+  const items = [];
 
-    let searchResults = "";
-    if (fullInput.length > 2) {
-      searchResults = await performSearch(fullInput, user_location);
-    }
-
-    const messageContent = [
-      {
-        type: "text",
-        text: `[STRICT GLOBAL CONTEXT]\nLOCATION: ${user_location}\nSEARCH_RESULTS: ${searchResults}\nUSER_INPUT: ${fullInput}`,
-      },
-    ];
-
-    if (image_base_64) {
-      messageContent.push({
-        type: "image_url",
-        image_url: {
-          url: `data:image/jpeg;base64,${image_base_64}`,
-          detail: "high",
-        },
-      });
-      messageContent.push({
-        type: "text",
-        text: "DIAGNOSTIC TASK: Identify the specific car part and find the mechanical fault.",
-      });
-    }
-
-    const response = await client.chat.completions.create({
-      model: "gpt-4o",
-      messages: [
-        { role: "system", content: buildDoctorSystemPrompt() },
-        ...history.slice(-3),
-        { role: "user", content: messageContent },
-      ],
-      temperature: 0.1,
-    });
-
-    return { ok: true, reply: response.choices[0].message.content };
-  } catch (error) {
-    console.error("FixLens Final Brain Error:", error.message);
-    return { ok: false, reply: "عذراً، النظام يواجه ضغطاً. حاول مجدداً." };
+  if (!fs.existsSync(dataDir)) {
+    CACHE = { items: [] };
+    return CACHE;
   }
+
+  const files = fs.readdirSync(dataDir).filter((f) => f.endsWith(".json"));
+
+  for (const f of files) {
+    const full = path.join(dataDir, f);
+    const json = safeReadJson(full);
+    if (!json) continue;
+
+    // We accept either array JSON or object JSON
+    if (Array.isArray(json)) {
+      for (const row of json) items.push({ source: f, ...row });
+    } else if (typeof json === "object") {
+      // if it has a list field, try common ones
+      const list =
+        json.items || json.issues || json.data || json.rows || json.list;
+      if (Array.isArray(list)) {
+        for (const row of list) items.push({ source: f, ...row });
+      } else {
+        items.push({ source: f, ...json });
+      }
+    }
+  }
+
+  CACHE = { items };
+  return CACHE;
+}
+
+function tokenize(text) {
+  return String(text || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .split(/\s+/)
+    .filter(Boolean);
+}
+
+function scoreItem(queryTokens, item) {
+  // Build a searchable text from common fields
+  const hay =
+    [
+      item.title,
+      item.name,
+      item.symptoms,
+      item.description,
+      item.problem,
+      item.causes,
+      item.fix,
+      item.solution,
+      item.keywords,
+      item.tags,
+      item.category,
+      item.system,
+      item.notes,
+    ]
+      .flat()
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase() || "";
+
+  if (!hay) return 0;
+
+  let score = 0;
+  for (const t of queryTokens) {
+    if (hay.includes(t)) score += 2;
+  }
+
+  // Bonus if title matches strongly
+  const title = String(item.title || item.name || "").toLowerCase();
+  for (const t of queryTokens) {
+    if (title.includes(t)) score += 3;
+  }
+
+  return score;
+}
+
+/**
+ * ✅ Local data search (no API cost)
+ * Returns a short formatted string to feed the model.
+ */
+export async function performSearch(userText, userLocation = "Global") {
+  const enabled = String(process.env.LOCAL_DATA_SEARCH || "true") === "true";
+  if (!enabled) return "";
+
+  const q = String(userText || "").trim();
+  if (q.length < 2) return "";
+
+  const { items } = loadDataOnce();
+  if (!items.length) return "";
+
+  const tokens = tokenize(q).slice(0, 20);
+  if (!tokens.length) return "";
+
+  const scored = items
+    .map((it) => ({ it, score: scoreItem(tokens, it) }))
+    .filter((x) => x.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 5);
+
+  if (!scored.length) return "";
+
+  // Build compact output (keep it short to reduce tokens)
+  const lines = scored.map(({ it, score }, idx) => {
+    const title = it.title || it.name || "Issue";
+    const symptoms = it.symptoms || it.problem || "";
+    const causes = it.causes || "";
+    const fix = it.fix || it.solution || "";
+    return `#${idx + 1} (${it.source}) ${title}
+Symptoms: ${String(symptoms).slice(0, 220)}
+Likely causes: ${String(causes).slice(0, 220)}
+Suggested checks/fix: ${String(fix).slice(0, 220)}`;
+  });
+
+  return `LOCAL_DATA_MATCHES (Location=${userLocation}):
+${lines.join("\n\n")}`;
 }
