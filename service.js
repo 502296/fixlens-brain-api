@@ -17,9 +17,9 @@ async function transcribeAudio(audioBase64) {
       file: fs.createReadStream(tempPath),
       model: "whisper-1",
       prompt:
-        "Car engine diagnostic sounds: knocking, squealing, ticking, engine fault.",
+        "Vehicle diagnostic sounds: knocking, squealing, ticking, misfire, belt slip, bearing, wheel hub, brake squeal, injector tick, turbo whine.",
     });
-    return result.text || "";
+    return (result.text || "").trim();
   } catch (err) {
     console.error("Audio Error:", err?.message || err);
     return "";
@@ -30,77 +30,100 @@ async function transcribeAudio(audioBase64) {
   }
 }
 
-function normalizeHistory(history) {
-  // Expect array of {role, content}. We'll keep last 3 if valid.
+function safeText(v) {
+  return (v ?? "").toString().trim();
+}
+
+function mapHistoryTurns(history = []) {
+  // Flutter sends: {role:'user'|'assistant', content:'...'}
+  // OpenAI expects: {role:'user'|'assistant'|'system', content:'...'}
   if (!Array.isArray(history)) return [];
-  const cleaned = history
-    .filter((m) => m && (m.role === "user" || m.role === "assistant") && m.content)
-    .slice(-3)
-    .map((m) => ({ role: m.role, content: m.content }));
-  return cleaned;
+  return history
+    .filter((t) => t && (t.role === "user" || t.role === "assistant") && typeof t.content === "string")
+    .slice(-6)
+    .map((t) => ({ role: t.role, content: safeText(t.content) }));
+}
+
+function detectIfUserAskedLocal(userText) {
+  const t = (userText || "").toLowerCase();
+  return (
+    t.includes("near me") ||
+    t.includes("nearest") ||
+    t.includes("workshop") ||
+    t.includes("garage") ||
+    t.includes("mechanic") ||
+    t.includes("ورشة") ||
+    t.includes("ميكانيك") ||
+    t.includes("قريب") ||
+    t.includes("بالقرب")
+  );
 }
 
 export async function handleFixLensRequest(req) {
   try {
-    const {
-      text = "",
-      image_base_64,
-      audio_base_64,
-      user_location = "Global",
-      history = [],
-    } = req.body || {};
+    const body = req.body || {};
 
-    // ✅ Voice -> text
-    const voiceText = await transcribeAudio(audio_base_64);
-    const fullInput = `${text} ${voiceText}`.trim();
+    const text = safeText(body.text);
+    const imageBase64 = body.image_base64 || body.image_base_64 || null;
+    const audioBase64 = body.audio_base_64 || body.audio_base64 || null;
 
-    // ✅ Local data search (cheap)
+    const userLocation = safeText(body.user_location) || "Global";
+    const history = mapHistoryTurns(body.history || []);
+
+    // 1) Audio -> text
+    const voiceText = await transcribeAudio(audioBase64);
+    const fullInput = safeText(`${text} ${voiceText}`).trim();
+
+    // 2) Local data search (cheap) ALWAYS first if we have meaningful input
     let searchResults = "";
-    if (fullInput.length > 2) {
-      searchResults = await performSearch(fullInput, user_location);
+    if (fullInput.length >= 3) {
+      searchResults = await performSearch(fullInput, userLocation);
     }
 
-    const messageContent = [
-      {
-        type: "text",
-        text:
-          `[STRICT GLOBAL CONTEXT]\n` +
-          `LOCATION: ${user_location}\n` +
-          `LOCAL_DATA: ${searchResults || "NONE"}\n` +
-          `USER_INPUT: ${fullInput || "(empty)"}`
-      },
-    ];
+    // 3) Web search (Pro feature) — OFF by default
+    // Later: only enable when PRO + user asked local + local data insufficient
+    // Example toggle:
+    // const isPro = body.isPro === true;
+    // if (isPro && detectIfUserAskedLocal(fullInput) && !searchResults) { ... call external Web Search ... }
+    //
+    // IMPORTANT: Do NOT invent workshops without verified web/place results.
 
-    // ✅ Vision
-    if (image_base_64) {
+    const messageContent = [];
+
+    messageContent.push({
+      type: "text",
+      text:
+        `[STRICT_GLOBAL_CONTEXT]\n` +
+        `LOCATION: ${userLocation}\n` +
+        `SEARCH_RESULTS: ${searchResults || ""}\n` +
+        `USER_INPUT: ${fullInput || ""}`,
+    });
+
+    if (imageBase64) {
       messageContent.push({
         type: "image_url",
-        image_url: { url: `data:image/jpeg;base64,${image_base_64}`, detail: "high" },
+        image_url: { url: `data:image/jpeg;base64,${imageBase64}`, detail: "high" },
       });
       messageContent.push({
         type: "text",
-        text: "DIAGNOSTIC TASK: Identify the specific car part and find the mechanical fault.",
+        text: "DIAGNOSTIC TASK: Identify the exact vehicle component and failure mechanism from the photo.",
       });
     }
 
-    const cleanedHistory = normalizeHistory(history);
-
     const response = await client.chat.completions.create({
-      model: process.env.OPENAI_MODEL || "gpt-4o",
+      model: "gpt-4o",
       messages: [
         { role: "system", content: buildDoctorSystemPrompt() },
-        ...cleanedHistory,
+        ...history,
         { role: "user", content: messageContent },
       ],
       temperature: 0.1,
     });
 
-    return { ok: true, reply: response.choices?.[0]?.message?.content || "" };
+    const reply = response?.choices?.[0]?.message?.content || "";
+    return { ok: true, reply };
   } catch (error) {
-    console.error("FixLens Final Brain Error:", error?.message || error);
-    return {
-      ok: false,
-      reply: "عذراً، النظام يواجه ضغطاً حالياً. حاول مجدداً بعد قليل.",
-    };
+    console.error("FixLens Brain Error:", error?.message || error);
+    return { ok: false, reply: "Sorry — FixLens is under load. Please try again." };
   }
 }
