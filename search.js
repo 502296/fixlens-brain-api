@@ -14,11 +14,9 @@ try {
       const raw = fs.readFileSync(p, "utf-8");
       const parsed = JSON.parse(raw);
 
-      // normalize into array of records
       if (Array.isArray(parsed)) {
         KB.push(...parsed.map((x) => ({ ...x, __source: f })));
       } else if (parsed && typeof parsed === "object") {
-        // if object contains items array
         if (Array.isArray(parsed.items)) KB.push(...parsed.items.map((x) => ({ ...x, __source: f })));
         else KB.push({ ...parsed, __source: f });
       }
@@ -30,7 +28,6 @@ try {
 }
 
 function toText(record) {
-  // try common fields, but fallback to full JSON string
   const fields = [
     record.title,
     record.name,
@@ -55,18 +52,29 @@ function toText(record) {
   return s.toLowerCase();
 }
 
-function scoreMatch(query, text) {
-  // simple token scoring (fast + no dependencies)
-  const q = query.toLowerCase().replace(/[^a-z0-9\u0600-\u06FF\s]/g, " ");
-  const tokens = q.split(/\s+/).filter(Boolean);
+function normalizeQuery(q) {
+  return String(q || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9\u0600-\u06FF\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
 
-  if (tokens.length === 0) return 0;
+function scoreMatch(query, text) {
+  const q = normalizeQuery(query);
+  if (!q) return 0;
+
+  const tokens = q.split(" ").filter(Boolean);
+  if (!tokens.length) return 0;
 
   let score = 0;
+
+  // phrase bonus
+  if (q.length >= 6 && text.includes(q)) score += 6;
+
   for (const t of tokens) {
     if (t.length < 2) continue;
     if (text.includes(t)) score += 2;
-    // bonus for exact phrase fragments
     if (t.length >= 4 && text.includes(" " + t + " ")) score += 1;
   }
   return score;
@@ -75,15 +83,13 @@ function scoreMatch(query, text) {
 export async function performSearch(userQuery, userLocation, opts = {}) {
   const { maxResults = 3 } = opts;
 
-  if (!userQuery || userQuery.trim().length < 2) {
-    return { verified_data: [], verified_workshops: [] };
-  }
+  const q = normalizeQuery(userQuery);
+  if (!q || q.length < 2) return { verified_data: [], verified_workshops: [] };
 
-  // local KB search
   const scored = KB
     .map((r) => {
       const t = toText(r);
-      const s = scoreMatch(userQuery, t);
+      const s = scoreMatch(q, t);
       return { r, s };
     })
     .filter((x) => x.s > 0)
