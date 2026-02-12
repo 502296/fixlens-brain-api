@@ -1,4 +1,4 @@
-// search.js — Local verified search using /data JSON files (no web by default)
+// search.js — Local verified search + Google Places (optional)
 import fs from "fs";
 import path from "path";
 
@@ -14,12 +14,11 @@ try {
       const raw = fs.readFileSync(p, "utf-8");
       const parsed = JSON.parse(raw);
 
-      // normalize into array of records
       if (Array.isArray(parsed)) {
         KB.push(...parsed.map((x) => ({ ...x, __source: f })));
       } else if (parsed && typeof parsed === "object") {
-        // if object contains items array
-        if (Array.isArray(parsed.items)) KB.push(...parsed.items.map((x) => ({ ...x, __source: f })));
+        if (Array.isArray(parsed.items))
+          KB.push(...parsed.items.map((x) => ({ ...x, __source: f })));
         else KB.push({ ...parsed, __source: f });
       }
     }
@@ -69,6 +68,43 @@ function scoreMatch(query, text) {
   return score;
 }
 
+async function googlePlacesWorkshops(locationText, maxResults = 5) {
+  const key = process.env.GOOGLE_PLACES_API_KEY;
+  if (!key) return [];
+
+  const loc = String(locationText || "").trim();
+  if (!loc) return [];
+
+  // Text Search is easiest when user gives city/state (no lat/lng needed)
+  const query = `auto repair shop near ${loc}`;
+  const url =
+    "https://maps.googleapis.com/maps/api/place/textsearch/json" +
+    `?query=${encodeURIComponent(query)}` +
+    `&key=${encodeURIComponent(key)}`;
+
+  const controller = new AbortController();
+  const t = setTimeout(() => controller.abort(), 6500);
+
+  try {
+    const res = await fetch(url, { signal: controller.signal });
+    const data = await res.json();
+
+    const results = Array.isArray(data?.results) ? data.results : [];
+    return results.slice(0, maxResults).map((r) => ({
+      name: r?.name || "Workshop",
+      address: r?.formatted_address || r?.vicinity || "",
+      rating: r?.rating ?? null,
+      place_id: r?.place_id || "",
+      source: "google_places",
+    }));
+  } catch (e) {
+    console.error("Google Places error:", e?.message || e);
+    return [];
+  } finally {
+    clearTimeout(t);
+  }
+}
+
 export async function performSearch(userQuery, userLocation, opts = {}) {
   const { maxResults = 3 } = opts;
 
@@ -76,7 +112,6 @@ export async function performSearch(userQuery, userLocation, opts = {}) {
     return { verified_data: [], verified_workshops: [] };
   }
 
-  // local KB search
   const scored = KB
     .map((r) => {
       const t = toText(r);
@@ -102,8 +137,8 @@ export async function performSearch(userQuery, userLocation, opts = {}) {
     };
   });
 
-  // Workshops remain empty here (web is handled in service.js for Pro only)
-  const verified_workshops = [];
+  const placesMax = Number(process.env.PLACES_MAX_RESULTS || 5);
+  const verified_workshops = await googlePlacesWorkshops(userLocation, placesMax);
 
   return { verified_data, verified_workshops };
 }
