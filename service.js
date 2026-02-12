@@ -164,7 +164,12 @@ export async function handleFixLensRequest(req) {
     let VERIFIED_WORKSHOPS = [];
 
     try {
-      const searchPack = await performSearch(fullInput || text, user_location);
+      // ✅ IMPORTANT FIX: pass locale + radius so Places becomes language-aware and city-aware with GPS
+      const searchPack = await performSearch(fullInput || text, user_location, {
+        locale,
+        placesRadiusMeters: Number(body.places_radius_meters || 25000),
+      });
+
       VERIFIED_DATA = Array.isArray(searchPack?.verified_data) ? searchPack.verified_data : [];
       VERIFIED_WORKSHOPS = Array.isArray(searchPack?.verified_workshops)
         ? searchPack.verified_workshops
