@@ -6,6 +6,8 @@ import morgan from "morgan";
 import { handleFixLensRequest } from "./service.js";
 
 const app = express();
+
+// Trust proxy (Render behind proxy)
 app.set("trust proxy", 1);
 
 // CORS allowlist (optional)
@@ -19,7 +21,9 @@ app.use(
     origin: (origin, cb) => {
       if (!origin) return cb(null, true);
       if (allowedOrigins.length === 0) return cb(null, true);
-      return allowedOrigins.includes(origin) ? cb(null, true) : cb(new Error("CORS_NOT_ALLOWED"));
+      return allowedOrigins.includes(origin)
+        ? cb(null, true)
+        : cb(new Error("CORS_NOT_ALLOWED"));
     },
     credentials: true,
   })
@@ -28,7 +32,6 @@ app.use(
 app.use(morgan("combined"));
 app.use(express.json({ limit: "25mb" }));
 
-// Root (optional) so browser doesn't show NOT_FOUND
 app.get("/", (req, res) => {
   res.status(200).json({
     ok: true,
@@ -62,7 +65,9 @@ app.post("/api/chat", (req, res) => apiHandler(req, res, "/api/chat"));
 
 // 404
 app.use((req, res) => {
-  res.status(404).json({ ok: false, error: "NOT_FOUND", path: req.path, method: req.method });
+  res
+    .status(404)
+    .json({ ok: false, error: "NOT_FOUND", path: req.path, method: req.method });
 });
 
 // error handler
