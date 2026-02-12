@@ -1,5 +1,4 @@
 // service.js
-const PROMPT_VERSION = "doctorPrompt_v2026_dynamic_1";
 import OpenAI from "openai";
 import fs from "fs";
 import path from "path";
@@ -8,9 +7,6 @@ import { performSearch } from "./search.js";
 
 const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-// =====================
-// Helpers
-// =====================
 function cleanBase64(b64 = "") {
   return String(b64)
     .replace(/^data:audio\/[a-zA-Z0-9.+-]+;base64,/, "")
@@ -62,7 +58,6 @@ function inferLocaleFromFirstUser(history, fallbackText, explicitLocale) {
   if (ex) return ex;
 
   if (Array.isArray(history) && history.length) {
-    // If previous STRICT_CONTEXT already carried LOCALE, lock to it
     for (const msg of history) {
       if (!msg || msg.role !== "user") continue;
       const t = extractTextFromContent(msg.content);
@@ -70,7 +65,6 @@ function inferLocaleFromFirstUser(history, fallbackText, explicitLocale) {
       if (strict) return strict;
     }
 
-    // Otherwise detect from earliest user message
     for (const msg of history) {
       if (!msg || msg.role !== "user") continue;
       const t = extractTextFromContent(msg.content);
@@ -81,25 +75,19 @@ function inferLocaleFromFirstUser(history, fallbackText, explicitLocale) {
   return detectByScript(fallbackText || "");
 }
 
-// =====================
-// Audio
-// =====================
 async function transcribeAudio(audioBase64) {
   const clean = cleanBase64(audioBase64);
-  // منع “ملفات فاضية” تسبب ردود روبوتية
   if (!clean || clean.length < 200) return "";
 
   const tempPath = path.join("/tmp", `v_${Date.now()}.m4a`);
   try {
     fs.writeFileSync(tempPath, Buffer.from(clean, "base64"));
-
     const result = await client.audio.transcriptions.create({
       file: fs.createReadStream(tempPath),
       model: "whisper-1",
       prompt:
         "Automotive diagnostic audio: knocking, squealing, ticking, rattling, misfire, bearing noise, belt noise.",
     });
-
     return result.text || "";
   } catch (err) {
     console.error("Audio Error:", err?.message || err);
@@ -109,9 +97,6 @@ async function transcribeAudio(audioBase64) {
   }
 }
 
-// =====================
-// Main
-// =====================
 export async function handleFixLensRequest(req) {
   try {
     const body = req.body || {};
@@ -119,27 +104,21 @@ export async function handleFixLensRequest(req) {
     const text = body.text || "";
     const user_location = body.user_location || "Global";
 
-    // accept both keys
     const image_base_64 = body.image_base_64 || body.image_base64 || "";
     const audio_base_64 = body.audio_base_64 || body.audio_base64 || "";
     const history = Array.isArray(body.history) ? body.history : [];
 
-    // 1) transcribe audio (if any)
     const voiceText = await transcribeAudio(audio_base_64);
     const fullInput = `${text} ${voiceText}`.trim();
 
-    // 2) ✅ LANGUAGE LOCK (server-side)
     const locale_locked = inferLocaleFromFirstUser(history, fullInput, body.locale);
 
-    // 3) Local verified search from /data
     const searchPack = await performSearch(fullInput, user_location);
     const VERIFIED_DATA = searchPack.verified_data || [];
     const VERIFIED_WORKSHOPS = searchPack.verified_workshops || [];
 
-    // 4) Build user message content
     const messageContent = [];
 
-    // ✅ IMPORTANT: do NOT include workshops key at all if empty
     const workshopsLine = VERIFIED_WORKSHOPS.length
       ? `\nVERIFIED_WORKSHOPS_JSON: ${JSON.stringify(VERIFIED_WORKSHOPS)}`
       : "";
@@ -166,7 +145,6 @@ USER_INPUT: ${fullInput}`,
       });
     }
 
-    // 5) ✅ hard language lock instruction
     const languageLockSystem = {
       role: "system",
       content: [
@@ -193,6 +171,5 @@ USER_INPUT: ${fullInput}`,
   } catch (error) {
     console.error("FixLens Error:", error?.message || error);
     return { ok: false, reply: "System is under load. Please try again.", locale: "en" };
-    
   }
 }
