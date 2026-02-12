@@ -14,9 +14,11 @@ try {
       const raw = fs.readFileSync(p, "utf-8");
       const parsed = JSON.parse(raw);
 
+      // normalize into array of records
       if (Array.isArray(parsed)) {
         KB.push(...parsed.map((x) => ({ ...x, __source: f })));
       } else if (parsed && typeof parsed === "object") {
+        // if object contains items array
         if (Array.isArray(parsed.items)) KB.push(...parsed.items.map((x) => ({ ...x, __source: f })));
         else KB.push({ ...parsed, __source: f });
       }
@@ -52,26 +54,13 @@ function toText(record) {
   return s.toLowerCase();
 }
 
-function normalizeQuery(q) {
-  return String(q || "")
-    .toLowerCase()
-    .replace(/[^a-z0-9\u0600-\u06FF\s]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
 function scoreMatch(query, text) {
-  const q = normalizeQuery(query);
-  if (!q) return 0;
+  const q = query.toLowerCase().replace(/[^a-z0-9\u0600-\u06FF\s]/g, " ");
+  const tokens = q.split(/\s+/).filter(Boolean);
 
-  const tokens = q.split(" ").filter(Boolean);
-  if (!tokens.length) return 0;
+  if (tokens.length === 0) return 0;
 
   let score = 0;
-
-  // phrase bonus
-  if (q.length >= 6 && text.includes(q)) score += 6;
-
   for (const t of tokens) {
     if (t.length < 2) continue;
     if (text.includes(t)) score += 2;
@@ -83,13 +72,15 @@ function scoreMatch(query, text) {
 export async function performSearch(userQuery, userLocation, opts = {}) {
   const { maxResults = 3 } = opts;
 
-  const q = normalizeQuery(userQuery);
-  if (!q || q.length < 2) return { verified_data: [], verified_workshops: [] };
+  if (!userQuery || userQuery.trim().length < 2) {
+    return { verified_data: [], verified_workshops: [] };
+  }
 
+  // local KB search
   const scored = KB
     .map((r) => {
       const t = toText(r);
-      const s = scoreMatch(q, t);
+      const s = scoreMatch(userQuery, t);
       return { r, s };
     })
     .filter((x) => x.s > 0)
@@ -111,7 +102,7 @@ export async function performSearch(userQuery, userLocation, opts = {}) {
     };
   });
 
-  // Workshops: by default none (no web). We'll add web later for Pro.
+  // Workshops remain empty here (web is handled in service.js for Pro only)
   const verified_workshops = [];
 
   return { verified_data, verified_workshops };
