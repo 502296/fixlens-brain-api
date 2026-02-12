@@ -71,6 +71,121 @@ function scoreMatch(query, text) {
 }
 
 // -----------------------------
+// ✅ Places Intent (CRITICAL FIX)
+// Only call Google Places when user explicitly asks for a shop/workshop.
+// Works across many languages.
+// -----------------------------
+function detectPlacesIntent(userQuery = "") {
+  const q = String(userQuery || "").toLowerCase();
+
+  // If user explicitly asks to be quiet / stop / don't answer, treat as NO intent.
+  const stopSignals = [
+    "اسكت",
+    "لا تكتب",
+    "stop",
+    "be quiet",
+    "don't answer",
+    "do not answer",
+    "silence",
+  ];
+  if (stopSignals.some((w) => q.includes(w))) return false;
+
+  // Explicit workshop / mechanic / near me intent keywords
+  const intentKeywords = [
+    // English
+    "workshop",
+    "mechanic",
+    "garage",
+    "auto repair",
+    "repair shop",
+    "car shop",
+    "near me",
+    "closest",
+    "nearby",
+    "recommend a shop",
+    "recommend me a shop",
+    "send me a shop",
+    "find me a shop",
+    "where can i fix",
+    "where to fix",
+    "where should i go",
+
+    // Arabic
+    "ورشة",
+    "كراج",
+    "ميكانيك",
+    "ميكانيكي",
+    "تصليح",
+    "أصلح",
+    "وين أصلح",
+    "وين اروح",
+    "قريب مني",
+    "اقرب ورشة",
+    "دلني على ورشة",
+    "رشح ورشة",
+    "محل تصليح",
+    "محل ميكانيك",
+
+    // Spanish
+    "taller",
+    "mecánico",
+    "taller mecánico",
+    "cerca de mí",
+
+    // French
+    "garage",
+    "mécanicien",
+    "près de moi",
+
+    // German
+    "werkstatt",
+    "mechaniker",
+    "in der nähe",
+
+    // Italian
+    "officina",
+    "meccanico",
+    "vicino a me",
+
+    // Portuguese
+    "oficina",
+    "mecânico",
+    "perto de mim",
+
+    // Turkish
+    "servis",
+    "tamirci",
+    "yakınımda",
+
+    // Russian
+    "сервис",
+    "мастерская",
+    "рядом",
+
+    // Chinese
+    "修车",
+    "修理厂",
+    "附近",
+
+    // Japanese
+    "修理工場",
+    "整備工場",
+    "近く",
+
+    // Korean
+    "정비소",
+    "근처",
+
+    // Hindi
+    "वर्कशॉप",
+    "मैकेनिक",
+    "पास में",
+  ];
+
+  return intentKeywords.some((w) => q.includes(w));
+}
+
+// -----------------------------
 // Location parsing helpers
 // -----------------------------
 function normalizeLocale(locale) {
@@ -96,7 +211,9 @@ function parseLatLng(input) {
   }
 
   const s = String(input).trim();
-  const m = s.match(/(-?\d+(\.\d+)?)\s*,\s*(-?\d+(\.\d+)?)/) || s.match(/(-?\d+(\.\d+)?)\s+(-?\d+(\.\d+)?)/);
+  const m =
+    s.match(/(-?\d+(\.\d+)?)\s*,\s*(-?\d+(\.\d+)?)/) ||
+    s.match(/(-?\d+(\.\d+)?)\s+(-?\d+(\.\d+)?)/);
   if (!m) return null;
 
   const lat = Number(m[1]);
@@ -109,6 +226,7 @@ function safeCityText(userLocation) {
   // If location is a plain string like "Louisville, KY"
   if (!userLocation) return "";
   if (typeof userLocation === "string") return userLocation.trim();
+
   // If it’s an object but without lat/lng, try to read city fields
   if (typeof userLocation === "object") {
     const city = userLocation.city || userLocation.locality || "";
@@ -178,7 +296,6 @@ async function placesSearchText({
       body: JSON.stringify(body),
     });
 
-    // If API not enabled or restricted you’ll see non-200
     const data = await res.json().catch(() => ({}));
 
     const places = Array.isArray(data?.places) ? data.places : [];
@@ -203,7 +320,7 @@ async function placesSearchText({
   }
 }
 
-async function googlePlacesWorkshops(userLocation, locale, maxResults = 5) {
+async function googlePlacesWorkshops(userLocation, locale, maxResults = 5, placesRadiusMeters = 25000) {
   const languageCode = normalizeLocale(locale);
 
   // Prefer GPS if available
@@ -216,7 +333,7 @@ async function googlePlacesWorkshops(userLocation, locale, maxResults = 5) {
       textQuery: query,
       languageCode,
       maxResults,
-      locationBias: { lat: gps.lat, lng: gps.lng, radiusMeters: 25000 },
+      locationBias: { lat: gps.lat, lng: gps.lng, radiusMeters: placesRadiusMeters },
     });
   }
 
@@ -241,6 +358,8 @@ export async function performSearch(userQuery, userLocation, opts = {}) {
     maxResults = 3,
     locale = "en",
     placesRadiusMeters = 25000,
+    // ✅ allowPlaces lets server force Places on/off if needed
+    allowPlaces = null, // null = auto-detect intent
   } = opts;
 
   // 1) Local KB search
@@ -272,24 +391,24 @@ export async function performSearch(userQuery, userLocation, opts = {}) {
     });
   }
 
-  // 2) Google Places workshops (GPS-aware + locale-aware)
+  // ✅ 2) Places workshops ONLY when user explicitly asks for a workshop
   let verified_workshops = [];
+
+  const wantsPlaces =
+    typeof allowPlaces === "boolean" ? allowPlaces : detectPlacesIntent(userQuery);
+
+  if (!wantsPlaces) {
+    return { verified_data, verified_workshops: [] };
+  }
+
   try {
     const placesMax = Number(process.env.PLACES_MAX_RESULTS || 5);
-
-    // If gps exists and you want smaller/larger radius:
-    const gps = parseLatLng(userLocation);
-    if (gps) {
-      // pass radius via opts by temporarily encoding into object
-      verified_workshops = await placesSearchText({
-        textQuery: "auto repair shop",
-        languageCode: normalizeLocale(locale),
-        maxResults: placesMax,
-        locationBias: { lat: gps.lat, lng: gps.lng, radiusMeters: placesRadiusMeters },
-      });
-    } else {
-      verified_workshops = await googlePlacesWorkshops(userLocation, locale, placesMax);
-    }
+    verified_workshops = await googlePlacesWorkshops(
+      userLocation,
+      locale,
+      placesMax,
+      placesRadiusMeters
+    );
   } catch (e) {
     console.error("Workshops search error:", e?.message || e);
     verified_workshops = [];
