@@ -4,84 +4,15 @@ import fs from "fs";
 import path from "path";
 import { buildDoctorSystemPrompt } from "./doctorPrompt.js";
 import { performSearch } from "./search.js";
+import { searchPlacesWorkshops } from "./places.js";
 
 const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-function cleanBase64(b64 = "") {
-  return String(b64)
-    .replace(/^data:audio\/[a-zA-Z0-9.+-]+;base64,/, "")
-    .replace(/^data:application\/octet-stream;base64,/, "")
-    .trim();
-}
-
-function detectByScript(text = "") {
-  if (/[\u0600-\u06FF]/.test(text)) return "ar";
-  return "en";
-}
-
-function normalizeLocale(loc) {
-  if (!loc) return "";
-  const s = String(loc).trim().toLowerCase();
-  if (s.startsWith("ar")) return "ar";
-  if (s.startsWith("en")) return "en";
-  if (s.startsWith("es")) return "es";
-  if (s.startsWith("fr")) return "fr";
-  if (s.startsWith("de")) return "de";
-  if (s.startsWith("it")) return "it";
-  return s.length <= 8 ? s : "";
-}
-
-function extractTextFromContent(content) {
-  if (!content) return "";
-  if (typeof content === "string") return content;
-  if (Array.isArray(content)) {
-    return content
-      .map((c) => {
-        if (!c) return "";
-        if (typeof c === "string") return c;
-        if (c.type === "text" && typeof c.text === "string") return c.text;
-        return "";
-      })
-      .join("\n");
-  }
-  return "";
-}
-
-function extractLocaleFromStrictContext(text = "") {
-  const m = text.match(/LOCALE:\s*([a-zA-Z-]{2,8})/);
-  if (!m) return "";
-  return normalizeLocale(m[1]);
-}
-
-function inferLocaleFromFirstUser(history, fallbackText, explicitLocale) {
-  const ex = normalizeLocale(explicitLocale);
-  if (ex) return ex;
-
-  if (Array.isArray(history) && history.length) {
-    for (const msg of history) {
-      if (!msg || msg.role !== "user") continue;
-      const t = extractTextFromContent(msg.content);
-      const strict = extractLocaleFromStrictContext(t);
-      if (strict) return strict;
-    }
-
-    for (const msg of history) {
-      if (!msg || msg.role !== "user") continue;
-      const t = extractTextFromContent(msg.content);
-      if (t && t.trim().length) return detectByScript(t);
-    }
-  }
-
-  return detectByScript(fallbackText || "");
-}
-
 async function transcribeAudio(audioBase64) {
-  const clean = cleanBase64(audioBase64);
-  if (!clean || clean.length < 200) return "";
-
+  if (!audioBase64 || audioBase64.length < 50) return "";
   const tempPath = path.join("/tmp", `v_${Date.now()}.m4a`);
   try {
-    fs.writeFileSync(tempPath, Buffer.from(clean, "base64"));
+    fs.writeFileSync(tempPath, Buffer.from(audioBase64, "base64"));
     const result = await client.audio.transcriptions.create({
       file: fs.createReadStream(tempPath),
       model: "whisper-1",
@@ -97,39 +28,78 @@ async function transcribeAudio(audioBase64) {
   }
 }
 
+function inferLocale({ locale, text }) {
+  if (locale && String(locale).trim()) return String(locale).trim();
+  if (text && /[\u0600-\u06FF]/.test(text)) return "ar";
+  return "en";
+}
+
+function wantsWorkshops(text) {
+  const t = (text || "").toLowerCase();
+  // Arabic + English triggers
+  return (
+    t.includes("ورشة") ||
+    t.includes("ميكانيك") ||
+    t.includes("كراج") ||
+    t.includes("تصليح") ||
+    t.includes("garage") ||
+    t.includes("mechanic") ||
+    t.includes("repair shop") ||
+    t.includes("workshop") ||
+    t.includes("shop near me") ||
+    t.includes("nearby shop")
+  );
+}
+
 export async function handleFixLensRequest(req) {
   try {
     const body = req.body || {};
 
     const text = body.text || "";
+    const locale = inferLocale({ locale: body.locale, text });
     const user_location = body.user_location || "Global";
 
+    // accept both keys
     const image_base_64 = body.image_base_64 || body.image_base64 || "";
     const audio_base_64 = body.audio_base_64 || body.audio_base64 || "";
     const history = Array.isArray(body.history) ? body.history : [];
 
+    // Pro / Web search flags (you control this from Flutter)
+    const web_search =
+      Boolean(body.web_search) || Boolean(body.enable_web_search) || Boolean(body.pro);
+
+    // 1) transcribe audio (if any)
     const voiceText = await transcribeAudio(audio_base_64);
     const fullInput = `${text} ${voiceText}`.trim();
 
-    const locale_locked = inferLocaleFromFirstUser(history, fullInput, body.locale);
-
+    // 2) Local verified search from /data
     const searchPack = await performSearch(fullInput, user_location);
     const VERIFIED_DATA = searchPack.verified_data || [];
-    const VERIFIED_WORKSHOPS = searchPack.verified_workshops || [];
 
+    // 3) Workshops (Pro web search via Google Places) — only when:
+    // - web_search enabled (Pro), AND
+    // - user asks for workshops OR user location is meaningful
+    let VERIFIED_WORKSHOPS = [];
+    if (web_search && (wantsWorkshops(fullInput) || (user_location && user_location !== "Global"))) {
+      const maxResults = Number(process.env.PLACES_MAX_RESULTS || 5);
+      VERIFIED_WORKSHOPS = await searchPlacesWorkshops({
+        userLocation: user_location,
+        userText: fullInput,
+        maxResults,
+      });
+    }
+
+    // 4) Build user message content
     const messageContent = [];
-
-    const workshopsLine = VERIFIED_WORKSHOPS.length
-      ? `\nVERIFIED_WORKSHOPS_JSON: ${JSON.stringify(VERIFIED_WORKSHOPS)}`
-      : "";
 
     messageContent.push({
       type: "text",
       text: `STRICT_CONTEXT
-LOCALE: ${locale_locked}
+LOCALE: ${locale}
 LOCATION: ${user_location}
 
-VERIFIED_DATA_JSON: ${JSON.stringify(VERIFIED_DATA)}${workshopsLine}
+VERIFIED_DATA_JSON: ${JSON.stringify(VERIFIED_DATA)}
+VERIFIED_WORKSHOPS_JSON: ${JSON.stringify(VERIFIED_WORKSHOPS)}
 
 USER_INPUT: ${fullInput}`,
     });
@@ -145,29 +115,18 @@ USER_INPUT: ${fullInput}`,
       });
     }
 
-    const languageLockSystem = {
-      role: "system",
-      content: [
-        `LANGUAGE_LOCK (CRITICAL):`,
-        `- The conversation language is permanently locked to: "${locale_locked}".`,
-        `- You MUST answer ONLY in "${locale_locked}" for every response.`,
-        `- NEVER switch language even if user mixes languages, unless user explicitly asks: "change language to X".`,
-      ].join("\n"),
-    };
-
     const response = await client.chat.completions.create({
       model: process.env.FIXLENS_MODEL || "gpt-4o",
       messages: [
         { role: "system", content: buildDoctorSystemPrompt() },
-        languageLockSystem,
         ...history.slice(-6),
         { role: "user", content: messageContent },
       ],
-      temperature: 0.1,
+      temperature: 0.15,
     });
 
     const out = response.choices?.[0]?.message?.content || "";
-    return { ok: true, reply: out, locale: locale_locked, locale_locked, voiceText };
+    return { ok: true, reply: out, locale, workshops_count: VERIFIED_WORKSHOPS.length };
   } catch (error) {
     console.error("FixLens Error:", error?.message || error);
     return { ok: false, reply: "System is under load. Please try again.", locale: "en" };
