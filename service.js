@@ -1,4 +1,5 @@
 // service.js
+const PROMPT_VERSION = "doctorPrompt_v2026_dynamic_1";
 import OpenAI from "openai";
 import fs from "fs";
 import path from "path";
@@ -192,5 +193,6 @@ USER_INPUT: ${fullInput}`,
   } catch (error) {
     console.error("FixLens Error:", error?.message || error);
     return { ok: false, reply: "System is under load. Please try again.", locale: "en" };
+    
   }
 }
