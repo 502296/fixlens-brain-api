@@ -127,6 +127,152 @@ function getErrorDebug(err) {
 }
 
 // -----------------------------
+// NEW: Language lock + mismatch fixer
+// -----------------------------
+function isMostlyArabic(s = "") {
+  const t = String(s || "");
+  const ar = (t.match(/[\u0600-\u06FF]/g) || []).length;
+  const latin = (t.match(/[A-Za-z]/g) || []).length;
+  return ar > 0 && ar >= latin * 0.6;
+}
+
+function isMostlyLatin(s = "") {
+  const t = String(s || "");
+  const ar = (t.match(/[\u0600-\u06FF]/g) || []).length;
+  const latin = (t.match(/[A-Za-z]/g) || []).length;
+  return latin > 0 && latin >= ar * 0.6;
+}
+
+async function rewriteToLocale(text, locale) {
+  const lang = localeToLangTag(locale);
+
+  // If already matches, return as-is
+  if (lang === "ar" && isMostlyArabic(text)) return text;
+  if (lang !== "ar" && isMostlyLatin(text)) return text;
+
+  // Do a tight rewrite/translation (no extra info)
+  try {
+    const r = await client.chat.completions.create({
+      model: process.env.FIXLENS_MODEL || "gpt-4o",
+      messages: [
+        {
+          role: "system",
+          content:
+            "You are a strict rewriter. Rewrite the given text in the target language only. Keep meaning, keep structure, do not add new info.",
+        },
+        {
+          role: "user",
+          content: `TARGET_LOCALE: ${locale}\nTARGET_LANGUAGE: ${lang}\n\nTEXT:\n${String(
+            text || ""
+          ).trim()}`,
+        },
+      ],
+      temperature: 0,
+    });
+
+    const out = (r?.choices?.[0]?.message?.content || "").trim();
+    return out || text;
+  } catch (_) {
+    return text;
+  }
+}
+
+// -----------------------------
+// NEW: Places intent detection + deterministic replies
+// -----------------------------
+function looksLikePlacesRequest(fullInput = "") {
+  const t = String(fullInput || "").toLowerCase();
+
+  // Arabic
+  if (
+    t.includes("ورشة") ||
+    t.includes("ورش") ||
+    t.includes("ميكاني") ||
+    t.includes("ميكانيكي") ||
+    t.includes("كراج") ||
+    t.includes("عنوان") ||
+    t.includes("اقرب") ||
+    t.includes("قريبة") ||
+    t.includes("موقع") ||
+    t.includes("خرائط")
+  )
+    return true;
+
+  // English
+  if (
+    t.includes("mechanic") ||
+    t.includes("shop") ||
+    t.includes("auto repair") ||
+    t.includes("garage") ||
+    t.includes("address") ||
+    t.includes("near me") ||
+    t.includes("nearby") ||
+    t.includes("in louisville") ||
+    t.includes("kentucky")
+  )
+    return true;
+
+  return false;
+}
+
+function formatWorkshopsReply(locale, workshops = []) {
+  const lang = localeToLangTag(locale);
+
+  if (lang === "ar") {
+    const lines = workshops.slice(0, 5).map((w, i) => {
+      const name = w?.name || "ورشة";
+      const address = w?.address ? `\nالعنوان: ${w.address}` : "";
+      const rating =
+        w?.rating && Number(w.rating) > 0
+          ? `\nالتقييم: ${w.rating}${w?.ratings_total ? ` (${w.ratings_total} مراجعة)` : ""}`
+          : "";
+      const maps = w?.maps_url ? `\nخرائط Google: ${w.maps_url}` : "";
+      return `${i + 1}) ${name}${address}${rating}${maps}`;
+    });
+
+    return (
+      "هذه أفضل ورش/ميكانيك قريبة حسب موقعك الحالي:\n\n" +
+      lines.join("\n\n") +
+      "\n\nإذا تحب، اكتب اسم الحي/المنطقة أو نوع المشكلة (فرامل/إطارات/قير) وأرتّب لك قائمة أدق."
+    );
+  }
+
+  // default English
+  const lines = workshops.slice(0, 5).map((w, i) => {
+    const name = w?.name || "Workshop";
+    const address = w?.address ? `\nAddress: ${w.address}` : "";
+    const rating =
+      w?.rating && Number(w.rating) > 0
+        ? `\nRating: ${w.rating}${w?.ratings_total ? ` (${w.ratings_total} reviews)` : ""}`
+        : "";
+    const maps = w?.maps_url ? `\nGoogle Maps: ${w.maps_url}` : "";
+    return `${i + 1}) ${name}${address}${rating}${maps}`;
+  });
+
+  return (
+    "Here are good nearby mechanic shops based on your current location:\n\n" +
+    lines.join("\n\n") +
+    "\n\nIf you tell me your neighborhood or the issue type (brakes/tires/transmission), I can refine the list."
+  );
+}
+
+function formatNoWorkshopsReply(locale) {
+  const lang = localeToLangTag(locale);
+
+  if (lang === "ar") {
+    return (
+      "أقدر أطلع لك ورش قريبة، لكن ما قدرت أحدد موقعك بشكل كافي الآن.\n" +
+      "اكتب اسم المدينة/الحي (مثلاً: Louisville, KY أو اسم منطقتك)، أو فعّل GPS داخل التطبيق ثم جرّب مرة ثانية."
+    );
+  }
+
+  return (
+    "I can find nearby shops, but I can’t determine your location precisely right now.\n" +
+    "Send your city/neighborhood (e.g., Louisville, KY), or enable GPS in the app and try again."
+  );
+}
+
+// -----------------------------
 // Audio Transcription
 // -----------------------------
 async function transcribeAudio(audioBase64) {
@@ -165,7 +311,7 @@ export async function handleFixLensRequest(req) {
   const history = Array.isArray(body.history) ? body.history : [];
 
   // Locale: allow explicit locale from app (recommended), otherwise infer from history/text
-  const locale = inferLocale({ locale: body.locale, text, history });
+  let locale = inferLocale({ locale: body.locale, text, history });
 
   // ✅ GLOBAL: never default to Louisville. Use what app sends or "Global"
   const user_location = body.user_location || "Global";
@@ -181,6 +327,14 @@ export async function handleFixLensRequest(req) {
     const audioResult = await transcribeAudio(audio_base_64);
     const voiceText = audioResult.text;
     const fullInput = `${text} ${voiceText}`.trim();
+
+    // ✅ HARD OVERRIDE: if user clearly typed Arabic, lock locale to Arabic (even if device locale is en-US)
+    const langFromInput = detectTextLanguage(fullInput || text);
+    if (langFromInput === "ar") {
+      // keep region tag if already ar-XX, else set to "ar"
+      const base = localeToLangTag(locale);
+      locale = base === "ar" ? locale : "ar";
+    }
 
     // 2) Local verified search from /data + optional Google Places
     let VERIFIED_DATA = [];
@@ -200,6 +354,33 @@ export async function handleFixLensRequest(req) {
       console.error("Search Error:", searchErr?.message || searchErr);
       VERIFIED_DATA = [];
       VERIFIED_WORKSHOPS = [];
+    }
+
+    // ✅ NEW: If user asked for workshops/places, return deterministic output
+    const isPlaces = looksLikePlacesRequest(fullInput || text);
+
+    if (isPlaces) {
+      const reply =
+        VERIFIED_WORKSHOPS.length > 0
+          ? formatWorkshopsReply(locale, VERIFIED_WORKSHOPS)
+          : formatNoWorkshopsReply(locale);
+
+      return {
+        ok: true,
+        reply,
+        locale,
+        workshops_count: VERIFIED_WORKSHOPS.length,
+        ...(debugMode
+          ? {
+              debug: {
+                stage: "places_short_circuit",
+                model: process.env.FIXLENS_MODEL || "gpt-4o",
+                has_workshops: VERIFIED_WORKSHOPS.length > 0,
+                user_location_type: typeof user_location,
+              },
+            }
+          : {}),
+      };
     }
 
     // 3) Build user message content
@@ -253,7 +434,10 @@ USER_INPUT: ${(text || "").trim()}`,
     });
 
     const outRaw = response?.choices?.[0]?.message?.content || "";
-    const out = ensureNonEmptyReply(outRaw, locale);
+    let out = ensureNonEmptyReply(outRaw, locale);
+
+    // ✅ NEW: if model answered in wrong language, rewrite to match locale
+    out = await rewriteToLocale(out, locale);
 
     return {
       ok: true,
