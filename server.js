@@ -38,10 +38,6 @@ app.use(express.json({ limit: "25mb" }));
 const GOOGLE_PLACES_API_KEY = process.env.GOOGLE_PLACES_API_KEY || "";
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY || "";
 
-// You can set this in Render if you want:
-// TEXT_MODEL=gpt-4o-mini (fast/cheap) or gpt-4o (strong)
-const INTENT_MODEL = process.env.TEXT_MODEL || "gpt-4o-mini";
-
 function extractUserText(body) {
   if (!body) return "";
   if (typeof body.text === "string") return body.text;
@@ -65,7 +61,8 @@ function hasAnyText(x) {
 }
 
 // =====================
-// Google Places: Text Search (New Places API)
+// OPTIONAL: Direct Places endpoint (for quick debugging only)
+// NOTE: This endpoint is NOT used by the app flow.
 // =====================
 async function googlePlacesSearchText(textQuery, languageCode = "en") {
   if (!GOOGLE_PLACES_API_KEY) {
@@ -81,7 +78,6 @@ async function googlePlacesSearchText(textQuery, languageCode = "en") {
 
   const body = {
     textQuery: finalQuery,
-    // languageCode optional, but it's nicer to set it.
     languageCode: languageCode || "en",
     regionCode: "US",
     pageSize: 8,
@@ -92,7 +88,6 @@ async function googlePlacesSearchText(textQuery, languageCode = "en") {
     headers: {
       "Content-Type": "application/json",
       "X-Goog-Api-Key": GOOGLE_PLACES_API_KEY,
-      // FieldMask is REQUIRED in new Places API:
       "X-Goog-FieldMask":
         "places.displayName,places.formattedAddress,places.rating,places.userRatingCount,places.googleMapsUri",
     },
@@ -102,8 +97,7 @@ async function googlePlacesSearchText(textQuery, languageCode = "en") {
   const data = await res.json().catch(() => ({}));
 
   if (!res.ok) {
-    const msg =
-      data?.error?.message || `Google Places error (status ${res.status})`;
+    const msg = data?.error?.message || `Google Places error (status ${res.status})`;
     const err = new Error(msg);
     err.status = res.status;
     err.details = data;
@@ -116,79 +110,9 @@ async function googlePlacesSearchText(textQuery, languageCode = "en") {
     name: p?.displayName?.text || "Unknown",
     address: p?.formattedAddress || "",
     rating: typeof p?.rating === "number" ? p.rating : null,
-    ratingsCount:
-      typeof p?.userRatingCount === "number" ? p.userRatingCount : null,
+    ratingsCount: typeof p?.userRatingCount === "number" ? p.userRatingCount : null,
     mapsUrl: p?.googleMapsUri || "",
   }));
-}
-
-// =====================
-// Multilingual intent detection via OpenAI (works in ANY language)
-// =====================
-async function detectPlacesIntentWithAI(userText) {
-  // If OpenAI key missing, we can't do multilingual intent detection
-  if (!OPENAI_API_KEY) return { use_places: false };
-
-  // Very short + strict JSON output
-  const system = `
-You are an intent detector for a mobile app.
-Return ONLY valid JSON (no extra text).
-
-Goal: detect if the user is asking for nearby real-world places (shops/services/garages/mechanics/etc).
-If yes, provide a clean search query suitable for Google Places "text search".
-
-Rules:
-- If user asks for a nearby workshop/mechanic/repair shop, set use_places=true.
-- If user asks for "send me a place near me" or "closest X", use_places=true.
-- If user is not asking for real-world place recommendations, use_places=false.
-- Detect the user's language code (BCP-47 short like: en, ar, es, fr, de, tr, fa, ur, hi, etc). If unsure, use "en".
-- Output JSON keys: use_places (boolean), query (string), language (string).
-`;
-
-  const user = `User text: ${userText}`;
-
-  const payload = {
-    model: INTENT_MODEL,
-    temperature: 0,
-    response_format: { type: "json_object" },
-    messages: [
-      { role: "system", content: system.trim() },
-      { role: "user", content: user },
-    ],
-  };
-
-  const res = await fetch("https://api.openai.com/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${OPENAI_API_KEY}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(payload),
-  });
-
-  const data = await res.json().catch(() => ({}));
-
-  if (!res.ok) {
-    // If detector fails, we just won't use places.
-    console.log("Intent detector failed:", data?.error?.message || res.status);
-    return { use_places: false };
-  }
-
-  const content = data?.choices?.[0]?.message?.content;
-  if (!hasAnyText(content)) return { use_places: false };
-
-  try {
-    const obj = JSON.parse(content);
-    const use_places = Boolean(obj?.use_places);
-    const query = typeof obj?.query === "string" ? obj.query.trim() : "";
-    const language =
-      typeof obj?.language === "string" && obj.language.trim()
-        ? obj.language.trim()
-        : "en";
-    return { use_places, query, language };
-  } catch {
-    return { use_places: false };
-  }
 }
 
 // =====================
@@ -198,7 +122,7 @@ app.get("/", (req, res) => {
   res.status(200).json({
     ok: true,
     service: "fixlens-brain-api",
-    hint: "Use POST /api/chat or POST /api/fixlens, POST /api/places, and GET /health",
+    hint: "Use POST /api/chat or POST /api/fixlens and GET /health",
   });
 });
 
@@ -209,24 +133,20 @@ app.get("/health", (req, res) => {
     time: new Date().toISOString(),
     has_google_places_key: Boolean(GOOGLE_PLACES_API_KEY),
     has_openai_key: Boolean(OPENAI_API_KEY),
-    intent_model: INTENT_MODEL,
   });
 });
 
-// ✅ Direct Places endpoint (for quick testing)
+// ✅ Debug-only Places endpoint
 app.post("/api/places", async (req, res) => {
   try {
     const userText = extractUserText(req.body) || req.body?.query || "";
-    const intent = await detectPlacesIntentWithAI(userText);
-
-    // If user didn't ask for places, still allow calling places with raw query for debugging
-    const query = hasAnyText(intent?.query) ? intent.query : userText;
-    const lang = intent?.language || "en";
+    const query = hasAnyText(userText) ? userText : "auto repair shop";
+    const lang = (req.body?.language || "en").toString().trim() || "en";
 
     const results = await googlePlacesSearchText(query, lang);
     return res.status(200).json({
       ok: true,
-      mode: "places",
+      mode: "places_debug",
       query,
       language: lang,
       results,
@@ -239,34 +159,9 @@ app.post("/api/places", async (req, res) => {
   }
 });
 
+// ✅ IMPORTANT: App endpoints ALWAYS return FixLens reply (never "mode: places")
 const apiHandler = async (req, res, name) => {
   try {
-    const userText = extractUserText(req.body);
-
-    // ✅ Multilingual Places Auto-Trigger
-    if (hasAnyText(userText)) {
-      const intent = await detectPlacesIntentWithAI(userText);
-      if (intent?.use_places) {
-        const query = hasAnyText(intent?.query) ? intent.query : userText;
-        const lang = intent?.language || "en";
-
-        console.log(`[${name}] Places intent detected → calling Google Places`, {
-          lang,
-        });
-
-        const results = await googlePlacesSearchText(query, lang);
-
-        return res.status(200).json({
-          ok: true,
-          mode: "places",
-          query,
-          language: lang,
-          results,
-        });
-      }
-    }
-
-    // Otherwise, normal FixLens AI flow
     const out = await handleFixLensRequest(req);
     return res.status(200).json(out);
   } catch (err) {
@@ -300,7 +195,6 @@ const server = app.listen(PORT, () => {
   console.log(`FixLens Brain API running on port ${PORT}`);
   console.log(`Google Places key present: ${Boolean(GOOGLE_PLACES_API_KEY)}`);
   console.log(`OpenAI key present: ${Boolean(OPENAI_API_KEY)}`);
-  console.log(`Intent model: ${INTENT_MODEL}`);
 });
 
 process.on("SIGTERM", () => {
