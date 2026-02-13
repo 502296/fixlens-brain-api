@@ -91,8 +91,6 @@ function localeToLangTag(locale) {
 function fallbackMessage(locale) {
   const lang = localeToLangTag(locale);
 
-  // Keep it short and professional. (For "all languages", we rely on model for main output.
-  // This fallback is only for edge cases where model output is empty or services fail.)
   if (lang === "ar") {
     return "حصلت مشكلة مؤقتة أثناء التحليل أو البحث، لكن أقدر أساعدك بالتشخيص الآن. اكتب: (نوع السيارة + السنة + الأعراض + متى تظهر المشكلة) وسأعطيك خطة فحص دقيقة.";
   }
@@ -106,36 +104,26 @@ function ensureNonEmptyReply(out, locale) {
   return fallbackMessage(locale);
 }
 
-// --------------------------------------------
-// ✅ FIX: normalize history to OpenAI safe format
-// (Prevents empty replies caused by mixed content formats)
-// --------------------------------------------
-function sanitizeHistory(history = []) {
-  if (!Array.isArray(history)) return [];
+// -----------------------------
+// Debug helpers (NEW)
+// -----------------------------
+function getErrorDebug(err) {
+  // OpenAI SDK v4 errors may include status/code/type/param
+  const d = {
+    name: err?.name,
+    message: err?.message,
+    status: err?.status,
+    code: err?.code,
+    type: err?.type,
+    param: err?.param,
+  };
 
-  return history
-    .map((m) => {
-      if (!m || !m.role) return null;
+  // Sometimes more details exist:
+  if (err?.error) d.error = err.error;
+  if (err?.response) d.response = err.response;
+  if (err?.cause) d.cause = String(err.cause);
 
-      // content string → OK
-      if (typeof m.content === "string") {
-        return { role: m.role, content: m.content };
-      }
-
-      // content array (multimodal) → convert to text-only
-      if (Array.isArray(m.content)) {
-        const text = m.content
-          .map((p) => (typeof p?.text === "string" ? p.text : ""))
-          .join(" ")
-          .trim();
-
-        if (text) return { role: m.role, content: text };
-        return null;
-      }
-
-      return null;
-    })
-    .filter(Boolean);
+  return d;
 }
 
 // -----------------------------
@@ -179,11 +167,14 @@ export async function handleFixLensRequest(req) {
   // Locale: allow explicit locale from app (recommended), otherwise infer from history/text
   const locale = inferLocale({ locale: body.locale, text, history });
 
-  // Location should be global-ready (earth-wide). App can send city/country or lat,lng later.
+  // ✅ GLOBAL: never default to Louisville. Use what app sends or "Global"
   const user_location = body.user_location || "Global";
 
   const image_base_64 = body.image_base_64 || body.image_base64 || "";
   const audio_base_64 = body.audio_base_64 || body.audio_base64 || "";
+
+  // ✅ Debug mode (optional): send debug:true from app when testing
+  const debugMode = Boolean(body.debug);
 
   try {
     // 1) transcribe audio (if any)
@@ -196,7 +187,6 @@ export async function handleFixLensRequest(req) {
     let VERIFIED_WORKSHOPS = [];
 
     try {
-      // ✅ IMPORTANT FIX: pass locale + radius so Places becomes language-aware and city-aware with GPS
       const searchPack = await performSearch(fullInput || text, user_location, {
         locale,
         placesRadiusMeters: Number(body.places_radius_meters || 25000),
@@ -207,7 +197,6 @@ export async function handleFixLensRequest(req) {
         ? searchPack.verified_workshops
         : [];
     } catch (searchErr) {
-      // IMPORTANT: never fail the whole request due to search/places.
       console.error("Search Error:", searchErr?.message || searchErr);
       VERIFIED_DATA = [];
       VERIFIED_WORKSHOPS = [];
@@ -216,18 +205,20 @@ export async function handleFixLensRequest(req) {
     // 3) Build user message content
     const messageContent = [];
 
-    // Critical: tell the model to respond in the detected/specified locale,
-    // and to keep language consistent (no mixed Arabic/English unless user asks).
     messageContent.push({
       type: "text",
       text: `STRICT_CONTEXT
 LOCALE: ${locale}
-LOCATION: ${user_location}
+LOCATION: ${typeof user_location === "string" ? user_location : JSON.stringify(user_location)}
 
 LANGUAGE_RULES:
 - Respond ONLY in the user's language implied by LOCALE (no bilingual output unless the user explicitly requests bilingual).
 - If LOCALE is a region tag (e.g., ar-IQ), use that language naturally.
-- If user asks for workshops/places, use VERIFIED_WORKSHOPS_JSON first. If empty, ask for city/neighborhood OR provide a safe generic selection checklist (still in same language).
+- Never assume a fixed city/country. Use LOCATION only if provided; otherwise treat it as Global.
+
+WORKSHOP_RULE:
+- If user asks for workshops/places, use VERIFIED_WORKSHOPS_JSON first.
+- If VERIFIED_WORKSHOPS_JSON is empty, ask for city/neighborhood OR ask permission to use GPS, then provide a safe selection checklist (still in same language).
 
 AUDIO_TRANSCRIPT_OK: ${audioResult.ok ? "YES" : audio_base_64 ? "NO" : "NO_AUDIO"}
 AUDIO_TRANSCRIPT: ${voiceText || ""}
@@ -245,19 +236,17 @@ USER_INPUT: ${(text || "").trim()}`,
       });
       messageContent.push({
         type: "text",
-        text: "Use the photo to identify visible parts, damage, leaks, wear, or incorrect installation. Tie findings to diagnosis.",
+        text:
+          "Use the photo to identify visible parts, damage, leaks, wear, or incorrect installation. Tie findings to diagnosis.",
       });
     }
-
-    // ✅ FIX: sanitize history so OpenAI always accepts message formats (prevents silent empty output)
-    const safeHistory = sanitizeHistory(history).slice(-8);
 
     // 4) Model response
     const response = await client.chat.completions.create({
       model: process.env.FIXLENS_MODEL || "gpt-4o",
       messages: [
         { role: "system", content: buildDoctorSystemPrompt() },
-        ...safeHistory,
+        ...history.slice(-8),
         { role: "user", content: messageContent },
       ],
       temperature: 0.2,
@@ -271,11 +260,12 @@ USER_INPUT: ${(text || "").trim()}`,
       reply: out,
       locale,
       workshops_count: VERIFIED_WORKSHOPS.length,
+      ...(debugMode ? { debug: { stage: "ok", model: process.env.FIXLENS_MODEL || "gpt-4o" } } : {}),
     };
   } catch (error) {
-    console.error("FixLens Error:", error?.message || error);
+    const dbg = getErrorDebug(error);
+    console.error("FixLens Error:", dbg);
 
-    // IMPORTANT: return error in user's language when possible
     const safeReply = fallbackMessage(locale);
 
     return {
@@ -283,6 +273,7 @@ USER_INPUT: ${(text || "").trim()}`,
       reply: safeReply,
       locale,
       workshops_count: 0,
+      ...(debugMode ? { debug: { stage: "catch", ...dbg } } : {}),
     };
   }
 }
