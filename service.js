@@ -70,15 +70,27 @@ function normalizeLocale(input) {
   return v;
 }
 
+/**
+ * ✅ IMPORTANT FIX:
+ * Priority order for language:
+ * 1) explicit locale from app (best)
+ * 2) CURRENT user text language (so it can switch anytime)
+ * 3) history language (last resort)
+ */
 function inferLocale({ locale, text, history }) {
   const normalized = normalizeLocale(locale);
   if (normalized) return normalized;
 
+  const currentText = String(text || "").trim();
+  if (currentText) {
+    const fromText = detectTextLanguage(currentText);
+    if (fromText) return fromText;
+  }
+
   const fromHistory = detectLocaleFromHistory(history);
   if (fromHistory) return fromHistory;
 
-  const fromText = detectTextLanguage(text || "");
-  return fromText || "en";
+  return "en";
 }
 
 function localeToLangTag(locale) {
@@ -91,8 +103,8 @@ function localeToLangTag(locale) {
 function fallbackMessage(locale) {
   const lang = localeToLangTag(locale);
 
-  // Keep it short and professional. (For "all languages", we rely on model for main output.
-  // This fallback is only for edge cases where model output is empty or services fail.)
+  // Keep it short and professional.
+  // This fallback is only for edge cases where model output is empty or services fail.
   if (lang === "ar") {
     return "حصلت مشكلة مؤقتة أثناء التحليل أو البحث، لكن أقدر أساعدك بالتشخيص الآن. اكتب: (نوع السيارة + السنة + الأعراض + متى تظهر المشكلة) وسأعطيك خطة فحص دقيقة.";
   }
@@ -144,11 +156,20 @@ export async function handleFixLensRequest(req) {
   const text = body.text || "";
   const history = Array.isArray(body.history) ? body.history : [];
 
-  // Locale: allow explicit locale from app (recommended), otherwise infer from history/text
+  // Locale: allow explicit locale from app (recommended), otherwise infer from CURRENT text first
   const locale = inferLocale({ locale: body.locale, text, history });
 
-  // Location should be global-ready (earth-wide). App can send city/country or lat,lng later.
-  const user_location = body.user_location || "Global";
+  /**
+   * ✅ IMPORTANT FIX:
+   * Location must be global-ready.
+   * No Louisville default. Use explicit fields if provided, otherwise Global.
+   */
+  const user_location =
+    body.user_location ||
+    body.location ||
+    body.city ||
+    (typeof body.lat === "number" && typeof body.lng === "number" ? `${body.lat},${body.lng}` : "") ||
+    "Global";
 
   const image_base_64 = body.image_base_64 || body.image_base64 || "";
   const audio_base_64 = body.audio_base_64 || body.audio_base64 || "";
@@ -164,18 +185,16 @@ export async function handleFixLensRequest(req) {
     let VERIFIED_WORKSHOPS = [];
 
     try {
-      // ✅ IMPORTANT FIX: pass locale + radius so Places becomes language-aware and city-aware with GPS
+      // pass locale + radius so Places becomes language-aware and city-aware with GPS
       const searchPack = await performSearch(fullInput || text, user_location, {
         locale,
         placesRadiusMeters: Number(body.places_radius_meters || 25000),
       });
 
       VERIFIED_DATA = Array.isArray(searchPack?.verified_data) ? searchPack.verified_data : [];
-      VERIFIED_WORKSHOPS = Array.isArray(searchPack?.verified_workshops)
-        ? searchPack.verified_workshops
-        : [];
+      VERIFIED_WORKSHOPS = Array.isArray(searchPack?.verified_workshops) ? searchPack.verified_workshops : [];
     } catch (searchErr) {
-      // IMPORTANT: never fail the whole request due to search/places.
+      // never fail the whole request due to search/places.
       console.error("Search Error:", searchErr?.message || searchErr);
       VERIFIED_DATA = [];
       VERIFIED_WORKSHOPS = [];
@@ -184,8 +203,7 @@ export async function handleFixLensRequest(req) {
     // 3) Build user message content
     const messageContent = [];
 
-    // Critical: tell the model to respond in the detected/specified locale,
-    // and to keep language consistent (no mixed Arabic/English unless user asks).
+    // Critical: tell the model to respond in the detected/specified locale
     messageContent.push({
       type: "text",
       text: `STRICT_CONTEXT
@@ -213,8 +231,7 @@ USER_INPUT: ${(text || "").trim()}`,
       });
       messageContent.push({
         type: "text",
-        text:
-          "Use the photo to identify visible parts, damage, leaks, wear, or incorrect installation. Tie findings to diagnosis.",
+        text: "Use the photo to identify visible parts, damage, leaks, wear, or incorrect installation. Tie findings to diagnosis.",
       });
     }
 
@@ -241,7 +258,7 @@ USER_INPUT: ${(text || "").trim()}`,
   } catch (error) {
     console.error("FixLens Error:", error?.message || error);
 
-    // IMPORTANT: return error in user's language when possible
+    // return error in user's language when possible
     const safeReply = fallbackMessage(locale);
 
     return {
