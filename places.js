@@ -34,32 +34,12 @@ function parseLatLng(input) {
   return { lat, lng };
 }
 
-// ✅ Treat "Global" (or similar) as empty location, so we don't query "in Global"
-function isGlobalLike(s) {
-  const v = String(s || "").trim().toLowerCase();
-  return v === "global" || v === "world" || v === "worldwide" || v === "anywhere";
-}
-
-// ✅ Build query text.
-// - If we have GPS, we DO NOT add "in <location>" (we use location+radius params instead)
-// - If no GPS, we do "in <base>" but we never allow base="Global"
-function buildQuery(userLocation, mode = "auto_repair", hasGps = false) {
-  const locRaw = String(userLocation || "").trim();
-  const loc = (!locRaw || isGlobalLike(locRaw)) ? "" : locRaw;
-
-  if (hasGps) {
-    if (mode === "tire") return "tire shop";
-    if (mode === "brake") return "brake repair";
-    if (mode === "transmission") return "transmission shop";
-    return "auto repair shop";
-  }
-
-  const base = loc ? loc : "United States";
-
-  if (mode === "tire") return `tire shop in ${base}`;
-  if (mode === "brake") return `brake repair in ${base}`;
-  if (mode === "transmission") return `transmission shop in ${base}`;
-  return `auto repair shop in ${base}`;
+// ✅ Better: build a query WITHOUT "in lat,lng" when GPS exists
+function buildQueryForMode(mode = "auto_repair") {
+  if (mode === "tire") return "tire shop";
+  if (mode === "brake") return "brake repair";
+  if (mode === "transmission") return "transmission shop";
+  return "auto repair shop";
 }
 
 function detectModeFromText(text) {
@@ -81,41 +61,35 @@ export async function searchPlacesWorkshops({
   userText,
   maxResults = 5,
   locale = "en",
-  // ✅ NEW (optional): allow radius from server request
-  radiusMeters = 25000,
+  placesRadiusMeters = 25000,
 }) {
   const key = process.env.GOOGLE_PLACES_API_KEY;
-  if (!key) return [];
+  if (!key) {
+    console.error("[places] Missing GOOGLE_PLACES_API_KEY");
+    return [];
+  }
 
+  const lang = normalizeLocale(locale);
   const gps = parseLatLng(userLocation);
 
   const mode = detectModeFromText(userText);
+  const baseQuery = buildQueryForMode(mode);
 
-  // ✅ If location is string "Global", treat it as empty
-  const locationText =
-    typeof userLocation === "string"
-      ? (isGlobalLike(userLocation) ? "" : userLocation)
-      : gps
-      ? `${gps.lat},${gps.lng}`
-      : "";
+  // ✅ If location is a city string, we can use "in city"
+  const cityText = typeof userLocation === "string" ? String(userLocation).trim() : "";
+  const hasCity = cityText && !gps; // if gps exists, prefer gps bias
 
-  // ✅ Query rules:
-  // - if GPS exists: query WITHOUT "in ..." + add location+radius params
-  // - else: query WITH "in United States" (or user's typed city/country)
-  const query = buildQuery(locationText, mode, Boolean(gps));
+  const query = hasCity ? `${baseQuery} in ${cityText}` : baseQuery;
 
-  // ✅ Clamp radius to sane range for legacy endpoint
-  const radius = Math.max(1000, Math.min(safeNum(radiusMeters, 25000), 50000));
-
-  // Base URL
   let url =
     "https://maps.googleapis.com/maps/api/place/textsearch/json" +
     `?query=${encodeURIComponent(query)}` +
-    `&language=${encodeURIComponent(normalizeLocale(locale))}` +
+    `&language=${encodeURIComponent(lang)}` +
     `&key=${encodeURIComponent(key)}`;
 
-  // ✅ If GPS exists, bias results properly (THIS IS THE KEY FIX)
+  // ✅ CRITICAL: if GPS exists, bias results using location + radius
   if (gps) {
+    const radius = Math.max(1000, Math.min(50000, Number(placesRadiusMeters) || 25000));
     url += `&location=${encodeURIComponent(`${gps.lat},${gps.lng}`)}`;
     url += `&radius=${encodeURIComponent(String(radius))}`;
   }
@@ -124,15 +98,17 @@ export async function searchPlacesWorkshops({
     const res = await fetch(url, { method: "GET" });
     const data = await res.json();
 
-    // ✅ Better logging so we can see the REAL reason (REQUEST_DENIED, ZERO_RESULTS, etc.)
+    // ✅ Add helpful logs (you’ll see these in Render Logs)
+    console.log("[places] query:", query);
+    console.log("[places] gps:", gps ? `${gps.lat},${gps.lng}` : "none");
+    console.log("[places] status:", data?.status, data?.error_message || "");
+
     if (!data || !Array.isArray(data.results)) {
-      console.error("Places bad response:", data);
       return [];
     }
 
     if (data.status !== "OK") {
-      console.error("Places status:", data?.status, data?.error_message || "");
-      // ✅ If ZERO_RESULTS, we just return [] (no crash)
+      // ZERO_RESULTS is a valid case; return []
       return [];
     }
 
@@ -152,7 +128,7 @@ export async function searchPlacesWorkshops({
       source: "google_places_legacy",
     }));
   } catch (e) {
-    console.error("Places fetch error:", e?.message || e);
+    console.error("[places] fetch error:", e?.message || e);
     return [];
   }
 }
