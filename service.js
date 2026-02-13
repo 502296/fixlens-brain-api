@@ -70,27 +70,15 @@ function normalizeLocale(input) {
   return v;
 }
 
-/**
- * ✅ IMPORTANT FIX:
- * Priority order for language:
- * 1) explicit locale from app (best)
- * 2) CURRENT user text language (so it can switch anytime)
- * 3) history language (last resort)
- */
 function inferLocale({ locale, text, history }) {
   const normalized = normalizeLocale(locale);
   if (normalized) return normalized;
 
-  const currentText = String(text || "").trim();
-  if (currentText) {
-    const fromText = detectTextLanguage(currentText);
-    if (fromText) return fromText;
-  }
-
   const fromHistory = detectLocaleFromHistory(history);
   if (fromHistory) return fromHistory;
 
-  return "en";
+  const fromText = detectTextLanguage(text || "");
+  return fromText || "en";
 }
 
 function localeToLangTag(locale) {
@@ -103,8 +91,7 @@ function localeToLangTag(locale) {
 function fallbackMessage(locale) {
   const lang = localeToLangTag(locale);
 
-  // Keep it short and professional.
-  // This fallback is only for edge cases where model output is empty or services fail.
+  // fallback قصير فقط عند فشل كامل (مو في العادة)
   if (lang === "ar") {
     return "حصلت مشكلة مؤقتة أثناء التحليل أو البحث، لكن أقدر أساعدك بالتشخيص الآن. اكتب: (نوع السيارة + السنة + الأعراض + متى تظهر المشكلة) وسأعطيك خطة فحص دقيقة.";
   }
@@ -116,6 +103,60 @@ function ensureNonEmptyReply(out, locale) {
   const text = String(out || "").trim();
   if (text) return text;
   return fallbackMessage(locale);
+}
+
+// -----------------------------
+// ✅ NEW: Location normalization (GLOBAL READY)
+// accepts:
+// - string: "Baghdad, IQ" / "Louisville, KY" / "Global"
+// - object: {lat, lng} or {latitude, longitude}
+// - explicit fields: lat/lng in body
+// -----------------------------
+function normalizeUserLocation(body) {
+  // 1) already provided
+  const ul = body?.user_location ?? body?.location ?? body?.city ?? "";
+
+  // object GPS
+  if (ul && typeof ul === "object") {
+    const lat = Number(ul.lat ?? ul.latitude);
+    const lng = Number(ul.lng ?? ul.lon ?? ul.longitude);
+    if (Number.isFinite(lat) && Number.isFinite(lng)) {
+      return { lat, lng };
+    }
+  }
+
+  // string city/country
+  if (typeof ul === "string" && ul.trim()) {
+    return ul.trim();
+  }
+
+  // 2) explicit numeric fields
+  const lat = Number(body?.lat);
+  const lng = Number(body?.lng);
+  if (Number.isFinite(lat) && Number.isFinite(lng)) {
+    return { lat, lng };
+  }
+
+  // 3) FINAL fallback (GLOBAL ONLY)
+  return "Global";
+}
+
+// -----------------------------
+// ✅ NEW: Build a Places-friendly location pack
+// - if GPS object: pass lat/lng
+// - if string: pass text
+// -----------------------------
+function buildLocationPack(user_location) {
+  if (user_location && typeof user_location === "object") {
+    return {
+      type: "gps",
+      lat: user_location.lat,
+      lng: user_location.lng,
+      text: `${user_location.lat},${user_location.lng}`,
+    };
+  }
+  const text = String(user_location || "Global").trim() || "Global";
+  return { type: "text", text };
 }
 
 // -----------------------------
@@ -156,20 +197,12 @@ export async function handleFixLensRequest(req) {
   const text = body.text || "";
   const history = Array.isArray(body.history) ? body.history : [];
 
-  // Locale: allow explicit locale from app (recommended), otherwise infer from CURRENT text first
+  // ✅ Locale: ALWAYS prefer explicit locale from app
   const locale = inferLocale({ locale: body.locale, text, history });
 
-  /**
-   * ✅ IMPORTANT FIX:
-   * Location must be global-ready.
-   * No Louisville default. Use explicit fields if provided, otherwise Global.
-   */
-  const user_location =
-    body.user_location ||
-    body.location ||
-    body.city ||
-    (typeof body.lat === "number" && typeof body.lng === "number" ? `${body.lat},${body.lng}` : "") ||
-    "Global";
+  // ✅ Location: GLOBAL READY (no Louisville)
+  const user_location = normalizeUserLocation(body);
+  const locPack = buildLocationPack(user_location);
 
   const image_base_64 = body.image_base_64 || body.image_base64 || "";
   const audio_base_64 = body.audio_base_64 || body.audio_base64 || "";
@@ -185,16 +218,18 @@ export async function handleFixLensRequest(req) {
     let VERIFIED_WORKSHOPS = [];
 
     try {
-      // pass locale + radius so Places becomes language-aware and city-aware with GPS
-      const searchPack = await performSearch(fullInput || text, user_location, {
+      // ✅ IMPORTANT: pass locale + radius + location pack (GPS or text)
+      const searchPack = await performSearch(fullInput || text, locPack, {
         locale,
         placesRadiusMeters: Number(body.places_radius_meters || 25000),
       });
 
       VERIFIED_DATA = Array.isArray(searchPack?.verified_data) ? searchPack.verified_data : [];
-      VERIFIED_WORKSHOPS = Array.isArray(searchPack?.verified_workshops) ? searchPack.verified_workshops : [];
+      VERIFIED_WORKSHOPS = Array.isArray(searchPack?.verified_workshops)
+        ? searchPack.verified_workshops
+        : [];
     } catch (searchErr) {
-      // never fail the whole request due to search/places.
+      // IMPORTANT: never fail the whole request due to search/places.
       console.error("Search Error:", searchErr?.message || searchErr);
       VERIFIED_DATA = [];
       VERIFIED_WORKSHOPS = [];
@@ -203,12 +238,11 @@ export async function handleFixLensRequest(req) {
     // 3) Build user message content
     const messageContent = [];
 
-    // Critical: tell the model to respond in the detected/specified locale
     messageContent.push({
       type: "text",
       text: `STRICT_CONTEXT
 LOCALE: ${locale}
-LOCATION: ${user_location}
+LOCATION: ${locPack.type === "gps" ? `${locPack.lat},${locPack.lng}` : locPack.text}
 
 LANGUAGE_RULES:
 - Respond ONLY in the user's language implied by LOCALE (no bilingual output unless the user explicitly requests bilingual).
@@ -231,7 +265,8 @@ USER_INPUT: ${(text || "").trim()}`,
       });
       messageContent.push({
         type: "text",
-        text: "Use the photo to identify visible parts, damage, leaks, wear, or incorrect installation. Tie findings to diagnosis.",
+        text:
+          "Use the photo to identify visible parts, damage, leaks, wear, or incorrect installation. Tie findings to diagnosis.",
       });
     }
 
@@ -258,7 +293,6 @@ USER_INPUT: ${(text || "").trim()}`,
   } catch (error) {
     console.error("FixLens Error:", error?.message || error);
 
-    // return error in user's language when possible
     const safeReply = fallbackMessage(locale);
 
     return {
