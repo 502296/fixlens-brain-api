@@ -78,7 +78,6 @@ function scoreMatch(query, text) {
 function detectPlacesIntent(userQuery = "") {
   const q = String(userQuery || "").toLowerCase();
 
-  // If user explicitly asks to be quiet / stop / don't answer, treat as NO intent.
   const stopSignals = [
     "اسكت",
     "لا تكتب",
@@ -90,7 +89,6 @@ function detectPlacesIntent(userQuery = "") {
   ];
   if (stopSignals.some((w) => q.includes(w))) return false;
 
-  // Explicit workshop / mechanic / near me intent keywords
   const intentKeywords = [
     // English
     "workshop",
@@ -186,21 +184,37 @@ function detectPlacesIntent(userQuery = "") {
 }
 
 // -----------------------------
+// Mode detection: tire/brake/transmission/etc
+// -----------------------------
+function detectModeFromText(text) {
+  const t = (text || "").toLowerCase();
+
+  if (t.includes("كفر") || t.includes("إطار") || t.includes("اطار") || t.includes("tire"))
+    return "tire";
+  if (t.includes("فرامل") || t.includes("brake")) return "brake";
+  if (t.includes("قير") || t.includes("جير") || t.includes("ناقل") || t.includes("transmission"))
+    return "transmission";
+
+  return "auto_repair";
+}
+
+function buildQueryForMode(mode) {
+  if (mode === "tire") return "tire shop";
+  if (mode === "brake") return "brake repair";
+  if (mode === "transmission") return "transmission shop";
+  return "auto repair shop";
+}
+
+// -----------------------------
 // Location parsing helpers
 // -----------------------------
 function normalizeLocale(locale) {
   const v = String(locale || "").trim();
   if (!v) return "en";
-  // Use language only for Places languageCode, e.g. ar-IQ -> ar
   return v.split("-")[0].toLowerCase() || "en";
 }
 
 function parseLatLng(input) {
-  // Accept:
-  // 1) { lat, lng }
-  // 2) { latitude, longitude }
-  // 3) "lat,lng"
-  // 4) "lat lng"
   if (!input) return null;
 
   if (typeof input === "object") {
@@ -223,11 +237,9 @@ function parseLatLng(input) {
 }
 
 function safeCityText(userLocation) {
-  // If location is a plain string like "Louisville, KY"
   if (!userLocation) return "";
   if (typeof userLocation === "string") return userLocation.trim();
 
-  // If it’s an object but without lat/lng, try to read city fields
   if (typeof userLocation === "object") {
     const city = userLocation.city || userLocation.locality || "";
     const region = userLocation.region || userLocation.state || "";
@@ -258,17 +270,15 @@ async function placesSearchText({
     languageCode,
   };
 
-  // If we have GPS, bias results to the user's city/area
   if (locationBias?.lat != null && locationBias?.lng != null) {
     body.locationBias = {
       circle: {
         center: { latitude: locationBias.lat, longitude: locationBias.lng },
-        radius: Number(locationBias.radiusMeters || 25000), // default 25km
+        radius: Number(locationBias.radiusMeters || 25000),
       },
     };
   }
 
-  // We request the fields we need only
   const fieldMask = [
     "places.displayName",
     "places.formattedAddress",
@@ -297,8 +307,8 @@ async function placesSearchText({
     });
 
     const data = await res.json().catch(() => ({}));
-
     const places = Array.isArray(data?.places) ? data.places : [];
+
     return places.slice(0, maxResults).map((p) => ({
       name: p?.displayName?.text || "Workshop",
       address: p?.formattedAddress || "",
@@ -320,30 +330,35 @@ async function placesSearchText({
   }
 }
 
-async function googlePlacesWorkshops(userLocation, locale, maxResults = 5, placesRadiusMeters = 25000) {
+async function googlePlacesWorkshops(
+  userQuery,
+  userLocation,
+  locale,
+  maxResults = 5,
+  placesRadiusMeters = 25000
+) {
   const languageCode = normalizeLocale(locale);
-
-  // Prefer GPS if available
   const gps = parseLatLng(userLocation);
 
-  // If GPS exists → bias near the user (same city/area)
+  const mode = detectModeFromText(userQuery);
+  const q = buildQueryForMode(mode);
+
+  console.log("[search] Places query:", q, "| locale:", locale, "| gps:", gps ? "yes" : "no");
+
   if (gps) {
-    const query = "auto repair shop";
     return await placesSearchText({
-      textQuery: query,
+      textQuery: q,
       languageCode,
       maxResults,
       locationBias: { lat: gps.lat, lng: gps.lng, radiusMeters: placesRadiusMeters },
     });
   }
 
-  // Else use city text if provided
   const locText = safeCityText(userLocation);
   if (!locText) return [];
 
-  const query = `auto repair shop in ${locText}`;
   return await placesSearchText({
-    textQuery: query,
+    textQuery: `${q} in ${locText}`,
     languageCode,
     maxResults,
     locationBias: null,
@@ -358,7 +373,6 @@ export async function performSearch(userQuery, userLocation, opts = {}) {
     maxResults = 3,
     locale = "en",
     placesRadiusMeters = 25000,
-    // ✅ allowPlaces lets server force Places on/off if needed
     allowPlaces = null, // null = auto-detect intent
   } = opts;
 
@@ -391,7 +405,7 @@ export async function performSearch(userQuery, userLocation, opts = {}) {
     });
   }
 
-  // ✅ 2) Places workshops ONLY when user explicitly asks for a workshop
+  // 2) Places workshops ONLY when user explicitly asks
   let verified_workshops = [];
 
   const wantsPlaces =
@@ -404,6 +418,7 @@ export async function performSearch(userQuery, userLocation, opts = {}) {
   try {
     const placesMax = Number(process.env.PLACES_MAX_RESULTS || 5);
     verified_workshops = await googlePlacesWorkshops(
+      userQuery,
       userLocation,
       locale,
       placesMax,
