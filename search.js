@@ -30,19 +30,7 @@ try {
 }
 
 function toText(record) {
-  const fields = [
-    record.title,
-    record.name,
-    record.symptom,
-    record.symptoms,
-    record.problem,
-    record.description,
-    record.causes,
-    record.checks,
-    record.steps,
-    record.tags,
-  ];
-
+  const fields = [record.title, record.name, record.symptom, record.symptoms, record.problem, record.description, record.causes, record.checks, record.steps, record.tags];
   let s = "";
   for (const v of fields) {
     if (!v) continue;
@@ -69,7 +57,7 @@ function scoreMatch(query, text) {
 }
 
 // -----------------------------
-// Places intent (strong, multilingual)
+// Places Intent: only if explicitly asked
 // -----------------------------
 function detectPlacesIntent(userQuery = "") {
   const q = String(userQuery || "").toLowerCase();
@@ -85,10 +73,6 @@ function detectPlacesIntent(userQuery = "") {
     "auto repair",
     "repair shop",
     "car shop",
-    "tire shop",
-    "tyre shop",
-    "brake shop",
-    "transmission shop",
     "near me",
     "closest",
     "nearby",
@@ -96,114 +80,47 @@ function detectPlacesIntent(userQuery = "") {
     "google maps",
     "where can i fix",
     "where to fix",
-    "where should i go",
 
     // Arabic
     "ورشة",
     "كراج",
     "ميكانيك",
     "ميكانيكي",
-    "تصليح",
-    "أصلح",
-    "وين أصلح",
-    "وين اروح",
-    "قريب مني",
-    "اقرب ورشة",
-    "دلني على ورشة",
-    "رشح ورشة",
     "محل تصليح",
     "محل ميكانيك",
-    "محل",
-    "محلات",
-    "اطارات",
+    "محل اطارات",
     "إطارات",
-    "كفر",
-    "كفرات",
-    "تواير",
-    "بنشر",
-    "بنچر",
+    "اطارات",
+    "قريب مني",
+    "اقرب",
+    "عنوان",
+    "خرائط",
+    "وين اصلح",
+    "وين اروح",
 
-    // Spanish
+    // Others (light)
     "taller",
-    "mecánico",
     "mecanico",
-    "reparación",
-    "reparacion",
-    "cerca",
-    "cerca de mi",
-    "cerca de mí",
-
-    // French
-    "garage",
     "mécanicien",
-    "mecanicien",
-    "près",
-    "pres de moi",
-    "adresse",
-
-    // German
     "werkstatt",
-    "mechaniker",
-    "in der nähe",
-    "in der nahe",
-    "adresse",
-
-    // Italian
-    "officina",
-    "meccanico",
-    "vicino a me",
-
-    // Portuguese
-    "oficina",
-    "mecânico",
-    "mecanico",
-    "perto de mim",
-
-    // Turkish
-    "servis",
-    "tamirci",
-    "yakınımda",
-
-    // Russian
     "автосервис",
-    "мастерская",
     "рядом",
-    "адрес",
-
-    // Chinese
-    "修车",
-    "修理厂",
     "附近",
-
-    // Japanese
-    "修理工場",
-    "整備工場",
     "近く",
-
-    // Korean
-    "정비소",
     "근처",
-
-    // Hindi
-    "वर्कशॉप",
-    "मैकेनिक",
-    "पास में",
   ];
 
   return intentKeywords.some((w) => q.includes(w));
 }
 
 // -----------------------------
-// Mode detection
+// Mode detection (tire/brake/transmission/etc)
 // -----------------------------
 function detectModeFromText(text) {
   const t = (text || "").toLowerCase();
-
-  if (t.includes("كفر") || t.includes("كفرات") || t.includes("إطار") || t.includes("اطار") || t.includes("اطارات") || t.includes("tire") || t.includes("tyre"))
-    return "tire";
+  if (t.includes("كفر") || t.includes("إطار") || t.includes("اطار") || t.includes("tire")) return "tire";
   if (t.includes("فرامل") || t.includes("brake")) return "brake";
   if (t.includes("قير") || t.includes("جير") || t.includes("ناقل") || t.includes("transmission")) return "transmission";
-
   return "auto_repair";
 }
 
@@ -215,7 +132,7 @@ function buildQueryForMode(mode) {
 }
 
 // -----------------------------
-// Location parsing
+// Location parsing helpers
 // -----------------------------
 function normalizeLocale(locale) {
   const v = String(locale || "").trim();
@@ -257,9 +174,28 @@ function safeCityText(userLocation) {
   return "";
 }
 
-function buildMapsUrlFromLatLng(lat, lng) {
-  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return "";
-  return `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
+// ✅ NEW: Extract location from the user query itself (works when GPS is off)
+function extractLocationFromQuery(userQuery = "") {
+  const q = String(userQuery || "").trim();
+  if (!q) return "";
+
+  // English pattern: "in Louisville, KY" / "in Paris" etc.
+  const m1 = q.match(/\bin\s+([A-Za-z][A-Za-z\s\.\-']{2,})(?:,\s*([A-Za-z]{2,}))?/i);
+  if (m1 && (m1[1] || m1[2])) {
+    const city = (m1[1] || "").trim();
+    const region = (m1[2] || "").trim();
+    const out = [city, region].filter(Boolean).join(", ");
+    if (out.length >= 3) return out;
+  }
+
+  // Arabic: "في لوفل كنتاكي" / "بالرياض" / "في بغداد"
+  const m2 = q.match(/(?:\bفي\b|\bبال\b|\bبـ)(\s*[^\d]{3,40})/);
+  if (m2 && m2[1]) {
+    const cand = m2[1].replace(/[^\u0600-\u06FFa-zA-Z,\s\.\-]/g, " ").trim();
+    if (cand.length >= 3) return cand;
+  }
+
+  return "";
 }
 
 // -----------------------------
@@ -271,11 +207,7 @@ async function placesSearchText({ textQuery, languageCode = "en", maxResults = 5
 
   const url = "https://places.googleapis.com/v1/places:searchText";
 
-  const body = {
-    textQuery,
-    maxResultCount: maxResults,
-    languageCode,
-  };
+  const body = { textQuery, maxResultCount: maxResults, languageCode };
 
   if (locationBias?.lat != null && locationBias?.lng != null) {
     body.locationBias = {
@@ -316,25 +248,19 @@ async function placesSearchText({ textQuery, languageCode = "en", maxResults = 5
     const data = await res.json().catch(() => ({}));
     const places = Array.isArray(data?.places) ? data.places : [];
 
-    return places.slice(0, maxResults).map((p) => {
-      const lat = p?.location?.latitude ?? null;
-      const lng = p?.location?.longitude ?? null;
-      const maps = p?.googleMapsUri || (Number.isFinite(lat) && Number.isFinite(lng) ? buildMapsUrlFromLatLng(lat, lng) : "");
-
-      return {
-        name: p?.displayName?.text || "Workshop",
-        address: p?.formattedAddress || "",
-        rating: p?.rating ?? null,
-        ratings_count: p?.userRatingCount ?? null,
-        phone: p?.nationalPhoneNumber || "",
-        website: p?.websiteUri || "",
-        maps_url: maps || "",
-        place_id: p?.id || "",
-        lat,
-        lng,
-        source: "google_places_new",
-      };
-    });
+    return places.slice(0, maxResults).map((p) => ({
+      name: p?.displayName?.text || "Workshop",
+      address: p?.formattedAddress || "",
+      rating: p?.rating ?? null,
+      ratings_total: p?.userRatingCount ?? null, // ✅ unified name
+      phone: p?.nationalPhoneNumber || "",
+      website: p?.websiteUri || "",
+      maps_url: p?.googleMapsUri || "",
+      place_id: p?.id || "",
+      lat: p?.location?.latitude ?? null,
+      lng: p?.location?.longitude ?? null,
+      source: "google_places_new",
+    }));
   } catch (e) {
     console.error("Google Places (New) error:", e?.message || e);
     return [];
@@ -350,8 +276,7 @@ async function googlePlacesWorkshops(userQuery, userLocation, locale, maxResults
   const mode = detectModeFromText(userQuery);
   const q = buildQueryForMode(mode);
 
-  console.log("[search] Places query:", q, "| locale:", locale, "| gps:", gps ? "yes" : "no");
-
+  // ✅ If GPS available -> bias circle
   if (gps) {
     return await placesSearchText({
       textQuery: q,
@@ -361,7 +286,14 @@ async function googlePlacesWorkshops(userQuery, userLocation, locale, maxResults
     });
   }
 
-  const locText = safeCityText(userLocation);
+  // ✅ If no GPS -> try userLocation text, else extract from query
+  let locText = safeCityText(userLocation);
+
+  // If app sent Global/empty, pull location from query like "in Louisville, KY" or "في لوفل كنتاكي"
+  if (!locText || locText.toLowerCase() === "global") {
+    locText = extractLocationFromQuery(userQuery);
+  }
+
   if (!locText) return [];
 
   return await placesSearchText({
@@ -396,49 +328,20 @@ export async function performSearch(userQuery, userLocation, opts = {}) {
       const causes = r.causes || r.cause || "";
       const steps = r.steps || r.action_steps || r.actions || "";
       const tags = r.tags || r.category || "";
-      return {
-        title: String(title),
-        score: s,
-        source: r.__source || "data",
-        causes,
-        steps,
-        tags,
-      };
+      return { title: String(title), score: s, source: r.__source || "data", causes, steps, tags };
     });
   }
 
-  // 2) Places workshops ONLY when user asks
+  // 2) Places workshops ONLY when explicitly asked
   let verified_workshops = [];
 
   const wantsPlaces = typeof allowPlaces === "boolean" ? allowPlaces : detectPlacesIntent(userQuery);
 
-  if (!wantsPlaces) {
-    return { verified_data, verified_workshops: [] };
-  }
+  if (!wantsPlaces) return { verified_data, verified_workshops: [] };
 
   try {
     const placesMax = Number(process.env.PLACES_MAX_RESULTS || 5);
     verified_workshops = await googlePlacesWorkshops(userQuery, userLocation, locale, placesMax, placesRadiusMeters);
-
-    // Ensure minimal fields exist
-    verified_workshops = (verified_workshops || []).map((w) => {
-      const lat = Number(w?.lat);
-      const lng = Number(w?.lng);
-      const maps_url = w?.maps_url || (Number.isFinite(lat) && Number.isFinite(lng) ? buildMapsUrlFromLatLng(lat, lng) : "");
-      return {
-        name: w?.name || "Workshop",
-        address: w?.address || "",
-        rating: w?.rating ?? null,
-        ratings_count: w?.ratings_count ?? null,
-        phone: w?.phone || "",
-        website: w?.website || "",
-        maps_url,
-        place_id: w?.place_id || "",
-        lat: Number.isFinite(lat) ? lat : null,
-        lng: Number.isFinite(lng) ? lng : null,
-        source: w?.source || "google_places_new",
-      };
-    });
   } catch (e) {
     console.error("Workshops search error:", e?.message || e);
     verified_workshops = [];
