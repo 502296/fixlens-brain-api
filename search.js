@@ -19,8 +19,7 @@ try {
       if (Array.isArray(parsed)) {
         KB.push(...parsed.map((x) => ({ ...x, __source: f })));
       } else if (parsed && typeof parsed === "object") {
-        if (Array.isArray(parsed.items))
-          KB.push(...parsed.items.map((x) => ({ ...x, __source: f })));
+        if (Array.isArray(parsed.items)) KB.push(...parsed.items.map((x) => ({ ...x, __source: f })));
         else KB.push({ ...parsed, __source: f });
       }
     }
@@ -58,7 +57,6 @@ function toText(record) {
 function scoreMatch(query, text) {
   const q = query.toLowerCase().replace(/[^a-z0-9\u0600-\u06FF\s]/g, " ");
   const tokens = q.split(/\s+/).filter(Boolean);
-
   if (tokens.length === 0) return 0;
 
   let score = 0;
@@ -71,22 +69,12 @@ function scoreMatch(query, text) {
 }
 
 // -----------------------------
-// ✅ Places Intent (CRITICAL FIX)
-// Only call Google Places when user explicitly asks for a shop/workshop.
-// Works across many languages.
+// Places intent (strong, multilingual)
 // -----------------------------
 function detectPlacesIntent(userQuery = "") {
   const q = String(userQuery || "").toLowerCase();
 
-  const stopSignals = [
-    "اسكت",
-    "لا تكتب",
-    "stop",
-    "be quiet",
-    "don't answer",
-    "do not answer",
-    "silence",
-  ];
+  const stopSignals = ["اسكت", "لا تكتب", "stop", "be quiet", "don't answer", "do not answer", "silence"];
   if (stopSignals.some((w) => q.includes(w))) return false;
 
   const intentKeywords = [
@@ -97,13 +85,15 @@ function detectPlacesIntent(userQuery = "") {
     "auto repair",
     "repair shop",
     "car shop",
+    "tire shop",
+    "tyre shop",
+    "brake shop",
+    "transmission shop",
     "near me",
     "closest",
     "nearby",
-    "recommend a shop",
-    "recommend me a shop",
-    "send me a shop",
-    "find me a shop",
+    "address",
+    "google maps",
     "where can i fix",
     "where to fix",
     "where should i go",
@@ -123,22 +113,40 @@ function detectPlacesIntent(userQuery = "") {
     "رشح ورشة",
     "محل تصليح",
     "محل ميكانيك",
+    "محل",
+    "محلات",
+    "اطارات",
+    "إطارات",
+    "كفر",
+    "كفرات",
+    "تواير",
+    "بنشر",
+    "بنچر",
 
     // Spanish
     "taller",
     "mecánico",
-    "taller mecánico",
+    "mecanico",
+    "reparación",
+    "reparacion",
+    "cerca",
+    "cerca de mi",
     "cerca de mí",
 
     // French
     "garage",
     "mécanicien",
-    "près de moi",
+    "mecanicien",
+    "près",
+    "pres de moi",
+    "adresse",
 
     // German
     "werkstatt",
     "mechaniker",
     "in der nähe",
+    "in der nahe",
+    "adresse",
 
     // Italian
     "officina",
@@ -148,6 +156,7 @@ function detectPlacesIntent(userQuery = "") {
     // Portuguese
     "oficina",
     "mecânico",
+    "mecanico",
     "perto de mim",
 
     // Turkish
@@ -156,9 +165,10 @@ function detectPlacesIntent(userQuery = "") {
     "yakınımda",
 
     // Russian
-    "сервис",
+    "автосервис",
     "мастерская",
     "рядом",
+    "адрес",
 
     // Chinese
     "修车",
@@ -184,16 +194,15 @@ function detectPlacesIntent(userQuery = "") {
 }
 
 // -----------------------------
-// Mode detection: tire/brake/transmission/etc
+// Mode detection
 // -----------------------------
 function detectModeFromText(text) {
   const t = (text || "").toLowerCase();
 
-  if (t.includes("كفر") || t.includes("إطار") || t.includes("اطار") || t.includes("tire"))
+  if (t.includes("كفر") || t.includes("كفرات") || t.includes("إطار") || t.includes("اطار") || t.includes("اطارات") || t.includes("tire") || t.includes("tyre"))
     return "tire";
   if (t.includes("فرامل") || t.includes("brake")) return "brake";
-  if (t.includes("قير") || t.includes("جير") || t.includes("ناقل") || t.includes("transmission"))
-    return "transmission";
+  if (t.includes("قير") || t.includes("جير") || t.includes("ناقل") || t.includes("transmission")) return "transmission";
 
   return "auto_repair";
 }
@@ -206,7 +215,7 @@ function buildQueryForMode(mode) {
 }
 
 // -----------------------------
-// Location parsing helpers
+// Location parsing
 // -----------------------------
 function normalizeLocale(locale) {
   const v = String(locale || "").trim();
@@ -225,9 +234,7 @@ function parseLatLng(input) {
   }
 
   const s = String(input).trim();
-  const m =
-    s.match(/(-?\d+(\.\d+)?)\s*,\s*(-?\d+(\.\d+)?)/) ||
-    s.match(/(-?\d+(\.\d+)?)\s+(-?\d+(\.\d+)?)/);
+  const m = s.match(/(-?\d+(\.\d+)?)\s*,\s*(-?\d+(\.\d+)?)/) || s.match(/(-?\d+(\.\d+)?)\s+(-?\d+(\.\d+)?)/);
   if (!m) return null;
 
   const lat = Number(m[1]);
@@ -250,15 +257,15 @@ function safeCityText(userLocation) {
   return "";
 }
 
+function buildMapsUrlFromLatLng(lat, lng) {
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return "";
+  return `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
+}
+
 // -----------------------------
 // Google Places API (New)
 // -----------------------------
-async function placesSearchText({
-  textQuery,
-  languageCode = "en",
-  maxResults = 5,
-  locationBias = null, // { lat, lng, radiusMeters }
-}) {
+async function placesSearchText({ textQuery, languageCode = "en", maxResults = 5, locationBias = null }) {
   const key = process.env.GOOGLE_PLACES_API_KEY;
   if (!key) return [];
 
@@ -309,19 +316,25 @@ async function placesSearchText({
     const data = await res.json().catch(() => ({}));
     const places = Array.isArray(data?.places) ? data.places : [];
 
-    return places.slice(0, maxResults).map((p) => ({
-      name: p?.displayName?.text || "Workshop",
-      address: p?.formattedAddress || "",
-      rating: p?.rating ?? null,
-      ratings_count: p?.userRatingCount ?? null,
-      phone: p?.nationalPhoneNumber || "",
-      website: p?.websiteUri || "",
-      maps_url: p?.googleMapsUri || "",
-      place_id: p?.id || "",
-      lat: p?.location?.latitude ?? null,
-      lng: p?.location?.longitude ?? null,
-      source: "google_places_new",
-    }));
+    return places.slice(0, maxResults).map((p) => {
+      const lat = p?.location?.latitude ?? null;
+      const lng = p?.location?.longitude ?? null;
+      const maps = p?.googleMapsUri || (Number.isFinite(lat) && Number.isFinite(lng) ? buildMapsUrlFromLatLng(lat, lng) : "");
+
+      return {
+        name: p?.displayName?.text || "Workshop",
+        address: p?.formattedAddress || "",
+        rating: p?.rating ?? null,
+        ratings_count: p?.userRatingCount ?? null,
+        phone: p?.nationalPhoneNumber || "",
+        website: p?.websiteUri || "",
+        maps_url: maps || "",
+        place_id: p?.id || "",
+        lat,
+        lng,
+        source: "google_places_new",
+      };
+    });
   } catch (e) {
     console.error("Google Places (New) error:", e?.message || e);
     return [];
@@ -330,13 +343,7 @@ async function placesSearchText({
   }
 }
 
-async function googlePlacesWorkshops(
-  userQuery,
-  userLocation,
-  locale,
-  maxResults = 5,
-  placesRadiusMeters = 25000
-) {
+async function googlePlacesWorkshops(userQuery, userLocation, locale, maxResults = 5, placesRadiusMeters = 25000) {
   const languageCode = normalizeLocale(locale);
   const gps = parseLatLng(userLocation);
 
@@ -369,12 +376,7 @@ async function googlePlacesWorkshops(
 // Main exported search
 // -----------------------------
 export async function performSearch(userQuery, userLocation, opts = {}) {
-  const {
-    maxResults = 3,
-    locale = "en",
-    placesRadiusMeters = 25000,
-    allowPlaces = null, // null = auto-detect intent
-  } = opts;
+  const { maxResults = 3, locale = "en", placesRadiusMeters = 25000, allowPlaces = null } = opts;
 
   // 1) Local KB search
   let verified_data = [];
@@ -405,11 +407,10 @@ export async function performSearch(userQuery, userLocation, opts = {}) {
     });
   }
 
-  // 2) Places workshops ONLY when user explicitly asks
+  // 2) Places workshops ONLY when user asks
   let verified_workshops = [];
 
-  const wantsPlaces =
-    typeof allowPlaces === "boolean" ? allowPlaces : detectPlacesIntent(userQuery);
+  const wantsPlaces = typeof allowPlaces === "boolean" ? allowPlaces : detectPlacesIntent(userQuery);
 
   if (!wantsPlaces) {
     return { verified_data, verified_workshops: [] };
@@ -417,13 +418,27 @@ export async function performSearch(userQuery, userLocation, opts = {}) {
 
   try {
     const placesMax = Number(process.env.PLACES_MAX_RESULTS || 5);
-    verified_workshops = await googlePlacesWorkshops(
-      userQuery,
-      userLocation,
-      locale,
-      placesMax,
-      placesRadiusMeters
-    );
+    verified_workshops = await googlePlacesWorkshops(userQuery, userLocation, locale, placesMax, placesRadiusMeters);
+
+    // Ensure minimal fields exist
+    verified_workshops = (verified_workshops || []).map((w) => {
+      const lat = Number(w?.lat);
+      const lng = Number(w?.lng);
+      const maps_url = w?.maps_url || (Number.isFinite(lat) && Number.isFinite(lng) ? buildMapsUrlFromLatLng(lat, lng) : "");
+      return {
+        name: w?.name || "Workshop",
+        address: w?.address || "",
+        rating: w?.rating ?? null,
+        ratings_count: w?.ratings_count ?? null,
+        phone: w?.phone || "",
+        website: w?.website || "",
+        maps_url,
+        place_id: w?.place_id || "",
+        lat: Number.isFinite(lat) ? lat : null,
+        lng: Number.isFinite(lng) ? lng : null,
+        source: w?.source || "google_places_new",
+      };
+    });
   } catch (e) {
     console.error("Workshops search error:", e?.message || e);
     verified_workshops = [];
