@@ -31,7 +31,7 @@ function detectTextLanguage(text = "") {
   // Chinese (CJK Unified)
   if (/[\u4E00-\u9FFF]/.test(t)) return "zh";
 
-  // Latin-based languages: default to en unless user sends locale
+  // Latin-based languages: we cannot reliably detect which one here -> keep "en" as default
   return "en";
 }
 
@@ -66,7 +66,7 @@ function detectLocaleFromHistory(history) {
 function normalizeLocale(input) {
   const v = String(input || "").trim();
   if (!v) return "";
-  // Accept BCP-47 like ar, ar-IQ, en-US, etc.
+  // Accept BCP-47 like ar, ar-IQ, en-US, fr-FR, es-ES, ...
   return v;
 }
 
@@ -88,20 +88,59 @@ function localeToLangTag(locale) {
   return v.split("-")[0].toLowerCase() || "en";
 }
 
-function fallbackMessage(locale) {
+// -----------------------------
+// Better "English detection" (for Latin locales)
+// -----------------------------
+function isLikelyEnglish(s = "") {
+  const t = String(s || "").toLowerCase();
+  if (!t || t.length < 40) return false;
+
+  const stop = [
+    " the ",
+    " and ",
+    " you ",
+    " your ",
+    " with ",
+    " for ",
+    " that ",
+    " this ",
+    " from ",
+    " are ",
+    " is ",
+    " to ",
+    " of ",
+    " in ",
+    " on ",
+    " it ",
+    " as ",
+    " can ",
+    " please ",
+    " try ",
+    " will ",
+  ];
+
+  let score = 0;
+  for (const w of stop) {
+    if (t.includes(w)) score++;
+  }
+  return score >= 4;
+}
+
+function fallbackMessageBase(locale) {
   const lang = localeToLangTag(locale);
 
   if (lang === "ar") {
     return "حصلت مشكلة مؤقتة أثناء التحليل أو البحث، لكن أقدر أساعدك بالتشخيص الآن. اكتب: (نوع السيارة + السنة + الأعراض + متى تظهر المشكلة) وسأعطيك خطة فحص دقيقة.";
   }
 
+  // Base in English; we will rewrite/translate to locale if needed
   return "A temporary issue occurred during analysis or search, but I can still help you right now. Please send: (car make/model + year + symptoms + when it happens) and I’ll give you a precise check plan.";
 }
 
 function ensureNonEmptyReply(out, locale) {
   const text = String(out || "").trim();
   if (text) return text;
-  return fallbackMessage(locale);
+  return fallbackMessageBase(locale);
 }
 
 // -----------------------------
@@ -145,10 +184,28 @@ function isMostlyLatin(s = "") {
 
 async function rewriteToLocale(text, locale) {
   const lang = localeToLangTag(locale);
+  const original = String(text || "").trim();
+  if (!original) return original;
 
-  // If already matches, return as-is
-  if (lang === "ar" && isMostlyArabic(text)) return text;
-  if (lang !== "ar" && isMostlyLatin(text)) return text;
+  // If already matches obvious cases, return as-is
+  if (lang === "ar" && isMostlyArabic(original)) return original;
+
+  // If target is English and text looks English, keep
+  if (lang === "en" && isLikelyEnglish(original)) return original;
+
+  // If target is not English and response is likely English, translate/rewrite
+  if (lang !== "en" && isLikelyEnglish(original)) {
+    // go rewrite
+  } else {
+    // For non-English scripts (zh/ja/ko/ru/he/hi/th), if output is mostly Latin -> rewrite
+    const nonLatinTargets = new Set(["zh", "ja", "ko", "ru", "he", "hi", "th", "ar"]);
+    if (nonLatinTargets.has(lang) && isMostlyLatin(original)) {
+      // go rewrite
+    } else {
+      // Otherwise don't force rewrite (avoid over-cost / unnecessary)
+      return original;
+    }
+  }
 
   // Do a tight rewrite/translation (no extra info)
   try {
@@ -162,18 +219,16 @@ async function rewriteToLocale(text, locale) {
         },
         {
           role: "user",
-          content: `TARGET_LOCALE: ${locale}\nTARGET_LANGUAGE: ${lang}\n\nTEXT:\n${String(
-            text || ""
-          ).trim()}`,
+          content: `TARGET_LOCALE: ${locale}\nTARGET_LANGUAGE: ${lang}\n\nTEXT:\n${original}`,
         },
       ],
       temperature: 0,
     });
 
     const out = (r?.choices?.[0]?.message?.content || "").trim();
-    return out || text;
+    return out || original;
   } catch (_) {
-    return text;
+    return original;
   }
 }
 
@@ -201,43 +256,76 @@ function looksLikePlacesRequest(fullInput = "") {
   // English
   if (
     t.includes("mechanic") ||
-    t.includes("shop") ||
     t.includes("auto repair") ||
     t.includes("garage") ||
+    t.includes("repair shop") ||
     t.includes("address") ||
     t.includes("near me") ||
     t.includes("nearby") ||
-    t.includes("in louisville") ||
-    t.includes("kentucky")
+    t.includes("google maps")
+  )
+    return true;
+
+  // Spanish / Portuguese
+  if (
+    t.includes("taller") ||
+    t.includes("mecánico") ||
+    t.includes("mecanico") ||
+    t.includes("reparación") ||
+    t.includes("reparacion") ||
+    t.includes("cerca") ||
+    t.includes("cerca de mí") ||
+    t.includes("cerca de mi")
+  )
+    return true;
+
+  // French
+  if (
+    t.includes("garage") ||
+    t.includes("mécanicien") ||
+    t.includes("mecanicien") ||
+    t.includes("près") ||
+    t.includes("pres de moi") ||
+    t.includes("adresse")
+  )
+    return true;
+
+  // German
+  if (
+    t.includes("werkstatt") ||
+    t.includes("mechaniker") ||
+    t.includes("in der nähe") ||
+    t.includes("in der nahe") ||
+    t.includes("adresse")
+  )
+    return true;
+
+  // Russian (basic)
+  if (
+    t.includes("автосервис") ||
+    t.includes("мастерская") ||
+    t.includes("рядом") ||
+    t.includes("адрес")
+  )
+    return true;
+
+  // Chinese / Japanese / Korean (basic "nearby repair")
+  if (
+    t.includes("附近") ||
+    t.includes("修理") ||
+    t.includes("维修") ||
+    t.includes("近く") ||
+    t.includes("整備") ||
+    t.includes("근처") ||
+    t.includes("정비") ||
+    t.includes("수리")
   )
     return true;
 
   return false;
 }
 
-function formatWorkshopsReply(locale, workshops = []) {
-  const lang = localeToLangTag(locale);
-
-  if (lang === "ar") {
-    const lines = workshops.slice(0, 5).map((w, i) => {
-      const name = w?.name || "ورشة";
-      const address = w?.address ? `\nالعنوان: ${w.address}` : "";
-      const rating =
-        w?.rating && Number(w.rating) > 0
-          ? `\nالتقييم: ${w.rating}${w?.ratings_total ? ` (${w.ratings_total} مراجعة)` : ""}`
-          : "";
-      const maps = w?.maps_url ? `\nخرائط Google: ${w.maps_url}` : "";
-      return `${i + 1}) ${name}${address}${rating}${maps}`;
-    });
-
-    return (
-      "هذه أفضل ورش/ميكانيك قريبة حسب موقعك الحالي:\n\n" +
-      lines.join("\n\n") +
-      "\n\nإذا تحب، اكتب اسم الحي/المنطقة أو نوع المشكلة (فرامل/إطارات/قير) وأرتّب لك قائمة أدق."
-    );
-  }
-
-  // default English
+function formatWorkshopsReplyBase(workshops = []) {
   const lines = workshops.slice(0, 5).map((w, i) => {
     const name = w?.name || "Workshop";
     const address = w?.address ? `\nAddress: ${w.address}` : "";
@@ -256,19 +344,10 @@ function formatWorkshopsReply(locale, workshops = []) {
   );
 }
 
-function formatNoWorkshopsReply(locale) {
-  const lang = localeToLangTag(locale);
-
-  if (lang === "ar") {
-    return (
-      "أقدر أطلع لك ورش قريبة، لكن ما قدرت أحدد موقعك بشكل كافي الآن.\n" +
-      "اكتب اسم المدينة/الحي (مثلاً: Louisville, KY أو اسم منطقتك)، أو فعّل GPS داخل التطبيق ثم جرّب مرة ثانية."
-    );
-  }
-
+function formatNoWorkshopsReplyBase() {
   return (
     "I can find nearby shops, but I can’t determine your location precisely right now.\n" +
-    "Send your city/neighborhood (e.g., Louisville, KY), or enable GPS in the app and try again."
+    "Send your city/neighborhood, or enable GPS in the app and try again."
   );
 }
 
@@ -328,10 +407,9 @@ export async function handleFixLensRequest(req) {
     const voiceText = audioResult.text;
     const fullInput = `${text} ${voiceText}`.trim();
 
-    // ✅ HARD OVERRIDE: if user clearly typed Arabic, lock locale to Arabic (even if device locale is en-US)
+    // ✅ If user clearly typed Arabic, lock locale to Arabic (even if device locale is en-US)
     const langFromInput = detectTextLanguage(fullInput || text);
     if (langFromInput === "ar") {
-      // keep region tag if already ar-XX, else set to "ar"
       const base = localeToLangTag(locale);
       locale = base === "ar" ? locale : "ar";
     }
@@ -356,14 +434,37 @@ export async function handleFixLensRequest(req) {
       VERIFIED_WORKSHOPS = [];
     }
 
-    // ✅ NEW: If user asked for workshops/places, return deterministic output
+    // ✅ NEW: If user asked for workshops/places, return deterministic output (then translate to locale if needed)
     const isPlaces = looksLikePlacesRequest(fullInput || text);
 
     if (isPlaces) {
-      const reply =
+      const baseReply =
         VERIFIED_WORKSHOPS.length > 0
-          ? formatWorkshopsReply(locale, VERIFIED_WORKSHOPS)
-          : formatNoWorkshopsReply(locale);
+          ? formatWorkshopsReplyBase(VERIFIED_WORKSHOPS)
+          : formatNoWorkshopsReplyBase();
+
+      const reply = await rewriteToLocale(
+        // If Arabic target, prefer Arabic-style base (but translation still works)
+        localeToLangTag(locale) === "ar"
+          ? "هذه أفضل ورش/ميكانيك قريبة حسب موقعك الحالي:\n\n" +
+              VERIFIED_WORKSHOPS.slice(0, 5)
+                .map((w, i) => {
+                  const name = w?.name || "ورشة";
+                  const address = w?.address ? `\nالعنوان: ${w.address}` : "";
+                  const rating =
+                    w?.rating && Number(w.rating) > 0
+                      ? `\nالتقييم: ${w.rating}${
+                          w?.ratings_total ? ` (${w.ratings_total} مراجعة)` : ""
+                        }`
+                      : "";
+                  const maps = w?.maps_url ? `\nخرائط Google: ${w.maps_url}` : "";
+                  return `${i + 1}) ${name}${address}${rating}${maps}`;
+                })
+                .join("\n\n") +
+              "\n\nإذا تحب، اكتب اسم الحي/المنطقة أو نوع المشكلة (فرامل/إطارات/قير) وأرتّب لك قائمة أدق."
+          : baseReply,
+        locale
+      );
 
       return {
         ok: true,
@@ -436,7 +537,7 @@ USER_INPUT: ${(text || "").trim()}`,
     const outRaw = response?.choices?.[0]?.message?.content || "";
     let out = ensureNonEmptyReply(outRaw, locale);
 
-    // ✅ NEW: if model answered in wrong language, rewrite to match locale
+    // ✅ Ensure it matches locale even for Latin languages (fr/es/de/it/...)
     out = await rewriteToLocale(out, locale);
 
     return {
@@ -450,7 +551,9 @@ USER_INPUT: ${(text || "").trim()}`,
     const dbg = getErrorDebug(error);
     console.error("FixLens Error:", dbg);
 
-    const safeReply = fallbackMessage(locale);
+    // Base fallback then translate/rewrite to locale when needed
+    let safeReply = fallbackMessageBase(locale);
+    safeReply = await rewriteToLocale(safeReply, locale);
 
     return {
       ok: false,
