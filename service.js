@@ -266,6 +266,109 @@ function formatNoWorkshopsReplyBase() {
 }
 
 // -----------------------------
+// ✅ Conversation-aware Places follow-up (AGREED FIX)
+// -----------------------------
+function _asTextContent(c) {
+  if (typeof c === "string") return c;
+  if (Array.isArray(c)) return c.map((x) => (typeof x?.text === "string" ? x.text : "")).join(" ").trim();
+  return "";
+}
+
+function _recentText(history = [], max = 8) {
+  if (!Array.isArray(history) || history.length === 0) return [];
+  return history.slice(-max).map((m) => ({
+    role: m?.role,
+    text: _asTextContent(m?.content || ""),
+  }));
+}
+
+function looksLikeLocationOnly(text = "") {
+  const t = String(text || "").trim();
+  if (!t) return false;
+
+  // Too long = probably not just a location
+  if (t.length > 38) return false;
+
+  // If it already looks like places request, let normal detection handle it
+  if (looksLikePlacesRequest(t)) return false;
+
+  // Must contain letters (Latin or Arabic) and be mostly city/state style
+  const hasLetters = /[A-Za-z\u0600-\u06FF]/.test(t);
+  if (!hasLetters) return false;
+
+  // Avoid numbers-heavy (zip codes) but allow small ones
+  const digits = (t.match(/\d/g) || []).length;
+  if (digits >= 5) return false;
+
+  // Simple patterns: "Louisville Kentucky", "Louisville, KY", "لوفل كنتاكي"
+  const ok =
+    /^[A-Za-z\u0600-\u06FF][A-Za-z\u0600-\u06FF\s,.'-]{2,}$/.test(t) ||
+    /^[A-Za-z\s]+,\s*[A-Za-z]{2,3}$/.test(t);
+
+  return Boolean(ok);
+}
+
+function historyHasPlacesContext(history = []) {
+  const recent = _recentText(history, 10);
+  if (recent.length === 0) return false;
+
+  // If user recently asked for places
+  for (let i = recent.length - 1; i >= 0; i--) {
+    const m = recent[i];
+    if (m.role === "user" && looksLikePlacesRequest(m.text)) return true;
+  }
+
+  // If assistant recently asked user to enable GPS or send city/neighborhood
+  const assistantHints = [
+    "gps",
+    "location",
+    "city",
+    "neighborhood",
+    "enable gps",
+    "send your city",
+    "write your city",
+    "اكتب مدينتك",
+    "اكتب حيّك",
+    "اكتب الحي",
+    "فعّل gps",
+    "الموقع",
+    "مدينتك",
+    "حيّك",
+  ];
+
+  for (let i = recent.length - 1; i >= 0; i--) {
+    const m = recent[i];
+    if (m.role !== "assistant") continue;
+    const lower = String(m.text || "").toLowerCase();
+    if (assistantHints.some((h) => lower.includes(h.toLowerCase()))) return true;
+  }
+
+  return false;
+}
+
+function shouldTreatAsPlaces({ fullInput, text, history }) {
+  const combined = String(fullInput || "").trim();
+  if (looksLikePlacesRequest(combined)) return true;
+
+  // ✅ If user just sends a city after we asked about GPS/city -> treat as places request
+  if (looksLikeLocationOnly(text) && historyHasPlacesContext(history)) return true;
+
+  return false;
+}
+
+function pickLocationOverride({ user_location, text }) {
+  // If GPS is off and user_location is Global, but text is a city, use text as location
+  const t = String(text || "").trim();
+  if (!looksLikeLocationOnly(t)) return null;
+
+  if (typeof user_location === "string") {
+    const ul = user_location.trim();
+    if (!ul || ul.toLowerCase() === "global") return t;
+  }
+  return null;
+}
+
+// -----------------------------
 // Audio Transcription
 // -----------------------------
 async function transcribeAudio(audioBase64) {
@@ -328,12 +431,20 @@ export async function handleFixLensRequest(req) {
       if (langFromInput !== base) locale = langFromInput;
     }
 
+    // ✅ (AGREED FIX) Determine if this should be treated as a places request,
+    // including "city-only follow-up" messages like: "Louisville Kentucky"
+    const isPlaces = shouldTreatAsPlaces({ fullInput: fullInput || text, text, history });
+
+    // ✅ (AGREED FIX) If GPS is off (Global) but user typed a city, override location for search
+    const locationOverride = pickLocationOverride({ user_location, text });
+    const effective_location = locationOverride != null ? locationOverride : user_location;
+
     // 2) Search (local KB + places)
     let VERIFIED_DATA = [];
     let VERIFIED_WORKSHOPS = [];
 
     try {
-      const searchPack = await performSearch(fullInput || text, user_location, {
+      const searchPack = await performSearch(fullInput || text, effective_location, {
         locale,
         placesRadiusMeters: Number(body.places_radius_meters || 25000),
       });
@@ -347,7 +458,6 @@ export async function handleFixLensRequest(req) {
     }
 
     // 3) If places request -> return deterministic list (then rewrite to locale)
-    const isPlaces = looksLikePlacesRequest(fullInput || text);
     if (isPlaces) {
       const baseReply =
         VERIFIED_WORKSHOPS.length > 0 ? formatWorkshopsReplyBase(VERIFIED_WORKSHOPS) : formatNoWorkshopsReplyBase();
@@ -386,6 +496,9 @@ export async function handleFixLensRequest(req) {
                 model: process.env.FIXLENS_MODEL || "gpt-4o",
                 has_workshops: VERIFIED_WORKSHOPS.length > 0,
                 user_location_type: typeof user_location,
+                effective_location_type: typeof effective_location,
+                used_location_override: Boolean(locationOverride),
+                location_override_value: locationOverride || null,
               },
             }
           : {}),
@@ -404,7 +517,7 @@ export async function handleFixLensRequest(req) {
       type: "text",
       text: `STRICT_CONTEXT
 LOCALE: ${locale}
-LOCATION: ${typeof user_location === "string" ? user_location : JSON.stringify(user_location)}
+LOCATION: ${typeof effective_location === "string" ? effective_location : JSON.stringify(effective_location)}
 
 LANGUAGE_RULES:
 - Respond ONLY in the user's language implied by LOCALE.
