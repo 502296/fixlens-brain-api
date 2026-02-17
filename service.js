@@ -13,16 +13,24 @@ const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 function detectTextLanguage(text = "") {
   const t = String(text || "");
 
-  if (/[\u0600-\u06FF]/.test(t)) return "ar"; // Arabic
-  if (/[\u0590-\u05FF]/.test(t)) return "he"; // Hebrew
-  if (/[\u0400-\u04FF]/.test(t)) return "ru"; // Cyrillic
-  if (/[\u0900-\u097F]/.test(t)) return "hi"; // Devanagari
-  if (/[\u0E00-\u0E7F]/.test(t)) return "th"; // Thai
-  if (/[\u1100-\u11FF\u3130-\u318F\uAC00-\uD7AF]/.test(t)) return "ko"; // Korean
-  if (/[\u3040-\u30FF]/.test(t)) return "ja"; // Japanese
-  if (/[\u4E00-\u9FFF]/.test(t)) return "zh"; // Chinese
+  // Arabic
+  if (/[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF]/.test(t)) return "ar";
+  // Hebrew
+  if (/[\u0590-\u05FF]/.test(t)) return "he";
+  // Cyrillic (ru/uk/bg/etc)
+  if (/[\u0400-\u04FF]/.test(t)) return "ru";
+  // Devanagari
+  if (/[\u0900-\u097F]/.test(t)) return "hi";
+  // Thai
+  if (/[\u0E00-\u0E7F]/.test(t)) return "th";
+  // Korean
+  if (/[\u1100-\u11FF\u3130-\u318F\uAC00-\uD7AF]/.test(t)) return "ko";
+  // Japanese
+  if (/[\u3040-\u30FF]/.test(t)) return "ja";
+  // Chinese
+  if (/[\u4E00-\u9FFF]/.test(t)) return "zh";
 
-  return "en";
+  return "en"; // means "Latin-ish" here (could be fr/es/de/it/pt/etc)
 }
 
 function detectLocaleFromHistory(history) {
@@ -49,9 +57,19 @@ function detectLocaleFromHistory(history) {
 function normalizeLocale(input) {
   const v = String(input || "").trim();
   if (!v) return "";
-  return v; // accept BCP-47 tags
+  // accept BCP-47 tags; never allow "auto"
+  if (v.toLowerCase() === "auto") return "";
+  return v;
 }
 
+function localeToLangTag(locale) {
+  const v = String(locale || "").trim();
+  if (!v) return "en";
+  return v.split("-")[0].toLowerCase() || "en";
+}
+
+// If locale present -> trust it.
+// Else infer from history -> else from text.
 function inferLocale({ locale, text, history }) {
   const normalized = normalizeLocale(locale);
   if (normalized) return normalized;
@@ -61,12 +79,6 @@ function inferLocale({ locale, text, history }) {
 
   const fromText = detectTextLanguage(text || "");
   return fromText || "en";
-}
-
-function localeToLangTag(locale) {
-  const v = String(locale || "").trim();
-  if (!v) return "en";
-  return v.split("-")[0].toLowerCase() || "en";
 }
 
 // -----------------------------
@@ -106,12 +118,44 @@ function isLikelyEnglish(s = "") {
 }
 
 // -----------------------------
+// Script checks (for rewrite decisions)
+// -----------------------------
+function isMostlyArabic(s = "") {
+  const t = String(s || "");
+  const ar = (t.match(/[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF]/g) || []).length;
+  const latin = (t.match(/[A-Za-z]/g) || []).length;
+  return ar > 0 && ar >= latin * 0.6;
+}
+
+function isMostlyCyrillic(s = "") {
+  const t = String(s || "");
+  const cy = (t.match(/[\u0400-\u04FF]/g) || []).length;
+  const latin = (t.match(/[A-Za-z]/g) || []).length;
+  return cy > 0 && cy >= latin * 0.6;
+}
+
+function isMostlyCJK(s = "") {
+  const t = String(s || "");
+  const cjk = (t.match(/[\u4E00-\u9FFF\u3040-\u30FF\uAC00-\uD7AF]/g) || []).length;
+  const latin = (t.match(/[A-Za-z]/g) || []).length;
+  return cjk > 0 && cjk >= latin * 0.4;
+}
+
+function isMostlyLatin(s = "") {
+  const t = String(s || "");
+  const latin = (t.match(/[A-Za-z]/g) || []).length;
+  const nonlatin =
+    (t.match(/[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\u0400-\u04FF\u4E00-\u9FFF\u3040-\u30FF\uAC00-\uD7AF]/g) || []).length;
+  return latin > 0 && latin >= nonlatin * 0.6;
+}
+
+// -----------------------------
 // Fallback message (base -> then rewritten)
 // -----------------------------
 function fallbackMessageBase(locale) {
   const lang = localeToLangTag(locale);
   if (lang === "ar") {
-    return "صار خلل بسيط أثناء التحليل/البحث. اكتب: (نوع السيارة + السنة + الأعراض + متى تظهر) وأنا أمشيك بخطة فحص دقيقة.";
+    return "صار خلل بسيط. اكتب: (نوع السيارة + السنة + الأعراض + متى تظهر) وأنا أمشيك بخطة فحص دقيقة.";
   }
   return "A temporary issue occurred. Send: (car make/model + year + symptoms + when it happens) and I’ll give a precise check plan.";
 }
@@ -141,36 +185,44 @@ function getErrorDebug(err) {
 }
 
 // -----------------------------
-// Language mismatch fixer (rewrite to locale)
+// Language mismatch fixer (rewrite to locale) — GLOBAL
 // -----------------------------
-function isMostlyArabic(s = "") {
-  const t = String(s || "");
-  const ar = (t.match(/[\u0600-\u06FF]/g) || []).length;
-  const latin = (t.match(/[A-Za-z]/g) || []).length;
-  return ar > 0 && ar >= latin * 0.6;
-}
-
-function isMostlyLatin(s = "") {
-  const t = String(s || "");
-  const ar = (t.match(/[\u0600-\u06FF]/g) || []).length;
-  const latin = (t.match(/[A-Za-z]/g) || []).length;
-  return latin > 0 && latin >= ar * 0.6;
-}
-
 async function rewriteToLocale(text, locale) {
-  const lang = localeToLangTag(locale);
+  const targetLocale = String(locale || "").trim() || "en";
+  const targetLang = localeToLangTag(targetLocale);
   const original = String(text || "").trim();
   if (!original) return original;
 
-  if (lang === "ar" && isMostlyArabic(original)) return original;
-  if (lang === "en" && isLikelyEnglish(original)) return original;
+  // If target is Arabic and already Arabic -> keep
+  if (targetLang === "ar" && isMostlyArabic(original)) return original;
 
+  // If target is English and likely English -> keep
+  if (targetLang === "en" && isLikelyEnglish(original)) return original;
+
+  // Strong rewrite rules:
+  // 1) If target is non-latin and output is mostly latin -> rewrite
   const nonLatinTargets = new Set(["zh", "ja", "ko", "ru", "he", "hi", "th", "ar"]);
-  const needsRewrite =
-    (lang !== "en" && isLikelyEnglish(original)) ||
-    (nonLatinTargets.has(lang) && isMostlyLatin(original));
-
-  if (!needsRewrite) return original;
+  if (nonLatinTargets.has(targetLang) && isMostlyLatin(original)) {
+    // rewrite
+  } else {
+    // 2) If target is Latin language (fr/es/de/it/pt/nl/...) but output is clearly non-latin -> rewrite
+    const latinTargets = new Set(["en", "fr", "es", "de", "it", "pt", "nl", "sv", "no", "da", "fi", "pl", "tr", "ro", "cs", "sk", "hu"]);
+    if (latinTargets.has(targetLang)) {
+      const nonLatinOut = isMostlyArabic(original) || isMostlyCyrillic(original) || isMostlyCJK(original);
+      if (!nonLatinOut) {
+        // 3) If target is not English and output looks English -> rewrite
+        if (!(targetLang !== "en" && isLikelyEnglish(original))) {
+          return original;
+        }
+      }
+      // else rewrite
+    } else {
+      // 4) For any other target (unknown), if output looks English but target != en -> rewrite
+      if (!(targetLang !== "en" && isLikelyEnglish(original))) {
+        return original;
+      }
+    }
+  }
 
   try {
     const r = await client.chat.completions.create({
@@ -179,11 +231,11 @@ async function rewriteToLocale(text, locale) {
         {
           role: "system",
           content:
-            "You are a strict rewriter. Rewrite the given text in the target language only. Keep meaning, keep structure, do not add new info.",
+            "You are a strict rewriter. Rewrite the given text in the target language only. Keep meaning and tone. Do not add new info. Do not add headings or lists.",
         },
         {
           role: "user",
-          content: `TARGET_LOCALE: ${locale}\nTARGET_LANGUAGE: ${lang}\n\nTEXT:\n${original}`,
+          content: `TARGET_LOCALE: ${targetLocale}\nTARGET_LANGUAGE: ${targetLang}\n\nTEXT:\n${original}`,
         },
       ],
       temperature: 0,
@@ -230,7 +282,7 @@ function looksLikePlacesRequest(fullInput = "") {
   )
     return true;
 
-  // few extra languages
+  // extra languages (light)
   if (t.includes("taller") || t.includes("mecanico") || t.includes("mécanicien") || t.includes("werkstatt")) return true;
   if (t.includes("автосервис") || t.includes("рядом")) return true;
   if (t.includes("附近") || t.includes("近く") || t.includes("근처")) return true;
@@ -238,6 +290,8 @@ function looksLikePlacesRequest(fullInput = "") {
   return false;
 }
 
+// NOTE: This base format is okay because we rewrite it later to locale.
+// Keep it simple and structured for clarity.
 function formatWorkshopsReplyBase(workshops = []) {
   const lines = workshops.slice(0, 5).map((w, i) => {
     const name = w?.name || "Workshop";
@@ -252,13 +306,12 @@ function formatWorkshopsReplyBase(workshops = []) {
   });
 
   return (
-    "Here are good nearby mechanic shops based on your location:\n\n" +
+    "Here are nearby mechanic shops based on your location:\n\n" +
     lines.join("\n\n") +
-    "\n\nIf you tell me your neighborhood or the issue type (brakes/tires/transmission), I can refine the list."
+    "\n\nIf you tell me your neighborhood/area or the issue type (brakes/tires/transmission), I can refine the list."
   );
 }
 
-// ✅ UPDATED: better no-results message (don’t keep telling user “send city” if they already did)
 function formatNoWorkshopsReplyBase(locationHint = "") {
   const loc = String(locationHint || "").trim();
   const locLine = loc ? `\n(Location received: ${loc})` : "";
@@ -267,7 +320,7 @@ function formatNoWorkshopsReplyBase(locationHint = "") {
     "I can find nearby shops, but the search returned no results right now." +
     locLine +
     "\nThis usually happens if GPS is not available or Google Places isn’t responding." +
-    "\nTry enabling GPS, or send your ZIP code / neighborhood and try again."
+    "\nTry enabling GPS, or send your city + area/landmark (and country if needed) and try again."
   );
 }
 
@@ -308,16 +361,17 @@ export async function handleFixLensRequest(req) {
   const text = body.text || "";
   const history = Array.isArray(body.history) ? body.history : [];
 
+  // If client sends a BCP-47 locale, keep it.
+  // Otherwise infer from history/text.
   let locale = inferLocale({ locale: body.locale, text, history });
 
   // ✅ worldwide: never default to a city
   const user_location = body.user_location || "Global";
 
-  // ✅ A safe printable location hint for logs/messages
   const effective_location =
     typeof user_location === "string" ? user_location : JSON.stringify(user_location);
 
-  const image_base_64 = body.image_base_64 || body.image_base64 || "";
+  const image_base_64 = body.audio_base_64 ? (body.image_base_64 || body.image_base64 || "") : (body.image_base_64 || body.image_base64 || "");
   const audio_base_64 = body.audio_base_64 || body.audio_base64 || "";
 
   const debugMode = Boolean(body.debug);
@@ -327,15 +381,16 @@ export async function handleFixLensRequest(req) {
     const audioResult = await transcribeAudio(audio_base_64);
     const voiceText = audioResult.text;
 
-    // Full input used for search intent detection and locale lock
+    // Full input used for search intent detection
     const fullInput = `${text} ${voiceText}`.trim();
 
-    // ✅ Strong locale lock: match last user sentence language
-    const langFromInput = detectTextLanguage(fullInput || text);
-    if (langFromInput) {
-      // keep region if already same base, else switch base-only
-      const base = localeToLangTag(locale);
-      if (langFromInput !== base) locale = langFromInput;
+    // ✅ Locale lock:
+    // If body.locale exists, we keep it as authority.
+    // If missing, we infer from input.
+    const hasClientLocale = Boolean(normalizeLocale(body.locale));
+    if (!hasClientLocale) {
+      const langFromInput = detectTextLanguage(fullInput || text);
+      if (langFromInput) locale = langFromInput;
     }
 
     // 2) Search (local KB + places)
@@ -359,7 +414,6 @@ export async function handleFixLensRequest(req) {
     // 3) If places request -> return deterministic list (then rewrite to locale)
     const isPlaces = looksLikePlacesRequest(fullInput || text);
 
-    // ✅ LOGS to Render (always visible)
     console.log("[FixLens][places_check]", {
       isPlaces,
       locale,
@@ -374,7 +428,7 @@ export async function handleFixLensRequest(req) {
           ? formatWorkshopsReplyBase(VERIFIED_WORKSHOPS)
           : formatNoWorkshopsReplyBase(effective_location);
 
-      // If Arabic target, provide an Arabic-flavored base first (better than machine translating English list)
+      // Provide a stronger Arabic base (if Arabic) before rewrite.
       const arBase =
         VERIFIED_WORKSHOPS.length > 0
           ? "هذه ورش/ميكانيك قريبة حسب موقعك:\n\n" +
@@ -391,8 +445,8 @@ export async function handleFixLensRequest(req) {
                 return `${i + 1}) ${name}${address}${rating}${phone}${maps}`;
               })
               .join("\n\n") +
-            "\n\nإذا تكتب اسم الحي أو نوع المشكلة (فرامل/إطارات/قير) أرتّب لك قائمة أدق."
-          : `وصلني موقعك: ${String(effective_location || "").trim() || "غير معروف"}.\nلكن البحث ما رجّع ورش الآن. هذا غالبًا بسبب أن GPS غير متاح أو Google Places غير شغّال/مقيّد.\nجرّب تفعيل GPS، أو اكتب ZIP/اسم الحي (مثلاً: 40202) وأعيد لك قائمة أدق.`;
+            "\n\nإذا تكتب اسم المنطقة/الحي أو نوع المشكلة (فرامل/إطارات/قير) أرتّب لك قائمة أدق."
+          : `وصلني موقعك: ${String(effective_location || "").trim() || "غير معروف"}.\nلكن البحث ما رجّع ورش الآن. هذا غالبًا بسبب أن GPS غير متاح أو Google Places غير شغّال/مقيّد.\nجرّب تفعيل GPS، أو اكتب (المدينة + المنطقة/معلم قريب + الدولة إذا لازم) وأعيد لك قائمة أدق.`;
 
       const reply = await rewriteToLocale(localeToLangTag(locale) === "ar" ? arBase : baseReply, locale);
 
@@ -419,7 +473,7 @@ export async function handleFixLensRequest(req) {
 
     const audioBlock =
       audio_base_64 && !audioResult.ok
-        ? "\nAUDIO_NOTE: The provided audio did not yield a clear transcript. Do NOT guess from audio. Ask ONE short follow-up to resend 10-15s near the source."
+        ? "\nAUDIO_NOTE: No clear transcript. Ask ONE short follow-up to resend 10–15s close to the source. Do not guess from audio."
         : "";
 
     messageContent.push({
@@ -429,13 +483,13 @@ LOCALE: ${locale}
 LOCATION: ${typeof user_location === "string" ? user_location : JSON.stringify(user_location)}
 
 LANGUAGE_RULES:
-- Respond ONLY in the user's language implied by LOCALE.
-- No bilingual output unless user explicitly requests it.
-- Worldwide: never assume country/city/fuel/regulations unless provided.
+- Respond ONLY in the language implied by LOCALE.
+- No bilingual output unless the user explicitly asks.
+- Worldwide: never assume country/city/fuel/regulations/units unless provided.
 
 SEARCH_RULES:
-- VERIFIED_DATA_JSON may contain known verified patterns. Use it only if relevant.
-- If the user asks for workshops/places, rely on VERIFIED_WORKSHOPS_JSON first.
+- Use VERIFIED_DATA_JSON only if relevant.
+- Use VERIFIED_WORKSHOPS_JSON when the user asks for places.
 
 AUDIO_TRANSCRIPT_OK: ${audioResult.ok ? "YES" : audio_base_64 ? "NO" : "NO_AUDIO"}
 AUDIO_TRANSCRIPT: ${voiceText || ""}${audioBlock}
@@ -453,14 +507,18 @@ USER_INPUT: ${(text || "").trim()}`,
       });
       messageContent.push({
         type: "text",
-        text: "Use the photo to identify visible parts, leaks, wear, cracks, residue, alignment. Tie findings to the single most probable diagnosis.",
+        text: "Use the photo to identify visible parts, leaks, wear, cracks, residue, alignment. Tie findings to ONE most probable diagnosis.",
       });
     }
 
     // 5) Model response
     const response = await client.chat.completions.create({
       model: process.env.FIXLENS_MODEL || "gpt-4o",
-      messages: [{ role: "system", content: buildDoctorSystemPrompt() }, ...history.slice(-8), { role: "user", content: messageContent }],
+      messages: [
+        { role: "system", content: buildDoctorSystemPrompt() },
+        ...history.slice(-8),
+        { role: "user", content: messageContent },
+      ],
       temperature: 0.2,
     });
 
