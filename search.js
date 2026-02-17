@@ -30,7 +30,19 @@ try {
 }
 
 function toText(record) {
-  const fields = [record.title, record.name, record.symptom, record.symptoms, record.problem, record.description, record.causes, record.checks, record.steps, record.tags];
+  const fields = [
+    record.title,
+    record.name,
+    record.symptom,
+    record.symptoms,
+    record.problem,
+    record.description,
+    record.causes,
+    record.checks,
+    record.steps,
+    record.tags,
+  ];
+
   let s = "";
   for (const v of fields) {
     if (!v) continue;
@@ -38,12 +50,18 @@ function toText(record) {
     else if (typeof v === "object") s += " " + JSON.stringify(v);
     else s += " " + String(v);
   }
+
   if (!s.trim()) s = JSON.stringify(record);
   return s.toLowerCase();
 }
 
+// ✅ UPDATED: Unicode-safe tokenization (supports all languages, not only a-z/0-9/ar)
 function scoreMatch(query, text) {
-  const q = query.toLowerCase().replace(/[^a-z0-9\u0600-\u06FF\s]/g, " ");
+  const q = String(query || "")
+    .toLowerCase()
+    // keep letters/numbers across languages + spaces
+    .replace(/[^\p{L}\p{N}\s]/gu, " ");
+
   const tokens = q.split(/\s+/).filter(Boolean);
   if (tokens.length === 0) return 0;
 
@@ -151,7 +169,9 @@ function parseLatLng(input) {
   }
 
   const s = String(input).trim();
-  const m = s.match(/(-?\d+(\.\d+)?)\s*,\s*(-?\d+(\.\d+)?)/) || s.match(/(-?\d+(\.\d+)?)\s+(-?\d+(\.\d+)?)/);
+  const m =
+    s.match(/(-?\d+(\.\d+)?)\s*,\s*(-?\d+(\.\d+)?)/) ||
+    s.match(/(-?\d+(\.\d+)?)\s+(-?\d+(\.\d+)?)/);
   if (!m) return null;
 
   const lat = Number(m[1]);
@@ -174,7 +194,7 @@ function safeCityText(userLocation) {
   return "";
 }
 
-// ✅ NEW: Extract location from the user query itself (works when GPS is off)
+// ✅ Extract location from the user query itself (works when GPS is off)
 function extractLocationFromQuery(userQuery = "") {
   const q = String(userQuery || "").trim();
   if (!q) return "";
@@ -310,7 +330,7 @@ async function googlePlacesWorkshops(userQuery, userLocation, locale, maxResults
 export async function performSearch(userQuery, userLocation, opts = {}) {
   const { maxResults = 3, locale = "en", placesRadiusMeters = 25000, allowPlaces = null } = opts;
 
-  // 1) Local KB search
+  // 1) Local KB search (CHEAP)
   let verified_data = [];
   if (userQuery && userQuery.trim().length >= 2) {
     const scored = KB
@@ -332,9 +352,8 @@ export async function performSearch(userQuery, userLocation, opts = {}) {
     });
   }
 
-  // 2) Places workshops ONLY when explicitly asked
+  // 2) Places workshops ONLY when explicitly asked (EXPENSIVE)
   let verified_workshops = [];
-
   const wantsPlaces = typeof allowPlaces === "boolean" ? allowPlaces : detectPlacesIntent(userQuery);
 
   if (!wantsPlaces) return { verified_data, verified_workshops: [] };
