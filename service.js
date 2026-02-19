@@ -299,7 +299,9 @@ function isMostlyLatin(s = "") {
   const t = String(s || "");
   const latin = (t.match(/[A-Za-z]/g) || []).length;
   const nonlatin =
-    (t.match(/[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\u0400-\u04FF\u4E00-\u9FFF\u3040-\u30FF\uAC00-\uD7AF]/g) || []).length;
+    (t.match(
+      /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\u0400-\u04FF\u4E00-\u9FFF\u3040-\u30FF\uAC00-\uD7AF]/g
+    ) || []).length;
   return latin > 0 && latin >= nonlatin * 0.6;
 }
 
@@ -623,26 +625,41 @@ export async function handleFixLensRequest(req) {
     const audioResult = await transcribeAudio(audio_base_64);
     const voiceText = audioResult.text;
 
-    // Full input used for search intent detection
+    // Full input used for DIAGNOSIS context (NOT for places intent)
     const fullInput = `${text} ${voiceText}`.trim();
 
-    // ✅ Locale lock:
+    // ✅ Locale lock (important):
     // If body.locale exists, we keep it as authority.
-    // If missing, we infer from input (including latin-language guessing).
+    // If missing, infer primarily from the user's typed text.
+    // (Audio transcript can be English even when the user writes Arabic.)
     const hasClientLocale = Boolean(normalizeLocale(body.locale));
     if (!hasClientLocale) {
-      const langFromInput = detectTextLanguage(fullInput || text);
-      if (langFromInput) locale = langFromInput;
+      const langFromTyped = detectTextLanguage(text || "");
+      if (langFromTyped) locale = langFromTyped;
+      else {
+        const langFromAudio = detectTextLanguage(voiceText || "");
+        if (langFromAudio) locale = langFromAudio;
+      }
     }
 
     // 2) Search (local KB + places)
     let VERIFIED_DATA = [];
     let VERIFIED_WORKSHOPS = [];
 
+    // ✅ Places intent should be based on what the user asked, not what Whisper guessed.
+    const placesIntentFromTypedText = looksLikePlacesRequest(text || "");
+    const placesAllow = Boolean(placesIntentFromTypedText);
+
+    // ✅ Query strategy:
+    // - For KB relevance: use fullInput (typed + audio) because it helps diagnosis
+    // - For Places: allowPlaces gates the expensive call; intent comes from typed text only
+    const queryForSearch = fullInput || text;
+
     try {
-      const searchPack = await performSearch(fullInput || text, user_location, {
+      const searchPack = await performSearch(queryForSearch, user_location, {
         locale,
         placesRadiusMeters: Number(body.places_radius_meters || 25000),
+        allowPlaces: placesAllow,
       });
 
       VERIFIED_DATA = Array.isArray(searchPack?.verified_data) ? searchPack.verified_data : [];
@@ -654,7 +671,7 @@ export async function handleFixLensRequest(req) {
     }
 
     // 3) If places request -> return deterministic list (then rewrite to locale)
-    const isPlaces = looksLikePlacesRequest(fullInput || text);
+    const isPlaces = placesIntentFromTypedText;
 
     console.log("[FixLens][places_check]", {
       isPlaces,
@@ -704,6 +721,7 @@ export async function handleFixLensRequest(req) {
                 model: process.env.FIXLENS_MODEL || "gpt-4o",
                 has_workshops: VERIFIED_WORKSHOPS.length > 0,
                 user_location_type: typeof user_location,
+                places_intent_from_typed: placesIntentFromTypedText,
               },
             }
           : {}),
