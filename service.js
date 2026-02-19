@@ -30,7 +30,161 @@ function detectTextLanguage(text = "") {
   // Chinese
   if (/[\u4E00-\u9FFF]/.test(t)) return "zh";
 
-  return "en"; // means "Latin-ish" here (could be fr/es/de/it/pt/etc)
+  // ✅ Latin-ish: attempt to guess non-English Latin languages
+  const latinGuess = guessLatinLanguage(t);
+  if (latinGuess) return latinGuess;
+
+  return "en"; // default
+}
+
+// ✅ NEW: best-effort guess for Latin-script languages (ES/FR/DE/IT/PT/TR/NL/PL)
+// This helps "first message" language when locale is missing.
+function guessLatinLanguage(s = "") {
+  const t = String(s || "").toLowerCase().trim();
+  if (!t) return "";
+
+  // If it contains lots of English stop-words strongly -> assume en
+  if (isLikelyEnglish(t)) return "en";
+
+  // Spanish
+  const esHits = [
+    " el ",
+    " la ",
+    " los ",
+    " las ",
+    " un ",
+    " una ",
+    " por ",
+    " para ",
+    " con ",
+    " sin ",
+    " tengo ",
+    " ruido ",
+    " freno",
+    " frenos",
+    " motor",
+    " taller",
+    " cerca",
+    " cuanto",
+    " cuánto",
+    " ayuda",
+    " arreglar",
+    " reparar",
+  ];
+  // French
+  const frHits = [
+    " le ",
+    " la ",
+    " les ",
+    " un ",
+    " une ",
+    " pour ",
+    " avec ",
+    " sans ",
+    " bruit ",
+    " frein",
+    " freins",
+    " moteur",
+    " garage",
+    " près",
+    " proche",
+    " combien",
+    " aider",
+    " réparer",
+  ];
+  // German
+  const deHits = [
+    " der ",
+    " die ",
+    " das ",
+    " und ",
+    " mit ",
+    " ohne ",
+    " geräusch",
+    " bremse",
+    " motor",
+    " werkstatt",
+    " in der nähe",
+    " wie viel",
+    " helfen",
+    " reparieren",
+  ];
+  // Italian
+  const itHits = [
+    " il ",
+    " lo ",
+    " la ",
+    " gli ",
+    " le ",
+    " un ",
+    " una ",
+    " per ",
+    " con ",
+    " senza ",
+    " rumore",
+    " freno",
+    " freni",
+    " motore",
+    " officina",
+    " vicino",
+    " quanto",
+    " aiutami",
+    " riparare",
+  ];
+  // Portuguese
+  const ptHits = [
+    " o ",
+    " a ",
+    " os ",
+    " as ",
+    " um ",
+    " uma ",
+    " para ",
+    " com ",
+    " sem ",
+    " barulho",
+    " freio",
+    " freios",
+    " motor",
+    " oficina",
+    " perto",
+    " quanto",
+    " ajuda",
+    " reparar",
+  ];
+  // Turkish (latin)
+  const trHits = [
+    " ve ",
+    " ile ",
+    " için ",
+    " fren",
+    " motor",
+    " usta",
+    " servis",
+    " yakın",
+    " ne kadar",
+    " yardım",
+    " tamir",
+  ];
+
+  // Simple scoring
+  const score = (hits) => hits.reduce((acc, w) => (t.includes(w) ? acc + 1 : acc), 0);
+
+  const scores = [
+    { lang: "es", n: score(esHits) },
+    { lang: "fr", n: score(frHits) },
+    { lang: "de", n: score(deHits) },
+    { lang: "it", n: score(itHits) },
+    { lang: "pt", n: score(ptHits) },
+    { lang: "tr", n: score(trHits) },
+  ];
+
+  scores.sort((a, b) => b.n - a.n);
+
+  // Require at least a couple hints to avoid false positives
+  if (scores[0].n >= 2) return scores[0].lang;
+
+  return "";
 }
 
 function detectLocaleFromHistory(history) {
@@ -185,6 +339,74 @@ function getErrorDebug(err) {
 }
 
 // -----------------------------
+// Intent detection (Doctor brain routing hints)
+// -----------------------------
+function looksLikeTeachMeFixRequest(fullInput = "") {
+  const t = String(fullInput || "").toLowerCase().trim();
+  if (!t) return false;
+
+  // Arabic
+  if (
+    t.includes("علمني") ||
+    t.includes("علّمني") ||
+    t.includes("كيف اصلح") ||
+    t.includes("شلون اصلح") ||
+    t.includes("طريقة اصلاح") ||
+    t.includes("خطوات") ||
+    t.includes("شرح")
+  )
+    return true;
+
+  // English
+  if (
+    t.includes("teach me") ||
+    t.includes("how do i fix") ||
+    t.includes("how to fix") ||
+    t.includes("walk me through") ||
+    t.includes("step by step") ||
+    t.includes("diy") ||
+    t.includes("can i fix it myself")
+  )
+    return true;
+
+  // Spanish / French / German / Italian / Portuguese (light)
+  if (t.includes("cómo arreglar") || t.includes("como arreglar") || t.includes("paso a paso")) return true;
+  if (t.includes("comment réparer") || t.includes("comment reparer") || t.includes("étape")) return true;
+  if (t.includes("wie repariere") || t.includes("schritt")) return true;
+  if (t.includes("come riparare") || t.includes("passo")) return true;
+  if (t.includes("como consertar") || t.includes("passo a passo")) return true;
+
+  return false;
+}
+
+// -----------------------------
+// Price estimate (heuristic; not authoritative)
+// -----------------------------
+function estimateRepairCostRange(fullInput = "") {
+  const t = String(fullInput || "").toLowerCase();
+
+  // Very light mapping (USD ranges). We do NOT claim exact pricing.
+  // If locale/country differs, model should phrase as estimate and ask location.
+  const rules = [
+    { key: ["brake", "brakes", "فرامل"], range: "$150–$650+" },
+    { key: ["battery", "بطارية"], range: "$120–$320" },
+    { key: ["starter", "سلف", "مارش"], range: "$250–$800+" },
+    { key: ["alternator", "دينمو", "مولد"], range: "$300–$900+" },
+    { key: ["oil leak", "leak", "تسريب", "تهريب"], range: "$120–$1,200+" },
+    { key: ["overheat", "overheating", "حرارة", "سخونة"], range: "$150–$1,500+" },
+    { key: ["misfire", "p030", "تقطيع"], range: "$120–$900+" },
+    { key: ["transmission", "جير", "قير"], range: "$250–$4,000+" },
+    { key: ["tire", "tyre", "إطار", "اطارات", "إطارات"], range: "$25–$350+ (per tire/service)" },
+    { key: ["ac", "a/c", "air conditioning", "مكيف"], range: "$150–$1,500+" },
+  ];
+
+  for (const r of rules) {
+    if (r.key.some((k) => t.includes(k))) return r.range;
+  }
+  return ""; // unknown
+}
+
+// -----------------------------
 // Language mismatch fixer (rewrite to locale) — GLOBAL
 // -----------------------------
 async function rewriteToLocale(text, locale) {
@@ -206,7 +428,25 @@ async function rewriteToLocale(text, locale) {
     // rewrite
   } else {
     // 2) If target is Latin language (fr/es/de/it/pt/nl/...) but output is clearly non-latin -> rewrite
-    const latinTargets = new Set(["en", "fr", "es", "de", "it", "pt", "nl", "sv", "no", "da", "fi", "pl", "tr", "ro", "cs", "sk", "hu"]);
+    const latinTargets = new Set([
+      "en",
+      "fr",
+      "es",
+      "de",
+      "it",
+      "pt",
+      "nl",
+      "sv",
+      "no",
+      "da",
+      "fi",
+      "pl",
+      "tr",
+      "ro",
+      "cs",
+      "sk",
+      "hu",
+    ]);
     if (latinTargets.has(targetLang)) {
       const nonLatinOut = isMostlyArabic(original) || isMostlyCyrillic(original) || isMostlyCJK(original);
       if (!nonLatinOut) {
@@ -371,7 +611,9 @@ export async function handleFixLensRequest(req) {
   const effective_location =
     typeof user_location === "string" ? user_location : JSON.stringify(user_location);
 
-  const image_base_64 = body.audio_base_64 ? (body.image_base_64 || body.image_base64 || "") : (body.image_base_64 || body.image_base64 || "");
+  // ✅ Keep original behavior but avoid confusion:
+  // Accept both image_base_64 + image_base64 and audio_base_64 + audio_base64
+  const image_base_64 = body.image_base_64 || body.image_base64 || "";
   const audio_base_64 = body.audio_base_64 || body.audio_base64 || "";
 
   const debugMode = Boolean(body.debug);
@@ -386,7 +628,7 @@ export async function handleFixLensRequest(req) {
 
     // ✅ Locale lock:
     // If body.locale exists, we keep it as authority.
-    // If missing, we infer from input.
+    // If missing, we infer from input (including latin-language guessing).
     const hasClientLocale = Boolean(normalizeLocale(body.locale));
     if (!hasClientLocale) {
       const langFromInput = detectTextLanguage(fullInput || text);
@@ -468,6 +710,12 @@ export async function handleFixLensRequest(req) {
       };
     }
 
+    // ✅ Detect "teach me fix" intent
+    const teachFix = looksLikeTeachMeFixRequest(fullInput || text);
+
+    // ✅ Estimate price range (heuristic)
+    const estimatedRange = estimateRepairCostRange(fullInput || text);
+
     // 4) Build message content for model (STRICT_CONTEXT)
     const messageContent = [];
 
@@ -484,8 +732,26 @@ LOCATION: ${typeof user_location === "string" ? user_location : JSON.stringify(u
 
 LANGUAGE_RULES:
 - Respond ONLY in the language implied by LOCALE.
+- The user must feel this is a real "Doctor Mechanic" (human, confident, specific, not generic).
 - No bilingual output unless the user explicitly asks.
 - Worldwide: never assume country/city/fuel/regulations/units unless provided.
+
+INTENT_RULES:
+- If the user asks for nearby shops/garages: use VERIFIED_WORKSHOPS_JSON and provide top options.
+- If the user asks "teach me / how to fix": switch to TEACH_MODE with safety + tools + step-by-step.
+- Otherwise: DIAGNOSE_MODE with a precise check plan, likely causes ranked, and what to test next.
+
+CURRENT_INTENT:
+- TEACH_MODE: ${teachFix ? "YES" : "NO"}
+- PRICE_ESTIMATE_REQUEST: ${estimatedRange ? "POSSIBLE" : "UNKNOWN"}
+
+PRICE_ESTIMATE (HEURISTIC):
+- If relevant, provide an estimate range like: ${estimatedRange || "(no estimate)"}.
+- Always phrase as estimate and ask for location if needed. Do not claim certainty.
+
+SAFETY_RULES (IMPORTANT WHEN TEACH_MODE):
+- Include PPE + safe lifting (jack stands), battery disconnect, hot parts warning, fuel vapors, ventilation.
+- If any step is risky: recommend professional help.
 
 SEARCH_RULES:
 - Use VERIFIED_DATA_JSON only if relevant.
