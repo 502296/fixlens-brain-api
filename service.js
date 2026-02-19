@@ -375,6 +375,7 @@ async function withRetry(fn, tries = 2, baseDelayMs = 250) {
     } catch (e) {
       lastErr = e;
       const msg = String(e?.message || "");
+      // Retry only on likely transient issues
       const transient =
         msg.includes("timeout") ||
         msg.includes("ETIMEDOUT") ||
@@ -389,25 +390,6 @@ async function withRetry(fn, tries = 2, baseDelayMs = 250) {
     }
   }
   throw lastErr || new Error("retry_failed");
-}
-
-// -----------------------------
-// ✅ NEW: Tiny helpers for Places reliability
-// -----------------------------
-function extractZipFromText(s = "") {
-  const m = String(s || "").match(/\b(\d{5})(?:-\d{4})?\b/);
-  return m ? m[1] : "";
-}
-
-function isGlobalLocation(loc) {
-  const v = typeof loc === "string" ? loc.trim().toLowerCase() : "";
-  return !v || v === "global";
-}
-
-function bumpRadius(r) {
-  const n = Number(r || 25000);
-  if (!Number.isFinite(n) || n <= 0) return 35000;
-  return Math.min(50000, Math.max(n, 35000));
 }
 
 // -----------------------------
@@ -457,6 +439,8 @@ function looksLikeTeachMeFixRequest(fullInput = "") {
 function estimateRepairCostRange(fullInput = "") {
   const t = String(fullInput || "").toLowerCase();
 
+  // Very light mapping (USD ranges). We do NOT claim exact pricing.
+  // If locale/country differs, model should phrase as estimate and ask location.
   const rules = [
     { key: ["brake", "brakes", "فرامل"], range: "$150–$650+" },
     { key: ["battery", "بطارية"], range: "$120–$320" },
@@ -473,7 +457,7 @@ function estimateRepairCostRange(fullInput = "") {
   for (const r of rules) {
     if (r.key.some((k) => t.includes(k))) return r.range;
   }
-  return "";
+  return ""; // unknown
 }
 
 // -----------------------------
@@ -485,24 +469,49 @@ async function rewriteToLocale(text, locale) {
   const original = String(text || "").trim();
   if (!original) return original;
 
+  // If target is Arabic and already Arabic -> keep
   if (targetLang === "ar" && isMostlyArabic(original)) return original;
+
+  // If target is English and likely English -> keep
   if (targetLang === "en" && isLikelyEnglish(original)) return original;
 
+  // Strong rewrite rules:
+  // 1) If target is non-latin and output is mostly latin -> rewrite
   const nonLatinTargets = new Set(["zh", "ja", "ko", "ru", "he", "hi", "th", "ar"]);
   if (nonLatinTargets.has(targetLang) && isMostlyLatin(original)) {
     // rewrite
   } else {
+    // 2) If target is Latin language (fr/es/de/it/pt/nl/...) but output is clearly non-latin -> rewrite
     const latinTargets = new Set([
-      "en","fr","es","de","it","pt","nl","sv","no","da","fi","pl","tr","ro","cs","sk","hu",
+      "en",
+      "fr",
+      "es",
+      "de",
+      "it",
+      "pt",
+      "nl",
+      "sv",
+      "no",
+      "da",
+      "fi",
+      "pl",
+      "tr",
+      "ro",
+      "cs",
+      "sk",
+      "hu",
     ]);
     if (latinTargets.has(targetLang)) {
       const nonLatinOut = isMostlyArabic(original) || isMostlyCyrillic(original) || isMostlyCJK(original);
       if (!nonLatinOut) {
+        // 3) If target is not English and output looks English -> rewrite
         if (!(targetLang !== "en" && isLikelyEnglish(original))) {
           return original;
         }
       }
+      // else rewrite
     } else {
+      // 4) For any other target (unknown), if output looks English but target != en -> rewrite
       if (!(targetLang !== "en" && isLikelyEnglish(original))) {
         return original;
       }
@@ -527,7 +536,7 @@ async function rewriteToLocale(text, locale) {
           ],
           temperature: 0,
         }),
-        Number(process.env.REWRITE_TIMEOUT_MS || 6500),
+        Number(process.env.REWRITE_TIMEOUT_MS || 9000), // ✅ slightly higher to avoid mixed-language
         "rewrite_timeout"
       );
     }, 2);
@@ -540,28 +549,10 @@ async function rewriteToLocale(text, locale) {
 }
 
 // -----------------------------
-// Places intent detection (stronger + ZIP-only support)
+// Places intent detection (light)
 // -----------------------------
 function looksLikePlacesRequest(fullInput = "") {
-  const raw = String(fullInput || "");
-  const t = raw.toLowerCase();
-
-  const zip = extractZipFromText(raw);
-
-  // ✅ If user sends just ZIP or ZIP + a service word => treat as Places
-  if (zip) {
-    // If it's literally only ZIP
-    if (raw.trim() === zip) return true;
-
-    // If ZIP + any place-ish/service-ish keyword
-    const zipPlaceHints = [
-      "near", "nearby", "closest", "address", "location", "maps",
-      "قريب", "اقرب", "أقرب", "عنوان", "موقع", "خرائط", "وين", "محل", "ورشة", "كراج",
-      "tire", "tyre", "shop", "garage", "mechanic", "repair",
-      "اطارات", "إطارات", "تواير", "ميكانيك", "ميكانيكي",
-    ];
-    if (zipPlaceHints.some((k) => t.includes(k))) return true;
-  }
+  const t = String(fullInput || "").toLowerCase();
 
   // Arabic
   if (
@@ -572,7 +563,6 @@ function looksLikePlacesRequest(fullInput = "") {
     t.includes("كراج") ||
     t.includes("عنوان") ||
     t.includes("اقرب") ||
-    t.includes("أقرب") ||
     t.includes("قريبة") ||
     t.includes("موقع") ||
     t.includes("خرائط") ||
@@ -594,8 +584,7 @@ function looksLikePlacesRequest(fullInput = "") {
     t.includes("nearby") ||
     t.includes("google maps") ||
     t.includes("tire shop") ||
-    t.includes("tyre shop") ||
-    t.includes("tire store")
+    t.includes("tyre shop")
   )
     return true;
 
@@ -604,10 +593,60 @@ function looksLikePlacesRequest(fullInput = "") {
   if (t.includes("автосервис") || t.includes("рядом")) return true;
   if (t.includes("附近") || t.includes("近く") || t.includes("근처")) return true;
 
+  // ZIP presence often means "find near this ZIP"
+  if (
+    /\b\d{5}(-\d{4})?\b/.test(t) &&
+    (t.includes("near") || t.includes("قريب") || t.includes("اقرب") || t.includes("address") || t.includes("عنوان"))
+  )
+    return true;
+
   return false;
 }
 
+// -----------------------------
+// ✅ Smart continuation for Places
+// - If user first asked for shops, then next message is only location => still treat as Places
+// -----------------------------
+function lastUserAskedForPlaces(history = []) {
+  if (!Array.isArray(history) || history.length === 0) return false;
+  for (let i = history.length - 1; i >= 0; i--) {
+    const msg = history[i];
+    if (msg?.role !== "user") continue;
+
+    const c = msg?.content;
+    let text = "";
+
+    if (typeof c === "string") text = c;
+    else if (Array.isArray(c)) {
+      text = c.map((x) => (typeof x?.text === "string" ? x.text : "")).join(" ");
+    }
+
+    text = String(text || "").trim();
+    if (!text) continue;
+
+    return looksLikePlacesRequest(text);
+  }
+  return false;
+}
+
+function looksLikeLocationHintOnly(text = "") {
+  const t = String(text || "").toLowerCase().trim();
+  if (!t) return false;
+
+  const hasZip = /\b\d{5}(-\d{4})?\b/.test(t);
+
+  const arHints = ["انا في", "أني في", "موقعي", "بالمنطقة", "بالحي", "شارع", "طريق", "قرب", "قريب من"];
+  const enHints = ["i am in", "i’m in", "i'm in", "my location", "near", "street", "st ", "road", "rd", "ave", "blvd"];
+
+  const hintWord = arHints.some((w) => t.includes(w)) || enHints.some((w) => t.includes(w));
+
+  const notExplicitPlaces = !looksLikePlacesRequest(t);
+
+  return (hasZip || hintWord) && notExplicitPlaces;
+}
+
 // NOTE: This base format is okay because we rewrite it later to locale.
+// Keep it simple and structured for clarity.
 function formatWorkshopsReplyBase(workshops = []) {
   const lines = workshops.slice(0, 5).map((w, i) => {
     const name = w?.name || "Workshop";
@@ -638,7 +677,7 @@ function formatNoWorkshopsReplyBase(locationHint = "", why = "") {
     locLine +
     "\nThis usually happens if GPS is not available, Google Places key is missing/restricted, or Places timed out." +
     whyLine +
-    "\nTry enabling GPS, or send your ZIP/city + area/landmark (and country if needed) and try again."
+    "\nTry enabling GPS, or send your city + area/landmark (and country if needed) and try again."
   );
 }
 
@@ -661,7 +700,7 @@ async function transcribeAudio(audioBase64) {
           prompt:
             "Automotive diagnostic audio. Identify the type of sound and where it likely comes from: engine bay vs wheels/brakes. Include context cues: rpm-related vs speed-related. Short concise transcript.",
         }),
-        Number(process.env.WHISPER_TIMEOUT_MS || 12000),
+        Number(process.env.WHISPER_TIMEOUT_MS || 14000), // ✅ slightly higher for cold start
         "whisper_timeout"
       );
     }, 2);
@@ -685,19 +724,25 @@ export async function handleFixLensRequest(req) {
   const text = body.text || "";
   const history = Array.isArray(body.history) ? body.history : [];
 
+  // If client sends a BCP-47 locale, keep it.
+  // Otherwise infer from history/text.
   let locale = inferLocale({ locale: body.locale, text, history });
 
+  // ✅ worldwide: never default to a city
   const user_location = body.user_location || "Global";
 
   const effective_location =
     typeof user_location === "string" ? user_location : JSON.stringify(user_location);
 
+  // ✅ Keep original behavior but avoid confusion:
+  // Accept both image_base_64 + image_base64 and audio_base_64 + audio_base64
   const image_base_64 = body.image_base_64 || body.image_base64 || "";
   const audio_base_64 = body.audio_base_64 || body.audio_base64 || "";
 
   const debugMode = Boolean(body.debug);
 
   try {
+    // Guard: empty message
     if (!String(text || "").trim() && !audio_base_64 && !image_base_64) {
       let safeReply = fallbackMessageBase(locale);
       safeReply = await rewriteToLocale(safeReply, locale);
@@ -717,7 +762,10 @@ export async function handleFixLensRequest(req) {
     // Full input used for DIAGNOSIS context (NOT for places intent)
     const fullInput = `${text} ${voiceText}`.trim();
 
-    // ✅ Locale lock
+    // ✅ Locale lock (important):
+    // If body.locale exists, we keep it as authority.
+    // If missing, infer primarily from the user's typed text.
+    // (Audio transcript can be English even when the user writes Arabic.)
     const hasClientLocale = Boolean(normalizeLocale(body.locale));
     if (!hasClientLocale) {
       const langFromTyped = detectTextLanguage(text || "");
@@ -732,15 +780,22 @@ export async function handleFixLensRequest(req) {
     let VERIFIED_DATA = [];
     let VERIFIED_WORKSHOPS = [];
 
-    // ✅ Places intent should be based on typed text only
+    // ✅ Places intent should be based on what the user asked, not what Whisper guessed.
     const placesIntentFromTypedText = looksLikePlacesRequest(text || "");
-    const isPlaces = Boolean(placesIntentFromTypedText);
+    const priorPlaces = lastUserAskedForPlaces(history);
+    const locationHintOnly = looksLikeLocationHintOnly(text || "");
+
+    // ✅ If last user request was Places and this message is only location => still Places
+    const placesIntentSmart = placesIntentFromTypedText || (priorPlaces && locationHintOnly);
+
+    const placesAllow = Boolean(placesIntentSmart);
 
     // ✅ Query strategy:
-    // - Diagnosis KB: fullInput
-    // - Places: prefer typed text ONLY to avoid Whisper noise
-    const queryForSearch = isPlaces ? (text || "").trim() : (fullInput || text);
+    // - For KB relevance: use fullInput (typed + audio) because it helps diagnosis
+    // - For Places: allowPlaces gates the expensive call; intent comes from typed text only
+    const queryForSearch = fullInput || text;
 
+    // ✅ Make search faster + more reliable (retry once)
     let placesWhy = "";
     try {
       const searchPack = await withRetry(async () => {
@@ -748,9 +803,9 @@ export async function handleFixLensRequest(req) {
           performSearch(queryForSearch, user_location, {
             locale,
             placesRadiusMeters: Number(body.places_radius_meters || 25000),
-            allowPlaces: isPlaces,
+            allowPlaces: placesAllow,
           }),
-          Number(process.env.SEARCH_TIMEOUT_MS || 8000),
+          Number(process.env.SEARCH_TIMEOUT_MS || 12000), // ✅ higher default for cold start
           "search_timeout"
         );
       }, 2);
@@ -765,35 +820,8 @@ export async function handleFixLensRequest(req) {
       placesWhy = msg || "search_failed";
     }
 
-    // ✅ NEW: Places smart retry (first-message reliability)
-    // If user clearly asked for places, but results are empty, retry ONCE:
-    // - force typed-only query
-    // - bump radius
-    // - allowPlaces true
-    if (isPlaces && Array.isArray(VERIFIED_WORKSHOPS) && VERIFIED_WORKSHOPS.length === 0) {
-      const hasPlacesKey = Boolean(process.env.GOOGLE_PLACES_API_KEY);
-      const zip = extractZipFromText(text || "");
-      const canRetry = hasPlacesKey && (zip || !isGlobalLocation(user_location));
-
-      if (canRetry) {
-        try {
-          const retryPack = await withTimeout(
-            performSearch((text || "").trim(), user_location, {
-              locale,
-              placesRadiusMeters: bumpRadius(body.places_radius_meters || 25000),
-              allowPlaces: true,
-            }),
-            Number(process.env.SEARCH_TIMEOUT_MS || 9000),
-            "search_retry_timeout"
-          );
-
-          const retryWorkshops = Array.isArray(retryPack?.verified_workshops) ? retryPack.verified_workshops : [];
-          if (retryWorkshops.length > 0) VERIFIED_WORKSHOPS = retryWorkshops;
-        } catch (e) {
-          // do nothing; we already have the "no workshops" path
-        }
-      }
-    }
+    // 3) If places request -> return deterministic list (then rewrite to locale)
+    const isPlaces = placesIntentSmart;
 
     console.log("[FixLens][places_check]", {
       isPlaces,
@@ -802,9 +830,12 @@ export async function handleFixLensRequest(req) {
       effective_location,
       workshops_count: Array.isArray(VERIFIED_WORKSHOPS) ? VERIFIED_WORKSHOPS.length : 0,
       has_places_key: Boolean(process.env.GOOGLE_PLACES_API_KEY),
+      places_allow: placesAllow,
+      places_intent_typed: placesIntentFromTypedText,
+      places_intent_prior: priorPlaces,
+      places_intent_loc_hint: locationHintOnly,
     });
 
-    // 3) If places request -> return deterministic list (then rewrite to locale)
     if (isPlaces) {
       const hasPlacesKey = Boolean(process.env.GOOGLE_PLACES_API_KEY);
 
@@ -816,9 +847,10 @@ export async function handleFixLensRequest(req) {
               !hasPlacesKey ? "GOOGLE_PLACES_API_KEY missing" : placesWhy || "no_results"
             );
 
+      // Provide a stronger Arabic base (if Arabic) before rewrite.
       const arBase =
         VERIFIED_WORKSHOPS.length > 0
-          ? "هذه محلات/ورش قريبة حسب موقعك:\n\n" +
+          ? "هذه ورش/ميكانيك قريبة حسب موقعك:\n\n" +
             VERIFIED_WORKSHOPS.slice(0, 5)
               .map((w, i) => {
                 const name = w?.name || "ورشة";
@@ -832,8 +864,8 @@ export async function handleFixLensRequest(req) {
                 return `${i + 1}) ${name}${address}${rating}${phone}${maps}`;
               })
               .join("\n\n") +
-            "\n\nإذا تكتب اسم المنطقة/الحي أو نوع الخدمة (إطارات/ميزان/فرامل/قير) أرتّب لك قائمة أدق."
-          : `وصلني موقعك: ${String(effective_location || "").trim() || "غير معروف"}.\nلكن البحث ما رجّع محلات الآن.\nهذا غالبًا بسبب: GPS غير متاح، أو Google Places غير شغّال/مقيّد، أو حصل Timeout.\nجرّب تفعيل GPS، أو اكتب (ZIP/المدينة + المنطقة + الدولة إذا لازم) وأعيد لك قائمة أدق.`;
+            "\n\nإذا تكتب اسم المنطقة/الحي أو نوع المشكلة (فرامل/إطارات/قير) أرتّب لك قائمة أدق."
+          : `وصلني موقعك: ${String(effective_location || "").trim() || "غير معروف"}.\nلكن البحث ما رجّع ورش الآن.\nهذا غالبًا بسبب: GPS غير متاح، أو مفتاح Google Places غير موجود/مقيّد، أو حصل Timeout.\nجرّب تفعيل GPS، أو اكتب (ZIP/المدينة + المنطقة + الدولة إذا لازم) وأعيد لك قائمة أدق.`;
 
       const reply = await rewriteToLocale(localeToLangTag(locale) === "ar" ? arBase : baseReply, locale);
 
@@ -849,7 +881,10 @@ export async function handleFixLensRequest(req) {
                 model: process.env.FIXLENS_MODEL || "gpt-4o",
                 has_workshops: VERIFIED_WORKSHOPS.length > 0,
                 user_location_type: typeof user_location,
-                places_intent_from_typed: true,
+                places_intent_from_typed: placesIntentFromTypedText,
+                places_intent_smart: placesIntentSmart,
+                prior_places: priorPlaces,
+                location_hint_only: locationHintOnly,
                 has_places_key: Boolean(process.env.GOOGLE_PLACES_API_KEY),
                 places_error_hint: placesWhy || "",
               },
@@ -941,10 +976,10 @@ USER_INPUT: ${(text || "").trim()}`,
             ...history.slice(-8),
             { role: "user", content: messageContent },
           ],
-          temperature: Number(process.env.FIXLENS_TEMPERATURE || 0.15),
-          max_tokens: Number(process.env.FIXLENS_MAX_TOKENS || 900),
+          temperature: Number(process.env.FIXLENS_TEMPERATURE || 0.15), // ✅ less repetition, more consistent
+          max_tokens: Number(process.env.FIXLENS_MAX_TOKENS || 900), // ✅ faster, prevents long ramble
         }),
-        Number(process.env.CHAT_TIMEOUT_MS || 16000),
+        Number(process.env.CHAT_TIMEOUT_MS || 25000), // ✅ higher default helps first message/cold start
         "chat_timeout"
       );
     }, 2);
