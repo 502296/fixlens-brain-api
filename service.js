@@ -8,7 +8,7 @@ import { performSearch } from "./search.js";
 const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 /* =========================================================
-   LOCATION NORMALIZATION (prevents "Global" / empty bias)
+   LOCATION NORMALIZER (fix "Global" / empty bugs)
 ========================================================= */
 function normalizeUserLocation(raw) {
   if (!raw) return "";
@@ -20,36 +20,20 @@ function normalizeUserLocation(raw) {
     return v;
   }
 
-  if (typeof raw === "object") {
-    // Accept {lat,lng} or {latitude,longitude} or {city,state,country}
-    return raw;
-  }
-
+  if (typeof raw === "object") return raw;
   return "";
 }
 
-function stringifyLocation(loc) {
-  if (!loc) return "";
-  if (typeof loc === "string") return loc.trim();
-  try {
-    return JSON.stringify(loc);
-  } catch {
-    return String(loc);
-  }
-}
-
 /* =========================================================
-   LANGUAGE (simple + safe)
+   LANGUAGE (simple but stable)
 ========================================================= */
 function detectTextLanguage(text = "") {
   const t = String(text || "");
-
   if (/[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF]/.test(t)) return "ar";
   if (/[\u0400-\u04FF]/.test(t)) return "ru";
   if (/[\u4E00-\u9FFF]/.test(t)) return "zh";
   if (/[\u3040-\u30FF]/.test(t)) return "ja";
   if (/[\uAC00-\uD7AF]/.test(t)) return "ko";
-
   return "en";
 }
 
@@ -65,14 +49,8 @@ function inferLocale({ locale, text }) {
   return detectTextLanguage(text || "") || "en";
 }
 
-function localeToLang(locale) {
-  const v = String(locale || "").trim();
-  if (!v) return "en";
-  return v.split("-")[0].toLowerCase() || "en";
-}
-
 /* =========================================================
-   TIMEOUT + RETRY (stable)
+   TIMEOUT + RETRY
 ========================================================= */
 function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));
@@ -85,20 +63,6 @@ async function withTimeout(promise, ms, label = "timeout") {
   ]);
 }
 
-function isTransientError(e) {
-  const msg = String(e?.message || "").toLowerCase();
-  return (
-    msg.includes("timeout") ||
-    msg.includes("timed out") ||
-    msg.includes("fetch failed") ||
-    msg.includes("econnreset") ||
-    msg.includes("etimedout") ||
-    msg.includes("network") ||
-    msg.includes("429") ||
-    msg.includes("rate")
-  );
-}
-
 async function withRetry(fn, tries = 2, baseDelay = 250) {
   let lastErr;
   for (let i = 0; i < tries; i++) {
@@ -106,7 +70,6 @@ async function withRetry(fn, tries = 2, baseDelay = 250) {
       return await fn(i);
     } catch (e) {
       lastErr = e;
-      if (!isTransientError(e) || i === tries - 1) throw e;
       await sleep(baseDelay * (i + 1));
     }
   }
@@ -114,126 +77,76 @@ async function withRetry(fn, tries = 2, baseDelay = 250) {
 }
 
 /* =========================================================
-   AUDIO TRANSCRIPTION (safe: transcript is NOT diagnosis)
+   PLACES INTENT (typed text ONLY)
+   - prevents voice transcript from triggering Places
 ========================================================= */
-async function transcribeAudio(audioBase64) {
-  if (!audioBase64 || String(audioBase64).length < 50) return { text: "", ok: false };
+function looksLikePlacesRequest(input = "") {
+  const t = String(input || "").toLowerCase();
 
-  const tempPath = path.join("/tmp", `v_${Date.now()}.m4a`);
-  try {
-    fs.writeFileSync(tempPath, Buffer.from(audioBase64, "base64"));
+  // shops / mechanic
+  const shop = [
+    "mechanic",
+    "garage",
+    "auto repair",
+    "repair shop",
+    "near me",
+    "nearby",
+    "closest",
+    "address",
+    "location",
+    "map",
+    "google maps",
+    "ورشة",
+    "ورش",
+    "ميكانيك",
+    "ميكانيكي",
+    "كراج",
+    "اقرب",
+    "أقرب",
+    "عنوان",
+    "موقع",
+    "خرائط",
+    "وين اصلح",
+  ];
 
-    const result = await withRetry(() =>
-      withTimeout(
-        client.audio.transcriptions.create({
-          file: fs.createReadStream(tempPath),
-          model: "whisper-1",
-          // keep it neutral (no guessing smells / causes)
-          prompt: "Transcribe the audio only. Do not guess causes. If unclear, output the closest transcript.",
-        }),
-        Number(process.env.WHISPER_TIMEOUT_MS || 15000),
-        "whisper_timeout"
-      )
-    );
+  // parts / tools
+  const parts = [
+    "auto parts",
+    "car parts",
+    "parts store",
+    "autozone",
+    "o'reilly",
+    "oreilly",
+    "advance auto",
+    "napa",
+    "hardware store",
+    "tool store",
+    "tools store",
+    "قطع غيار",
+    "محل قطع",
+    "محل قطع غيار",
+    "محل ادوات",
+    "محل أدوات",
+    "ادوات",
+    "أدوات",
+  ];
 
-    const text = String(result?.text || "").trim();
-    // Heuristic: treat very short transcripts as unreliable
-    const ok = Boolean(text) && text.length >= 6;
-    return { text, ok };
-  } catch (err) {
-    console.error("Audio Error:", err?.message || err);
-    return { text: "", ok: false };
-  } finally {
-    try {
-      if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
-    } catch {}
-  }
+  return shop.some((w) => t.includes(w)) || parts.some((w) => t.includes(w));
 }
 
-/* =========================================================
-   PLACES INTENT (IMPORTANT)
-   - typed text only (audio NEVER triggers places)
-   - smart continuation: if last user asked places and now sent only location => still places
-========================================================= */
-function looksLikePlacesRequest(text = "") {
-  const t = String(text || "").toLowerCase();
-
-  // Arabic
-  if (
-    t.includes("ورشة") ||
-    t.includes("ميكاني") ||
-    t.includes("ميكانيكي") ||
-    t.includes("كراج") ||
-    t.includes("محل") ||
-    t.includes("عنوان") ||
-    t.includes("اقرب") ||
-    t.includes("أقرب") ||
-    t.includes("قريب") ||
-    t.includes("خرائط") ||
-    t.includes("اطارات") ||
-    t.includes("إطارات") ||
-    t.includes("قطع غيار") ||
-    t.includes("محل قطع") ||
-    t.includes("ادوات") ||
-    t.includes("أدوات")
-  )
-    return true;
-
-  // English
-  if (
-    t.includes("mechanic") ||
-    t.includes("garage") ||
-    t.includes("auto repair") ||
-    t.includes("repair shop") ||
-    t.includes("tire shop") ||
-    t.includes("tyre shop") ||
-    t.includes("address") ||
-    t.includes("near me") ||
-    t.includes("nearby") ||
-    t.includes("google maps") ||
-    t.includes("parts store") ||
-    t.includes("auto parts") ||
-    t.includes("hardware store") ||
-    t.includes("tool store")
-  )
-    return true;
-
-  // ZIP pattern often indicates places
-  if (/\b\d{5}(?:-\d{4})?\b/.test(t)) return true;
-
-  return false;
-}
-
-// detects "location-only" message (Louisville Kentucky / 40218 / "I am in ...")
-function looksLikeLocationOnly(text = "") {
-  const t = String(text || "").trim();
+function looksLikeLocationHintOnly(text = "") {
+  const t = String(text || "").toLowerCase().trim();
   if (!t) return false;
 
-  // if it's only zip
-  if (/^\d{5}(?:-\d{4})?$/.test(t)) return true;
+  // zip only or coordinates-like
+  if (/^\d{5}(-\d{4})?$/.test(t)) return true;
+  if (/(-?\d+(\.\d+)?)\s*,\s*(-?\d+(\.\d+)?)/.test(t)) return true;
 
-  // if it looks like city/state words and not diagnostic symptom words
-  const lower = t.toLowerCase();
-  const locationHints = [
-    "kentucky",
-    "louisville",
-    "ky",
-    "usa",
-    "united states",
-    "i am in",
-    "i'm in",
-    "in ",
-    "في ",
-    "انا في",
-    "أني في",
-  ];
-  const symptomWords = ["noise", "vibration", "check engine", "overheat", "smoke", "stall", "تقطيع", "صوت", "رجّة", "حرارة", "دخان"];
-  const hasLoc = locationHints.some((w) => lower.includes(w));
-  const hasSymptom = symptomWords.some((w) => lower.includes(w));
-  return hasLoc && !hasSymptom;
+  const hints = ["i am in", "i'm in", "in ", "my location", "zip", "city", "state", "انا في", "أني في", "في ", "بال", "المنطقة", "الحي"];
+  return hints.some((w) => t.includes(w));
 }
 
-function lastUserAskedPlaces(history = []) {
+function lastUserAskedForPlaces(history = []) {
   if (!Array.isArray(history) || history.length === 0) return false;
   for (let i = history.length - 1; i >= 0; i--) {
     const msg = history[i];
@@ -253,49 +166,96 @@ function lastUserAskedPlaces(history = []) {
 }
 
 /* =========================================================
-   RESPONSE TEXT HELPERS
+   AUDIO TRANSCRIPTION (safe for NON-SPEECH)
+   - If transcript looks like "smell/burning" while user didn't say it, we ignore it.
 ========================================================= */
-function fallbackMessage(locale) {
-  const lang = localeToLang(locale);
-  if (lang === "ar") return "صار خلل بسيط. اكتب (نوع السيارة + السنة + الأعراض + متى تظهر) وأمشيك بخطة فحص دقيقة.";
-  return "A temporary issue occurred. Send (car make/model + year + symptoms + when it happens) and I’ll give a precise check plan.";
+function containsSmellWords(s = "") {
+  const t = String(s || "").toLowerCase();
+  return (
+    t.includes("smell") ||
+    t.includes("burning") ||
+    t.includes("plastic") ||
+    t.includes("odor") ||
+    t.includes("رائحة") ||
+    t.includes("حرق") ||
+    t.includes("بلاستيك")
+  );
 }
 
-function formatPlacesList(locale, items = []) {
-  const lang = localeToLang(locale);
-  const top = items.slice(0, 5);
+async function transcribeAudio(audioBase64) {
+  if (!audioBase64 || String(audioBase64).length < 50) return { text: "", ok: false };
 
-  if (top.length === 0) {
-    return lang === "ar"
-      ? "ما لكيت نتائج قريبة الآن. فعّل GPS أو اكتب ZIP/المدينة + الولاية حتى أجيب لك نتائج دقيقة."
-      : "No nearby results right now. Enable GPS or send ZIP/city+state for accurate results.";
+  const tempPath = path.join("/tmp", `v_${Date.now()}.m4a`);
+  try {
+    fs.writeFileSync(tempPath, Buffer.from(audioBase64, "base64"));
+
+    const result = await withRetry(() =>
+      withTimeout(
+        client.audio.transcriptions.create({
+          file: fs.createReadStream(tempPath),
+          model: "whisper-1",
+          // IMPORTANT: tell whisper this is often non-speech car sound
+          prompt:
+            "This is often non-speech automotive sound. If no clear spoken words, return a very short description like: 'NON_SPEECH_ENGINE_SOUND' or 'NON_SPEECH_BRAKE_SOUND'. Do not invent smells.",
+        }),
+        Number(process.env.WHISPER_TIMEOUT_MS || 15000),
+        "whisper_timeout"
+      )
+    );
+
+    const text = String(result?.text || "").trim();
+    if (!text) return { text: "", ok: false };
+
+    // If whisper output is extremely long, likely garbage for non-speech
+    if (text.length > 240) return { text: "", ok: false };
+
+    return { text, ok: true };
+  } catch (err) {
+    console.error("Audio Error:", err?.message || err);
+    return { text: "", ok: false };
+  } finally {
+    try {
+      if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
+    } catch {}
+  }
+}
+
+/* =========================================================
+   OUTPUT FORMATTERS (clean)
+========================================================= */
+function formatPlaceLine(w, i, locale) {
+  const ar = String(locale || "").toLowerCase().startsWith("ar");
+  const name = w?.name || (ar ? "مكان" : "Place");
+  const address = w?.address ? (ar ? `\nالعنوان: ${w.address}` : `\nAddress: ${w.address}`) : "";
+  const rating =
+    w?.rating && Number(w.rating) > 0
+      ? ar
+        ? `\nالتقييم: ${w.rating}${w?.ratings_total ? ` (${w.ratings_total} مراجعة)` : ""}`
+        : `\nRating: ${w.rating}${w?.ratings_total ? ` (${w.ratings_total} reviews)` : ""}`
+      : "";
+  const phone = w?.phone ? (ar ? `\nالهاتف: ${w.phone}` : `\nPhone: ${w.phone}`) : "";
+  const price = w?.price_label
+    ? ar
+      ? `\nمستوى السعر: ${w.price_label}${w?.price_meaning ? ` (${w.price_meaning})` : ""}`
+      : `\nPrice level: ${w.price_label}${w?.price_meaning ? ` (${w.price_meaning})` : ""}`
+    : "";
+  const maps = w?.maps_url ? (ar ? `\nخرائط Google: ${w.maps_url}` : `\nGoogle Maps: ${w.maps_url}`) : "";
+
+  return `${i + 1}) ${name}${address}${rating}${phone}${price}${maps}`;
+}
+
+function buildPlacesReply(workshops, locale) {
+  const ar = String(locale || "").toLowerCase().startsWith("ar");
+  if (!Array.isArray(workshops) || workshops.length === 0) {
+    return ar
+      ? "ما لكيت نتائج قريبة الآن. فعّل GPS أو اكتب ZIP/المدينة + الولاية (مثال: 40218 أو Louisville, KY)."
+      : "No nearby results right now. Enable GPS or send ZIP / City + State (e.g., 40218 or Louisville, KY).";
   }
 
-  const lines = top
-    .map((w, i) => {
-      const name = w?.name || (lang === "ar" ? "مكان" : "Place");
-      const address = w?.address ? `\n${lang === "ar" ? "العنوان" : "Address"}: ${w.address}` : "";
-      const rating =
-        w?.rating ? `\n${lang === "ar" ? "التقييم" : "Rating"}: ${w.rating}${w?.ratings_total ? ` (${w.ratings_total})` : ""}` : "";
-      const phone = w?.phone ? `\n${lang === "ar" ? "الهاتف" : "Phone"}: ${w.phone}` : "";
-      const maps = w?.maps_url ? `\nGoogle: ${w.maps_url}` : "";
-      const priceHint = w?.price_hint ? `\n${lang === "ar" ? "تقريب السعر" : "Price hint"}: ${w.price_hint}` : "";
-
-      return `${i + 1}) ${name}${address}${rating}${phone}${priceHint}${maps}`;
-    })
-    .join("\n\n");
-
-  const header =
-    lang === "ar"
-      ? "هذه نتائج قريبة حسب موقعك:"
-      : "Here are nearby results based on your location:";
-
-  const footer =
-    lang === "ar"
-      ? "\n\nإذا تكتب نوع الطلب (قطع غيار/أدوات/إطارات/فرامل) أرتّب لك نتائج أدق."
-      : "\n\nIf you tell me what you need (parts/tools/tires/brakes) I can refine the list.";
-
-  return `${header}\n\n${lines}${footer}`;
+  const lines = workshops.slice(0, 5).map((w, i) => formatPlaceLine(w, i, locale)).join("\n\n");
+  return ar
+    ? `هذه نتائج قريبة حسب موقعك:\n\n${lines}\n\nإذا تكتب نوع الطلب (قطع غيار/إطارات/فرامل/ميكانيك) أرتّب لك نتائج أدق.`
+    : `Here are nearby results based on your location:\n\n${lines}\n\nTell me what you need (parts/tires/brakes/mechanic) and I’ll refine it.`;
 }
 
 /* =========================================================
@@ -308,12 +268,10 @@ export async function handleFixLensRequest(req) {
 
   let locale = inferLocale({ locale: body.locale, text });
 
-  const user_location = normalizeUserLocation(body.user_location); // "" | string | object
-  const effective_location = stringifyLocation(user_location) || "Global";
-
+  // ✅ location: string or object (gps)
+  const user_location = normalizeUserLocation(body.user_location);
   const image_base_64 = body.image_base_64 || body.image_base64 || "";
   const audio_base_64 = body.audio_base_64 || body.audio_base64 || "";
-
   const debugMode = Boolean(body.debug);
 
   try {
@@ -321,50 +279,54 @@ export async function handleFixLensRequest(req) {
     if (!text.trim() && !audio_base_64 && !image_base_64) {
       return {
         ok: false,
-        reply: fallbackMessage(locale),
+        reply: String(locale || "").toLowerCase().startsWith("ar")
+          ? "اكتب الأعراض أو أرسل صورة/صوت، وأنا أبدأ معك."
+          : "Send symptoms or attach photo/audio and I’ll start.",
         locale,
         workshops_count: 0,
         ...(debugMode ? { debug: { stage: "empty_input" } } : {}),
       };
     }
 
-    // AUDIO
+    // ===== AUDIO =====
     const audioResult = await transcribeAudio(audio_base_64);
-    const voiceText = audioResult.ok ? audioResult.text : "";
+    let voiceText = audioResult.ok ? audioResult.text : "";
 
-    // IMPORTANT: places intent from typed text only
-    const placesFromTyped = looksLikePlacesRequest(text);
-    const priorPlaces = lastUserAskedPlaces(history);
-    const locationOnly = looksLikeLocationOnly(text);
+    // 🔥 IMPORTANT: prevent "smell/burning" hallucination from non-speech
+    // If user didn't type smell but transcript contains smell words -> drop transcript.
+    if (!containsSmellWords(text) && containsSmellWords(voiceText)) {
+      voiceText = "";
+    }
 
-    // smart: if prior was places and now user only sent location -> treat as places
-    const isPlaces = placesFromTyped || (priorPlaces && locationOnly);
+    const fullInput = `${text} ${voiceText}`.trim();
 
-    // SEARCH: pass typed text (not audio) for places decision,
-    // but allow KB to use both if needed.
-    const queryForKB = `${text} ${voiceText}`.trim();
-    const queryForPlaces = text.trim();
+    // ===== PLACES INTENT (typed text only + smart continuation) =====
+    const typedPlaces = looksLikePlacesRequest(text);
+    const priorPlaces = lastUserAskedForPlaces(history);
+    const locHintOnly = looksLikeLocationHintOnly(text);
+    const placesIntent = typedPlaces || (priorPlaces && locHintOnly);
 
-    const searchPack = await withRetry(() =>
-      withTimeout(
-        performSearch(queryForKB || text, user_location, {
-          locale,
-          allowPlaces: isPlaces,
-          placesQueryOverride: queryForPlaces, // ✅ makes places use typed text only
-          placesRadiusMeters: Number(body.places_radius_meters || 25000),
-        }),
-        Number(process.env.SEARCH_TIMEOUT_MS || 15000),
-        "search_timeout"
-      )
+    // ===== SEARCH (KB + Places when allowed) =====
+    const searchPack = await withRetry(
+      () =>
+        withTimeout(
+          performSearch(fullInput || text, user_location, {
+            locale,
+            allowPlaces: placesIntent,
+            placesRadiusMeters: Number(body.places_radius_meters || 25000),
+          }),
+          Number(process.env.SEARCH_TIMEOUT_MS || 15000),
+          "search_timeout"
+        ),
+      2
     );
 
     const VERIFIED_DATA = Array.isArray(searchPack?.verified_data) ? searchPack.verified_data : [];
     const VERIFIED_WORKSHOPS = Array.isArray(searchPack?.verified_workshops) ? searchPack.verified_workshops : [];
 
-    // PLACES SHORT-CIRCUIT
-    if (isPlaces) {
-      const reply = formatPlacesList(locale, VERIFIED_WORKSHOPS);
-
+    // ===== DIRECT PLACES RESPONSE =====
+    if (placesIntent) {
+      const reply = buildPlacesReply(VERIFIED_WORKSHOPS, locale);
       return {
         ok: true,
         reply,
@@ -374,83 +336,90 @@ export async function handleFixLensRequest(req) {
           ? {
               debug: {
                 stage: "places",
-                effective_location,
-                has_gps: typeof user_location === "object",
-                places_from_typed: placesFromTyped,
-                prior_places: priorPlaces,
-                location_only: locationOnly,
-                workshops_count: VERIFIED_WORKSHOPS.length,
+                typedPlaces,
+                priorPlaces,
+                locHintOnly,
+                has_places_key: Boolean(process.env.GOOGLE_PLACES_API_KEY),
+                location_type: typeof user_location,
               },
             }
           : {}),
       };
     }
 
-    // DIAGNOSIS MODE (build strict prompt)
-    const lang = localeToLang(locale);
+    // ===== DIAGNOSIS MODE =====
+    const messageContent = [];
 
+    // If audio exists but transcript is empty -> tell model it is NON-SPEECH sound and ask ONE key question.
     const audioNote =
-      audio_base_64 && !audioResult.ok
-        ? (lang === "ar"
-            ? "ملاحظة صوت: التسجيل غير واضح. إذا تقدر أعد تسجيل 10–15 ثانية قريب من مصدر الصوت."
-            : "Audio note: unclear. If possible, re-record 10–15s close to the source.")
+      audio_base_64 && !voiceText
+        ? "\nAUDIO_NOTE: Non-speech car sound. Do NOT infer smells. Diagnose based on typical sound patterns and ask ONE short question: does it increase with RPM or vehicle speed?"
         : "";
 
-    const payload = {
-      LOCALE: locale,
-      USER_LOCATION: effective_location,
-      USER_INPUT: text.trim(),
-      AUDIO_TRANSCRIPT_OK: audioResult.ok ? "YES" : audio_base_64 ? "NO" : "NO_AUDIO",
-      AUDIO_TRANSCRIPT: voiceText || "",
-      AUDIO_NOTE: audioNote,
-      VERIFIED_DATA_JSON: VERIFIED_DATA,
-    };
+    messageContent.push({
+      type: "text",
+      text: `STRICT_CONTEXT
+LOCALE: ${locale}
+LOCATION: ${typeof user_location === "string" ? user_location : JSON.stringify(user_location)}
 
-    const response = await withRetry(() =>
-      withTimeout(
-        client.chat.completions.create({
-          model: process.env.FIXLENS_MODEL || "gpt-4o",
-          messages: [
-            { role: "system", content: buildDoctorSystemPrompt() },
-            ...history.slice(-6),
-            {
-              role: "user",
-              content:
-                `STRICT_CONTEXT\n` +
-                `- Respond ONLY in the language implied by LOCALE.\n` +
-                `- Do NOT invent facts.\n` +
-                `- If AUDIO_TRANSCRIPT_OK=NO, do NOT base diagnosis on audio.\n` +
-                `- Give ranked likely causes + exact next checks.\n\n` +
-                `${JSON.stringify(payload)}`,
-            },
-          ],
-          temperature: Number(process.env.FIXLENS_TEMPERATURE || 0.15),
-          max_tokens: Number(process.env.FIXLENS_MAX_TOKENS || 900),
-        }),
-        Number(process.env.CHAT_TIMEOUT_MS || 25000),
-        "chat_timeout"
-      )
+RULES:
+- Respond ONLY in LOCALE language.
+- No filler.
+- Rank likely causes + exact next checks.
+- Ask at most ONE question only if it changes diagnosis.
+
+VERIFIED_DATA_JSON: ${JSON.stringify(VERIFIED_DATA)}
+AUDIO_TRANSCRIPT: ${voiceText || ""}${audioNote}
+
+USER_INPUT: ${text.trim()}`,
+    });
+
+    if (image_base_64) {
+      messageContent.push({
+        type: "image_url",
+        image_url: { url: `data:image/jpeg;base64,${image_base_64}`, detail: "high" },
+      });
+    }
+
+    const response = await withRetry(
+      () =>
+        withTimeout(
+          client.chat.completions.create({
+            model: process.env.FIXLENS_MODEL || "gpt-4o",
+            messages: [
+              { role: "system", content: buildDoctorSystemPrompt() },
+              ...history.slice(-6),
+              { role: "user", content: messageContent },
+            ],
+            temperature: Number(process.env.FIXLENS_TEMPERATURE || 0.15),
+            max_tokens: Number(process.env.FIXLENS_MAX_TOKENS || 900),
+          }),
+          Number(process.env.CHAT_TIMEOUT_MS || 25000),
+          "chat_timeout"
+        ),
+      2
     );
 
     const reply =
-      response?.choices?.[0]?.message?.content?.trim() ||
-      fallbackMessage(locale);
+      String(response?.choices?.[0]?.message?.content || "").trim() ||
+      (String(locale || "").toLowerCase().startsWith("ar") ? "صار خلل مؤقت، أعد المحاولة." : "Temporary issue, please retry.");
 
     return {
       ok: true,
       reply,
       locale,
-      workshops_count: 0,
-      ...(debugMode ? { debug: { stage: "ok", effective_location } } : {}),
+      workshops_count: VERIFIED_WORKSHOPS.length,
+      ...(debugMode ? { debug: { stage: "ok" } } : {}),
     };
   } catch (error) {
     console.error("FixLens Fatal:", error?.message || error);
     return {
       ok: false,
-      reply: fallbackMessage(locale),
+      reply: String(locale || "").toLowerCase().startsWith("ar")
+        ? "حدث خطأ مؤقت، أعد المحاولة."
+        : "Temporary error, please retry.",
       locale,
       workshops_count: 0,
-      ...(debugMode ? { debug: { stage: "catch", message: String(error?.message || "") } } : {}),
     };
   }
 }
