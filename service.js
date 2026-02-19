@@ -78,10 +78,12 @@ async function withRetry(fn, tries = 2, baseDelay = 250) {
 
 /* =========================================================
    PLACES INTENT (typed text ONLY)
+   - prevents voice transcript from triggering Places
 ========================================================= */
 function looksLikePlacesRequest(input = "") {
   const t = String(input || "").toLowerCase();
 
+  // shops / mechanic
   const shop = [
     "mechanic",
     "garage",
@@ -107,6 +109,7 @@ function looksLikePlacesRequest(input = "") {
     "وين اصلح",
   ];
 
+  // parts / tools
   const parts = [
     "auto parts",
     "car parts",
@@ -131,28 +134,114 @@ function looksLikePlacesRequest(input = "") {
   return shop.some((w) => t.includes(w)) || parts.some((w) => t.includes(w));
 }
 
+/* =========================================================
+   🔥 NEW: Symptom detector
+   - prevents “priorPlaces + hint” from hijacking diagnosis
+========================================================= */
+function looksLikeSymptomText(text = "") {
+  const t = String(text || "").toLowerCase();
+
+  const words = [
+    // Arabic symptoms
+    "رجفة",
+    "رجة",
+    "اهتزاز",
+    "يهتز",
+    "يرجف",
+    "صوت",
+    "صرير",
+    "طقطقة",
+    "خبط",
+    "دقة",
+    "صفير",
+    "رائحة",
+    "حرق",
+    "حرارة",
+    "يسخن",
+    "تقطيع",
+    "تفتفة",
+    "ضعف",
+    "ثقل",
+    "سحب",
+    "انحراف",
+    "دركسون",
+    "فرامل",
+    "بريك",
+    "مكابح",
+    "تاير",
+    "تواير",
+    "إطار",
+    "اطار",
+    "كفر",
+    "محرك",
+    "مكينة",
+    "قير",
+    "جير",
+    "ناقل",
+    "بطارية",
+    "دينمو",
+    "ستارتر",
+    "تشليح",
+    "لمبة",
+    "تشيك انجن",
+    "check engine",
+
+    // English symptoms
+    "vibration",
+    "shake",
+    "shaking",
+    "noise",
+    "squeal",
+    "grinding",
+    "clicking",
+    "knocking",
+    "rattle",
+    "smell",
+    "burning",
+    "overheat",
+    "stall",
+    "misfire",
+    "rpm",
+    "engine",
+    "brake",
+    "brakes",
+    "tire",
+    "tyre",
+    "steering",
+    "pulling",
+    "alignment",
+  ];
+
+  return words.some((w) => t.includes(w));
+}
+
+/* =========================================================
+   ✅ FIXED: Location hint ONLY
+   - must be explicit location (ZIP / coordinates / "Louisville, KY" / "انا في ...")
+   - never triggers from generic "في/بال"
+========================================================= */
 function looksLikeLocationHintOnly(text = "") {
-  const t = String(text || "").toLowerCase().trim();
+  const t = String(text || "").trim();
   if (!t) return false;
 
-  if (/^\d{5}(-\d{4})?$/.test(t)) return true; // ZIP only
-  if (/(-?\d+(\.\d+)?)\s*,\s*(-?\d+(\.\d+)?)/.test(t)) return true; // lat,lng
+  const lower = t.toLowerCase();
 
-  const hints = [
-    "i am in",
-    "i'm in",
-    "my location",
-    "zip",
-    "city",
-    "state",
-    "انا في",
-    "أني في",
-    "في ",
-    "بال",
-    "المنطقة",
-    "الحي",
-  ];
-  return hints.some((w) => t.includes(w));
+  // ZIP only or coordinates
+  if (/^\d{5}(-\d{4})?$/.test(lower)) return true;
+  if (/^\s*-?\d+(\.\d+)?\s*,\s*-?\d+(\.\d+)?\s*$/.test(lower)) return true;
+
+  // "Louisville, KY" or "Louisville KY"
+  if (/[a-zA-Z].*,\s*[A-Z]{2}\b/.test(t)) return true;
+  if (/[a-zA-Z]+\s+[A-Z]{2}\b/.test(t)) return true;
+
+  // Arabic explicit location (only)
+  // Examples: "انا في لوفل كنتاكي" / "موقعي لوفل" / "المدينة لوفل"
+  if (/(^|\s)(انا في|أني في|موقعي|المدينة|الولاية|zip)\b/i.test(t)) {
+    // if it's long -> likely symptoms not location
+    if (t.length <= 40) return true;
+  }
+
+  return false;
 }
 
 function lastUserAskedForPlaces(history = []) {
@@ -176,8 +265,8 @@ function lastUserAskedForPlaces(history = []) {
 }
 
 /* =========================================================
-   AUDIO TRANSCRIPTION (SAFE FOR NON-SPEECH)
-   - Use verbose_json + no_speech_prob
+   AUDIO TRANSCRIPTION (safe for NON-SPEECH)
+   - If transcript looks like "smell/burning" while user didn't say it, we ignore it.
 ========================================================= */
 function containsSmellWords(s = "") {
   const t = String(s || "").toLowerCase();
@@ -193,8 +282,7 @@ function containsSmellWords(s = "") {
 }
 
 async function transcribeAudio(audioBase64) {
-  if (!audioBase64 || String(audioBase64).length < 50)
-    return { text: "", ok: false, meta: {} };
+  if (!audioBase64 || String(audioBase64).length < 50) return { text: "", ok: false };
 
   const tempPath = path.join("/tmp", `v_${Date.now()}.m4a`);
   try {
@@ -205,10 +293,9 @@ async function transcribeAudio(audioBase64) {
         client.audio.transcriptions.create({
           file: fs.createReadStream(tempPath),
           model: "whisper-1",
-          response_format: "verbose_json",
-          temperature: 0,
+          // IMPORTANT: tell whisper this is often non-speech car sound
           prompt:
-            "This audio may contain NON-SPEECH automotive sounds. If there are no clear spoken words, return an empty transcript. Do NOT invent smells.",
+            "This is often non-speech automotive sound. If no clear spoken words, return a very short description like: 'NON_SPEECH_ENGINE_SOUND' or 'NON_SPEECH_BRAKE_SOUND'. Do not invent smells.",
         }),
         Number(process.env.WHISPER_TIMEOUT_MS || 15000),
         "whisper_timeout"
@@ -216,26 +303,15 @@ async function transcribeAudio(audioBase64) {
     );
 
     const text = String(result?.text || "").trim();
+    if (!text) return { text: "", ok: false };
 
-    // If verbose segments exist, use no_speech_prob to ignore engine-only audio
-    const segs = Array.isArray(result?.segments) ? result.segments : [];
-    if (segs.length > 0) {
-      const avgNoSpeech =
-        segs.reduce((a, s) => a + Number(s?.no_speech_prob || 0), 0) / segs.length;
+    // If whisper output is extremely long, likely garbage for non-speech
+    if (text.length > 240) return { text: "", ok: false };
 
-      // mostly no speech -> ignore
-      if (avgNoSpeech >= 0.6) return { text: "", ok: false, meta: { avgNoSpeech } };
-    }
-
-    if (!text) return { text: "", ok: false, meta: {} };
-
-    // If transcript is huge, likely garbage
-    if (text.length > 240) return { text: "", ok: false, meta: { dropped: "too_long" } };
-
-    return { text, ok: true, meta: {} };
+    return { text, ok: true };
   } catch (err) {
     console.error("Audio Error:", err?.message || err);
-    return { text: "", ok: false, meta: { err: String(err?.message || err) } };
+    return { text: "", ok: false };
   } finally {
     try {
       if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
@@ -249,26 +325,19 @@ async function transcribeAudio(audioBase64) {
 function formatPlaceLine(w, i, locale) {
   const ar = String(locale || "").toLowerCase().startsWith("ar");
   const name = w?.name || (ar ? "مكان" : "Place");
-
   const address = w?.address ? (ar ? `\nالعنوان: ${w.address}` : `\nAddress: ${w.address}`) : "";
-
   const rating =
     w?.rating && Number(w.rating) > 0
       ? ar
         ? `\nالتقييم: ${w.rating}${w?.ratings_total ? ` (${w.ratings_total} مراجعة)` : ""}`
         : `\nRating: ${w.rating}${w?.ratings_total ? ` (${w.ratings_total} reviews)` : ""}`
       : "";
-
   const phone = w?.phone ? (ar ? `\nالهاتف: ${w.phone}` : `\nPhone: ${w.phone}`) : "";
-
-  // ✅ price meaning fields from updated search.js: price_meaning_ar / price_meaning_en
-  const meaning = ar ? (w?.price_meaning_ar || "") : (w?.price_meaning_en || "");
   const price = w?.price_label
     ? ar
-      ? `\nمستوى السعر: ${w.price_label}${meaning ? ` (${meaning})` : ""}`
-      : `\nPrice level: ${w.price_label}${meaning ? ` (${meaning})` : ""}`
+      ? `\nمستوى السعر: ${w.price_label}${w?.price_meaning ? ` (${w.price_meaning})` : ""}`
+      : `\nPrice level: ${w.price_label}${w?.price_meaning ? ` (${w.price_meaning})` : ""}`
     : "";
-
   const maps = w?.maps_url ? (ar ? `\nخرائط Google: ${w.maps_url}` : `\nGoogle Maps: ${w.maps_url}`) : "";
 
   return `${i + 1}) ${name}${address}${rating}${phone}${price}${maps}`;
@@ -298,6 +367,7 @@ export async function handleFixLensRequest(req) {
 
   let locale = inferLocale({ locale: body.locale, text });
 
+  // ✅ location: string or object (gps)
   const user_location = normalizeUserLocation(body.user_location);
   const image_base_64 = body.image_base_64 || body.image_base64 || "";
   const audio_base_64 = body.audio_base_64 || body.audio_base64 || "";
@@ -321,31 +391,34 @@ export async function handleFixLensRequest(req) {
     const audioResult = await transcribeAudio(audio_base_64);
     let voiceText = audioResult.ok ? audioResult.text : "";
 
-    // 🔥 prevent "smell/burning" hallucination
+    // 🔥 IMPORTANT: prevent "smell/burning" hallucination from non-speech
+    // If user didn't type smell but transcript contains smell words -> drop transcript.
     if (!containsSmellWords(text) && containsSmellWords(voiceText)) {
       voiceText = "";
     }
 
-    // ✅ For diagnosis only, we can use fullInput
     const fullInput = `${text} ${voiceText}`.trim();
 
-    // ===== PLACES INTENT (typed only + smart continuation) =====
+    // ===== PLACES INTENT (typed text only + smart continuation) =====
     const typedPlaces = looksLikePlacesRequest(text);
     const priorPlaces = lastUserAskedForPlaces(history);
     const locHintOnly = looksLikeLocationHintOnly(text);
-    const placesIntent = typedPlaces || (priorPlaces && locHintOnly);
 
-    // ✅ CRITICAL: When doing places, use ONLY typed text (so voice never drifts query)
-    const queryForSearch = placesIntent ? text : (fullInput || text);
+    // ✅ KEY FIX: if message contains symptoms, do NOT hijack to places
+    const hasSymptoms = looksLikeSymptomText(text);
+
+    const placesIntent =
+      typedPlaces ||
+      (priorPlaces && locHintOnly && !hasSymptoms);
 
     // ===== SEARCH (KB + Places when allowed) =====
     const searchPack = await withRetry(
       () =>
         withTimeout(
-          performSearch(queryForSearch, user_location, {
+          performSearch(fullInput || text, user_location, {
             locale,
             allowPlaces: placesIntent,
-            maxResults: 3,
+            placesRadiusMeters: Number(body.places_radius_meters || 25000),
           }),
           Number(process.env.SEARCH_TIMEOUT_MS || 15000),
           "search_timeout"
@@ -371,6 +444,7 @@ export async function handleFixLensRequest(req) {
                 typedPlaces,
                 priorPlaces,
                 locHintOnly,
+                hasSymptoms,
                 has_places_key: Boolean(process.env.GOOGLE_PLACES_API_KEY),
                 location_type: typeof user_location,
               },
@@ -382,9 +456,10 @@ export async function handleFixLensRequest(req) {
     // ===== DIAGNOSIS MODE =====
     const messageContent = [];
 
+    // If audio exists but transcript is empty -> tell model it is NON-SPEECH sound and ask ONE key question.
     const audioNote =
       audio_base_64 && !voiceText
-        ? "\nAUDIO_NOTE: Non-speech automotive sound. Do NOT infer smells. Diagnose sound patterns only and ask ONE short question: does it increase with RPM or vehicle speed?"
+        ? "\nAUDIO_NOTE: Non-speech car sound. Do NOT infer smells. Diagnose based on typical sound patterns and ask ONE short question: does it increase with RPM or vehicle speed?"
         : "";
 
     messageContent.push({
@@ -433,9 +508,7 @@ USER_INPUT: ${text.trim()}`,
 
     const reply =
       String(response?.choices?.[0]?.message?.content || "").trim() ||
-      (String(locale || "").toLowerCase().startsWith("ar")
-        ? "صار خلل مؤقت، أعد المحاولة."
-        : "Temporary issue, please retry.");
+      (String(locale || "").toLowerCase().startsWith("ar") ? "صار خلل مؤقت، أعد المحاولة." : "Temporary issue, please retry.");
 
     return {
       ok: true,
