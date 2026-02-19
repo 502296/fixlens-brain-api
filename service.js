@@ -1,837 +1,736 @@
-// service.js
-import OpenAI from "openai";
+// search.js — Local verified search + Google Places API (New) + GPS/Locale support
 import fs from "fs";
 import path from "path";
-import { buildDoctorSystemPrompt } from "./doctorPrompt.js";
-import { performSearch } from "./search.js";
 
-const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+const DATA_DIR = path.join(process.cwd(), "data");
 
 // -----------------------------
-// Helpers: Language / Locale
+// Node fetch safety (works on Node 18+ and older)
 // -----------------------------
-function detectTextLanguage(text = "") {
-  const t = String(text || "");
-
-  // Arabic
-  if (/[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF]/.test(t)) return "ar";
-  // Hebrew
-  if (/[\u0590-\u05FF]/.test(t)) return "he";
-  // Cyrillic (ru/uk/bg/etc)
-  if (/[\u0400-\u04FF]/.test(t)) return "ru";
-  // Devanagari
-  if (/[\u0900-\u097F]/.test(t)) return "hi";
-  // Thai
-  if (/[\u0E00-\u0E7F]/.test(t)) return "th";
-  // Korean
-  if (/[\u1100-\u11FF\u3130-\u318F\uAC00-\uD7AF]/.test(t)) return "ko";
-  // Japanese
-  if (/[\u3040-\u30FF]/.test(t)) return "ja";
-  // Chinese
-  if (/[\u4E00-\u9FFF]/.test(t)) return "zh";
-
-  // ✅ Latin-ish: attempt to guess non-English Latin languages
-  const latinGuess = guessLatinLanguage(t);
-  if (latinGuess) return latinGuess;
-
-  return "en"; // default
+let _fetch = globalThis.fetch;
+async function ensureFetch() {
+  if (_fetch) return _fetch;
+  // node-fetch v3 is ESM; dynamic import is safe
+  const mod = await import("node-fetch");
+  _fetch = mod.default;
+  return _fetch;
 }
 
-// ✅ NEW: best-effort guess for Latin-script languages (ES/FR/DE/IT/PT/TR/NL/PL)
-// This helps "first message" language when locale is missing.
-function guessLatinLanguage(s = "") {
-  const t = String(s || "").toLowerCase().trim();
-  if (!t) return "";
+// -----------------------------
+// Load local KB JSON once (CHEAP) + safe normalization
+// -----------------------------
+let KB = [];
+let KB_LOADED = false;
 
-  // If it contains lots of English stop-words strongly -> assume en
-  if (isLikelyEnglish(t)) return "en";
+function loadKBOnce() {
+  if (KB_LOADED) return;
+  KB_LOADED = true;
 
-  // Spanish
-  const esHits = [
-    " el ",
-    " la ",
-    " los ",
-    " las ",
-    " un ",
-    " una ",
-    " por ",
-    " para ",
-    " con ",
-    " sin ",
-    " tengo ",
-    " ruido ",
-    " freno",
-    " frenos",
-    " motor",
-    " taller",
-    " cerca",
-    " cuanto",
-    " cuánto",
-    " ayuda",
-    " arreglar",
-    " reparar",
-  ];
-  // French
-  const frHits = [
-    " le ",
-    " la ",
-    " les ",
-    " un ",
-    " une ",
-    " pour ",
-    " avec ",
-    " sans ",
-    " bruit ",
-    " frein",
-    " freins",
-    " moteur",
-    " garage",
-    " près",
-    " proche",
-    " combien",
-    " aider",
-    " réparer",
-  ];
-  // German
-  const deHits = [
-    " der ",
-    " die ",
-    " das ",
-    " und ",
-    " mit ",
-    " ohne ",
-    " geräusch",
-    " bremse",
-    " motor",
-    " werkstatt",
-    " in der nähe",
-    " wie viel",
-    " helfen",
-    " reparieren",
-  ];
-  // Italian
-  const itHits = [
-    " il ",
-    " lo ",
-    " la ",
-    " gli ",
-    " le ",
-    " un ",
-    " una ",
-    " per ",
-    " con ",
-    " senza ",
-    " rumore",
-    " freno",
-    " freni",
-    " motore",
-    " officina",
-    " vicino",
-    " quanto",
-    " aiutami",
-    " riparare",
-  ];
-  // Portuguese
-  const ptHits = [
-    " o ",
-    " a ",
-    " os ",
-    " as ",
-    " um ",
-    " uma ",
-    " para ",
-    " com ",
-    " sem ",
-    " barulho",
-    " freio",
-    " freios",
-    " motor",
-    " oficina",
-    " perto",
-    " quanto",
-    " ajuda",
-    " reparar",
-  ];
-  // Turkish (latin)
-  const trHits = [
-    " ve ",
-    " ile ",
-    " için ",
-    " fren",
-    " motor",
-    " usta",
-    " servis",
-    " yakın",
-    " ne kadar",
-    " yardım",
-    " tamir",
-  ];
-
-  // Simple scoring
-  const score = (hits) => hits.reduce((acc, w) => (t.includes(w) ? acc + 1 : acc), 0);
-
-  const scores = [
-    { lang: "es", n: score(esHits) },
-    { lang: "fr", n: score(frHits) },
-    { lang: "de", n: score(deHits) },
-    { lang: "it", n: score(itHits) },
-    { lang: "pt", n: score(ptHits) },
-    { lang: "tr", n: score(trHits) },
-  ];
-
-  scores.sort((a, b) => b.n - a.n);
-
-  // Require at least a couple hints to avoid false positives
-  if (scores[0].n >= 2) return scores[0].lang;
-
-  return "";
-}
-
-function detectLocaleFromHistory(history) {
-  if (!Array.isArray(history)) return "";
-  for (let i = history.length - 1; i >= 0; i--) {
-    const msg = history[i];
-    if (msg?.role !== "user") continue;
-    const c = msg?.content;
-
-    if (typeof c === "string") {
-      const lang = detectTextLanguage(c);
-      if (lang) return lang;
+  try {
+    if (!fs.existsSync(DATA_DIR)) {
+      KB = [];
+      return;
     }
 
-    if (Array.isArray(c)) {
-      const joined = c.map((x) => (typeof x?.text === "string" ? x.text : "")).join(" ");
-      const lang = detectTextLanguage(joined);
-      if (lang) return lang;
+    const files = fs.readdirSync(DATA_DIR).filter((f) => f.endsWith(".json"));
+    const attachSource = (f) => (x) => ({ ...x, __source: f });
+
+    for (const f of files) {
+      const p = path.join(DATA_DIR, f);
+      const raw = fs.readFileSync(p, "utf-8");
+      const parsed = JSON.parse(raw);
+
+      const tag = attachSource(f);
+
+      if (Array.isArray(parsed)) {
+        KB.push(...parsed.map(tag));
+      } else if (parsed && typeof parsed === "object") {
+        if (Array.isArray(parsed.items)) KB.push(...parsed.items.map(tag));
+        else KB.push(tag(parsed));
+      }
     }
+  } catch (e) {
+    console.error("KB load error:", e?.message || e);
+    KB = [];
   }
-  return "";
 }
 
-function normalizeLocale(input) {
-  const v = String(input || "").trim();
-  if (!v) return "";
-  // accept BCP-47 tags; never allow "auto"
-  if (v.toLowerCase() === "auto") return "";
-  return v;
+// -----------------------------
+// Small helpers (Unicode safe)
+// -----------------------------
+function safeStr(v) {
+  try {
+    if (v == null) return "";
+    if (typeof v === "string") return v;
+    if (typeof v === "number" || typeof v === "boolean") return String(v);
+    if (Array.isArray(v)) return v.map(safeStr).join(" ");
+    if (typeof v === "object") return JSON.stringify(v);
+    return String(v);
+  } catch (_) {
+    return "";
+  }
 }
 
-function localeToLangTag(locale) {
+function normalizeSpace(s) {
+  return String(s || "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function normalizeLocale(locale) {
   const v = String(locale || "").trim();
   if (!v) return "en";
   return v.split("-")[0].toLowerCase() || "en";
 }
 
-// If locale present -> trust it.
-// Else infer from history -> else from text.
-function inferLocale({ locale, text, history }) {
-  const normalized = normalizeLocale(locale);
-  if (normalized) return normalized;
+function normalizeForSearch(s) {
+  // Keep letters/numbers across languages + spaces
+  return normalizeSpace(
+    String(s || "")
+      .toLowerCase()
+      .replace(/[^\p{L}\p{N}\s]/gu, " ")
+  );
+}
 
-  const fromHistory = detectLocaleFromHistory(history);
-  if (fromHistory) return fromHistory;
-
-  const fromText = detectTextLanguage(text || "");
-  return fromText || "en";
+function uniqBy(arr, keyFn) {
+  const seen = new Set();
+  const out = [];
+  for (const x of arr || []) {
+    const k = keyFn(x);
+    if (!k) continue;
+    if (seen.has(k)) continue;
+    seen.add(k);
+    out.push(x);
+  }
+  return out;
 }
 
 // -----------------------------
-// Better English heuristic
+// KB -> searchable text
+// (field boosts will be applied in scoring)
 // -----------------------------
-function isLikelyEnglish(s = "") {
-  const t = String(s || "").toLowerCase();
-  if (!t || t.length < 40) return false;
-
-  const stop = [
-    " the ",
-    " and ",
-    " you ",
-    " your ",
-    " with ",
-    " for ",
-    " that ",
-    " this ",
-    " from ",
-    " are ",
-    " is ",
-    " to ",
-    " of ",
-    " in ",
-    " on ",
-    " it ",
-    " as ",
-    " can ",
-    " please ",
-    " try ",
-    " will ",
+function toText(record) {
+  const fields = [
+    record.title,
+    record.name,
+    record.problem,
+    record.symptom,
+    record.symptoms,
+    record.symptom_short,
+    record.symptom_patterns,
+    record.description,
+    record.likely_causes,
+    record.recommended_checks,
+    record.safety_warning,
+    record.causes,
+    record.checks,
+    record.steps,
+    record.tags,
+    record.category,
+    record.system,
   ];
+
+  let s = "";
+  for (const v of fields) {
+    const chunk = safeStr(v);
+    if (!chunk) continue;
+    s += " " + chunk;
+  }
+
+  if (!s.trim()) s = safeStr(record);
+  return normalizeForSearch(s);
+}
+
+// -----------------------------
+// Smarter scoring (Enterprise-ish)
+// - Unicode tokenization
+// - phrase bonus
+// - field-aware boosts (when present)
+// -----------------------------
+function tokenize(query) {
+  const q = normalizeForSearch(query);
+  const tokens = q.split(" ").filter(Boolean);
+  // remove extremely short tokens + cap to avoid heavy loops
+  return tokens.filter((t) => t.length >= 2).slice(0, 24);
+}
+
+function containsWord(text, token) {
+  // simple boundary-ish: spaces around; still ok cross-lang
+  return (
+    text.includes(" " + token + " ") ||
+    text.startsWith(token + " ") ||
+    text.endsWith(" " + token) ||
+    text === token
+  );
+}
+
+function scoreMatch(query, recordText, recordObj) {
+  const qNorm = normalizeForSearch(query);
+  const text = " " + String(recordText || "") + " ";
+  const tokens = tokenize(qNorm);
+  if (tokens.length === 0) return 0;
 
   let score = 0;
-  for (const w of stop) if (t.includes(w)) score++;
-  return score >= 4;
-}
 
-// -----------------------------
-// Script checks (for rewrite decisions)
-// -----------------------------
-function isMostlyArabic(s = "") {
-  const t = String(s || "");
-  const ar = (t.match(/[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF]/g) || []).length;
-  const latin = (t.match(/[A-Za-z]/g) || []).length;
-  return ar > 0 && ar >= latin * 0.6;
-}
+  // Phrase bonus for longer queries (helps exact symptom phrases)
+  if (qNorm.length >= 10 && text.includes(" " + qNorm + " ")) score += 12;
 
-function isMostlyCyrillic(s = "") {
-  const t = String(s || "");
-  const cy = (t.match(/[\u0400-\u04FF]/g) || []).length;
-  const latin = (t.match(/[A-Za-z]/g) || []).length;
-  return cy > 0 && cy >= latin * 0.6;
-}
+  // Token scoring
+  for (const t of tokens) {
+    if (text.includes(t)) score += 2;
 
-function isMostlyCJK(s = "") {
-  const t = String(s || "");
-  const cjk = (t.match(/[\u4E00-\u9FFF\u3040-\u30FF\uAC00-\uD7AF]/g) || []).length;
-  const latin = (t.match(/[A-Za-z]/g) || []).length;
-  return cjk > 0 && cjk >= latin * 0.4;
-}
+    if (t.length >= 4 && containsWord(text, t)) score += 2;
 
-function isMostlyLatin(s = "") {
-  const t = String(s || "");
-  const latin = (t.match(/[A-Za-z]/g) || []).length;
-  const nonlatin =
-    (t.match(
-      /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\u0400-\u04FF\u4E00-\u9FFF\u3040-\u30FF\uAC00-\uD7AF]/g
-    ) || []).length;
-  return latin > 0 && latin >= nonlatin * 0.6;
-}
-
-// -----------------------------
-// Fallback message (base -> then rewritten)
-// -----------------------------
-function fallbackMessageBase(locale) {
-  const lang = localeToLangTag(locale);
-  if (lang === "ar") {
-    return "صار خلل بسيط. اكتب: (نوع السيارة + السنة + الأعراض + متى تظهر) وأنا أمشيك بخطة فحص دقيقة.";
+    // Diagnostic codes: P0300 etc.
+    if (/^p0\d{3}$/i.test(t)) {
+      if (text.includes(t.toLowerCase())) score += 10;
+    }
   }
-  return "A temporary issue occurred. Send: (car make/model + year + symptoms + when it happens) and I’ll give a precise check plan.";
-}
 
-function ensureNonEmptyReply(out, locale) {
-  const text = String(out || "").trim();
-  if (text) return text;
-  return fallbackMessageBase(locale);
-}
+  // Field boosts (cheap but effective)
+  const title = normalizeForSearch(recordObj?.title || recordObj?.name || "");
+  const category = normalizeForSearch(recordObj?.category || "");
+  const system = normalizeForSearch(recordObj?.system || "");
+  const symptom = normalizeForSearch(recordObj?.symptom_short || recordObj?.symptom || "");
+  const tags = normalizeForSearch(safeStr(recordObj?.tags || ""));
 
-// -----------------------------
-// Error debug
-// -----------------------------
-function getErrorDebug(err) {
-  const d = {
-    name: err?.name,
-    message: err?.message,
-    status: err?.status,
-    code: err?.code,
-    type: err?.type,
-    param: err?.param,
-  };
-  if (err?.error) d.error = err.error;
-  if (err?.response) d.response = err.response;
-  if (err?.cause) d.cause = String(err.cause);
-  return d;
+  for (const t of tokens) {
+    if (t.length < 3) continue;
+    if (title && title.includes(t)) score += 4;
+    if (symptom && symptom.includes(t)) score += 3;
+    if (category && category.includes(t)) score += 2;
+    if (system && system.includes(t)) score += 2;
+    if (tags && tags.includes(t)) score += 1;
+  }
+
+  return score;
 }
 
 // -----------------------------
-// Intent detection (Doctor brain routing hints)
+// Places Intent: only if explicitly asked
+// (Stronger: includes tire/shop/address/zip/location keywords)
 // -----------------------------
-function looksLikeTeachMeFixRequest(fullInput = "") {
-  const t = String(fullInput || "").toLowerCase().trim();
-  if (!t) return false;
+function detectPlacesIntent(userQuery = "") {
+  const qRaw = String(userQuery || "");
+  const q = qRaw.toLowerCase();
 
-  // Arabic
-  if (
-    t.includes("علمني") ||
-    t.includes("علّمني") ||
-    t.includes("كيف اصلح") ||
-    t.includes("شلون اصلح") ||
-    t.includes("طريقة اصلاح") ||
-    t.includes("خطوات") ||
-    t.includes("شرح")
-  )
-    return true;
+  const stopSignals = [
+    "اسكت",
+    "لا تكتب",
+    "stop",
+    "be quiet",
+    "don't answer",
+    "do not answer",
+    "silence",
+  ];
+  if (stopSignals.some((w) => q.includes(w))) return false;
 
-  // English
-  if (
-    t.includes("teach me") ||
-    t.includes("how do i fix") ||
-    t.includes("how to fix") ||
-    t.includes("walk me through") ||
-    t.includes("step by step") ||
-    t.includes("diy") ||
-    t.includes("can i fix it myself")
-  )
-    return true;
+  // Strong location signals (ZIP / coordinates / "in <city>" / Arabic "في")
+  if (/\b\d{5}(?:-\d{4})?\b/.test(qRaw)) return true; // ZIP present => likely places
+  if (parseLatLng(qRaw)) return true;
 
-  // Spanish / French / German / Italian / Portuguese (light)
-  if (t.includes("cómo arreglar") || t.includes("como arreglar") || t.includes("paso a paso")) return true;
-  if (t.includes("comment réparer") || t.includes("comment reparer") || t.includes("étape")) return true;
-  if (t.includes("wie repariere") || t.includes("schritt")) return true;
-  if (t.includes("come riparare") || t.includes("passo")) return true;
-  if (t.includes("como consertar") || t.includes("passo a passo")) return true;
+  const intentKeywords = [
+    // English
+    "workshop",
+    "mechanic",
+    "garage",
+    "auto repair",
+    "repair shop",
+    "car shop",
+    "tire shop",
+    "tyre shop",
+    "tire store",
+    "wheel alignment",
+    "alignment shop",
+    "brake shop",
+    "near me",
+    "closest",
+    "nearby",
+    "address",
+    "location",
+    "google maps",
+    "map",
+    "where can i fix",
+    "where to fix",
+    "find me",
+    "search for",
 
-  return false;
-}
+    // Arabic
+    "ورشة",
+    "ورش",
+    "كراج",
+    "ميكانيك",
+    "ميكانيكي",
+    "محل",
+    "محل تصليح",
+    "محل ميكانيك",
+    "محل اطارات",
+    "محل إطارات",
+    "اطارات",
+    "إطارات",
+    "ميزان",
+    "ترصيص",
+    "سحب",
+    "محاذاة",
+    "قريب مني",
+    "اقرب",
+    "أقرب",
+    "عنوان",
+    "موقع",
+    "خرائط",
+    "وين اصلح",
+    "وين اروح",
+    "ابحث",
+    "تبحث",
 
-// -----------------------------
-// Price estimate (heuristic; not authoritative)
-// -----------------------------
-function estimateRepairCostRange(fullInput = "") {
-  const t = String(fullInput || "").toLowerCase();
-
-  // Very light mapping (USD ranges). We do NOT claim exact pricing.
-  // If locale/country differs, model should phrase as estimate and ask location.
-  const rules = [
-    { key: ["brake", "brakes", "فرامل"], range: "$150–$650+" },
-    { key: ["battery", "بطارية"], range: "$120–$320" },
-    { key: ["starter", "سلف", "مارش"], range: "$250–$800+" },
-    { key: ["alternator", "دينمو", "مولد"], range: "$300–$900+" },
-    { key: ["oil leak", "leak", "تسريب", "تهريب"], range: "$120–$1,200+" },
-    { key: ["overheat", "overheating", "حرارة", "سخونة"], range: "$150–$1,500+" },
-    { key: ["misfire", "p030", "تقطيع"], range: "$120–$900+" },
-    { key: ["transmission", "جير", "قير"], range: "$250–$4,000+" },
-    { key: ["tire", "tyre", "إطار", "اطارات", "إطارات"], range: "$25–$350+ (per tire/service)" },
-    { key: ["ac", "a/c", "air conditioning", "مكيف"], range: "$150–$1,500+" },
+    // Others (light)
+    "taller",
+    "mecanico",
+    "mécanicien",
+    "werkstatt",
+    "автосервис",
+    "рядом",
+    "附近",
+    "近く",
+    "근처",
   ];
 
-  for (const r of rules) {
-    if (r.key.some((k) => t.includes(k))) return r.range;
-  }
-  return ""; // unknown
+  return intentKeywords.some((w) => q.includes(String(w).toLowerCase()));
 }
 
 // -----------------------------
-// Language mismatch fixer (rewrite to locale) — GLOBAL
+// Mode detection (tire/brake/transmission/etc)
 // -----------------------------
-async function rewriteToLocale(text, locale) {
-  const targetLocale = String(locale || "").trim() || "en";
-  const targetLang = localeToLangTag(targetLocale);
-  const original = String(text || "").trim();
-  if (!original) return original;
+function detectModeFromText(text) {
+  const t = (text || "").toLowerCase();
+  if (t.includes("كفر") || t.includes("إطار") || t.includes("اطار") || t.includes("اطارات") || t.includes("إطارات") || t.includes("tire") || t.includes("tyre")) return "tire";
+  if (t.includes("فرامل") || t.includes("brake")) return "brake";
+  if (t.includes("قير") || t.includes("جير") || t.includes("ناقل") || t.includes("transmission")) return "transmission";
+  if (t.includes("بطارية") || t.includes("battery") || t.includes("starter") || t.includes("alternator")) return "electrical";
+  if (t.includes("حرارة") || t.includes("overheat") || t.includes("coolant") || t.includes("radiator")) return "cooling";
+  return "auto_repair";
+}
 
-  // If target is Arabic and already Arabic -> keep
-  if (targetLang === "ar" && isMostlyArabic(original)) return original;
-
-  // If target is English and likely English -> keep
-  if (targetLang === "en" && isLikelyEnglish(original)) return original;
-
-  // Strong rewrite rules:
-  // 1) If target is non-latin and output is mostly latin -> rewrite
-  const nonLatinTargets = new Set(["zh", "ja", "ko", "ru", "he", "hi", "th", "ar"]);
-  if (nonLatinTargets.has(targetLang) && isMostlyLatin(original)) {
-    // rewrite
-  } else {
-    // 2) If target is Latin language (fr/es/de/it/pt/nl/...) but output is clearly non-latin -> rewrite
-    const latinTargets = new Set([
-      "en",
-      "fr",
-      "es",
-      "de",
-      "it",
-      "pt",
-      "nl",
-      "sv",
-      "no",
-      "da",
-      "fi",
-      "pl",
-      "tr",
-      "ro",
-      "cs",
-      "sk",
-      "hu",
-    ]);
-    if (latinTargets.has(targetLang)) {
-      const nonLatinOut = isMostlyArabic(original) || isMostlyCyrillic(original) || isMostlyCJK(original);
-      if (!nonLatinOut) {
-        // 3) If target is not English and output looks English -> rewrite
-        if (!(targetLang !== "en" && isLikelyEnglish(original))) {
-          return original;
-        }
-      }
-      // else rewrite
-    } else {
-      // 4) For any other target (unknown), if output looks English but target != en -> rewrite
-      if (!(targetLang !== "en" && isLikelyEnglish(original))) {
-        return original;
-      }
-    }
-  }
-
-  try {
-    const r = await client.chat.completions.create({
-      model: process.env.FIXLENS_MODEL || "gpt-4o",
-      messages: [
-        {
-          role: "system",
-          content:
-            "You are a strict rewriter. Rewrite the given text in the target language only. Keep meaning and tone. Do not add new info. Do not add headings or lists.",
-        },
-        {
-          role: "user",
-          content: `TARGET_LOCALE: ${targetLocale}\nTARGET_LANGUAGE: ${targetLang}\n\nTEXT:\n${original}`,
-        },
-      ],
-      temperature: 0,
-    });
-
-    const out = (r?.choices?.[0]?.message?.content || "").trim();
-    return out || original;
-  } catch (_) {
-    return original;
-  }
+function buildQueryForMode(mode) {
+  if (mode === "tire") return "tire shop";
+  if (mode === "brake") return "brake repair";
+  if (mode === "transmission") return "transmission shop";
+  if (mode === "electrical") return "battery alternator starter shop";
+  if (mode === "cooling") return "radiator coolant repair shop";
+  return "auto repair shop";
 }
 
 // -----------------------------
-// Places intent detection (light)
+// Location parsing helpers
 // -----------------------------
-function looksLikePlacesRequest(fullInput = "") {
-  const t = String(fullInput || "").toLowerCase();
+function parseLatLng(input) {
+  if (!input) return null;
 
-  // Arabic
-  if (
-    t.includes("ورشة") ||
-    t.includes("ورش") ||
-    t.includes("ميكاني") ||
-    t.includes("ميكانيكي") ||
-    t.includes("كراج") ||
-    t.includes("عنوان") ||
-    t.includes("اقرب") ||
-    t.includes("قريبة") ||
-    t.includes("موقع") ||
-    t.includes("خرائط")
-  )
-    return true;
+  if (typeof input === "object") {
+    const lat = Number(input.lat ?? input.latitude);
+    const lng = Number(input.lng ?? input.longitude);
+    if (Number.isFinite(lat) && Number.isFinite(lng)) return { lat, lng };
+    return null;
+  }
 
-  // English
-  if (
-    t.includes("mechanic") ||
-    t.includes("auto repair") ||
-    t.includes("garage") ||
-    t.includes("repair shop") ||
-    t.includes("address") ||
-    t.includes("near me") ||
-    t.includes("nearby") ||
-    t.includes("google maps")
-  )
-    return true;
+  const s = String(input).trim();
+  const m =
+    s.match(/(-?\d+(\.\d+)?)\s*,\s*(-?\d+(\.\d+)?)/) ||
+    s.match(/(-?\d+(\.\d+)?)\s+(-?\d+(\.\d+)?)/);
+  if (!m) return null;
 
-  // extra languages (light)
-  if (t.includes("taller") || t.includes("mecanico") || t.includes("mécanicien") || t.includes("werkstatt")) return true;
-  if (t.includes("автосервис") || t.includes("рядом")) return true;
-  if (t.includes("附近") || t.includes("近く") || t.includes("근처")) return true;
-
-  return false;
+  const lat = Number(m[1]);
+  const lng = Number(m[3]);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  return { lat, lng };
 }
 
-// NOTE: This base format is okay because we rewrite it later to locale.
-// Keep it simple and structured for clarity.
-function formatWorkshopsReplyBase(workshops = []) {
-  const lines = workshops.slice(0, 5).map((w, i) => {
-    const name = w?.name || "Workshop";
-    const address = w?.address ? `\nAddress: ${w.address}` : "";
-    const rating =
-      w?.rating && Number(w.rating) > 0
-        ? `\nRating: ${w.rating}${w?.ratings_total ? ` (${w.ratings_total} reviews)` : ""}`
-        : "";
-    const maps = w?.maps_url ? `\nGoogle Maps: ${w.maps_url}` : "";
-    const phone = w?.phone ? `\nPhone: ${w.phone}` : "";
-    return `${i + 1}) ${name}${address}${rating}${phone}${maps}`;
+function safeCityText(userLocation) {
+  if (!userLocation) return "";
+  if (typeof userLocation === "string") return userLocation.trim();
+
+  if (typeof userLocation === "object") {
+    const city = userLocation.city || userLocation.locality || "";
+    const region = userLocation.region || userLocation.state || "";
+    const country = userLocation.country || "";
+    const combo = [city, region, country].filter(Boolean).join(", ");
+    return combo.trim();
+  }
+  return "";
+}
+
+// ZIP-only (US-style): 40218 or 40218-1234
+function isZipOnly(text = "") {
+  const t = String(text || "").trim();
+  return /^\d{5}(-\d{4})?$/.test(t);
+}
+
+// Extract ZIP from any query text
+function extractZipFromText(userQuery = "") {
+  const s = String(userQuery || "");
+  const m = s.match(/\b(\d{5})(?:-\d{4})?\b/);
+  return m ? m[1] : "";
+}
+
+// Extract location from user query (works when GPS is off)
+function extractLocationFromQuery(userQuery = "") {
+  const q = String(userQuery || "").trim();
+  if (!q) return "";
+
+  // If the whole query is just ZIP
+  if (isZipOnly(q)) return q;
+
+  // If query contains ZIP anywhere
+  const zip = extractZipFromText(q);
+  if (zip) return zip;
+
+  // English: "in Louisville, KY" / "in Paris"
+  const m1 = q.match(/\bin\s+([A-Za-z][A-Za-z\s\.\-']{2,})(?:,\s*([A-Za-z]{2,}))?/i);
+  if (m1 && (m1[1] || m1[2])) {
+    const city = (m1[1] || "").trim();
+    const region = (m1[2] || "").trim();
+    const out = [city, region].filter(Boolean).join(", ");
+    if (out.length >= 3) return out;
+  }
+
+  // Arabic: "في لوفل كنتاكي" / "بالرياض" / "في بغداد"
+  const m2 = q.match(/(?:\bفي\b|\bبال\b|\bبـ)(\s*[^\d]{3,60})/);
+  if (m2 && m2[1]) {
+    const cand = m2[1].replace(/[^\u0600-\u06FFa-zA-Z,\s\.\-]/g, " ").trim();
+    if (cand.length >= 3) return cand;
+  }
+
+  return "";
+}
+
+// -----------------------------
+// Google Places API (New) — EXPENSIVE
+// + Cache to reduce cost
+// -----------------------------
+const PLACES_CACHE = new Map();
+
+// Defaults
+const PLACES_CACHE_TTL_MS = Number(process.env.PLACES_CACHE_TTL_MS || 10 * 60 * 1000); // 10 min
+const PLACES_TIMEOUT_MS = Number(process.env.PLACES_TIMEOUT_MS || 6500);
+const PLACES_MAX_RESULTS_DEFAULT = Number(process.env.PLACES_MAX_RESULTS || 5);
+const PLACES_RADIUS_CAP = Number(process.env.PLACES_RADIUS_CAP || 50000); // cap radius
+const PLACES_ENABLED = String(process.env.PLACES_ENABLED || "true").toLowerCase() !== "false";
+
+// Optional: if you ever want to force "allowPlaces=false" to be strictly respected
+const PLACES_STRICT_ALLOW_FALSE = String(process.env.PLACES_STRICT_ALLOW_FALSE || "false").toLowerCase() === "true";
+
+function cacheGet(key) {
+  const hit = PLACES_CACHE.get(key);
+  if (!hit) return null;
+  if (Date.now() > hit.expiresAt) {
+    PLACES_CACHE.delete(key);
+    return null;
+  }
+  return hit.value;
+}
+
+function cacheSet(key, value, ttlMs) {
+  PLACES_CACHE.set(key, { value, expiresAt: Date.now() + (ttlMs || PLACES_CACHE_TTL_MS) });
+}
+
+function makePlacesCacheKey({ textQuery, languageCode, locationBias }) {
+  const bias =
+    locationBias?.lat != null && locationBias?.lng != null
+      ? `${Number(locationBias.lat).toFixed(3)},${Number(locationBias.lng).toFixed(3)}:${Number(locationBias.radiusMeters || 0)}`
+      : "no_bias";
+  return `${languageCode}::${textQuery}::${bias}`;
+}
+
+async function placesSearchText({ textQuery, languageCode = "en", maxResults = 5, locationBias = null }) {
+  const key = process.env.GOOGLE_PLACES_API_KEY;
+  if (!key) return [];
+  if (!PLACES_ENABLED) return [];
+
+  const safeMax = Math.max(1, Math.min(Number(maxResults || 5), 10));
+  const safeRadius = Math.max(1000, Math.min(Number(locationBias?.radiusMeters || 25000), PLACES_RADIUS_CAP));
+
+  const cacheKey = makePlacesCacheKey({
+    textQuery,
+    languageCode,
+    locationBias: locationBias ? { ...locationBias, radiusMeters: safeRadius } : null,
   });
 
-  return (
-    "Here are nearby mechanic shops based on your location:\n\n" +
-    lines.join("\n\n") +
-    "\n\nIf you tell me your neighborhood/area or the issue type (brakes/tires/transmission), I can refine the list."
-  );
-}
+  const cached = cacheGet(cacheKey);
+  if (cached) return cached;
 
-function formatNoWorkshopsReplyBase(locationHint = "") {
-  const loc = String(locationHint || "").trim();
-  const locLine = loc ? `\n(Location received: ${loc})` : "";
+  const url = "https://places.googleapis.com/v1/places:searchText";
 
-  return (
-    "I can find nearby shops, but the search returned no results right now." +
-    locLine +
-    "\nThis usually happens if GPS is not available or Google Places isn’t responding." +
-    "\nTry enabling GPS, or send your city + area/landmark (and country if needed) and try again."
-  );
-}
+  const body = { textQuery, maxResultCount: safeMax, languageCode };
 
-// -----------------------------
-// Audio Transcription
-// -----------------------------
-async function transcribeAudio(audioBase64) {
-  if (!audioBase64 || String(audioBase64).length < 50) return { text: "", ok: false };
+  if (locationBias?.lat != null && locationBias?.lng != null) {
+    body.locationBias = {
+      circle: {
+        center: { latitude: locationBias.lat, longitude: locationBias.lng },
+        radius: safeRadius,
+      },
+    };
+  }
 
-  const tempPath = path.join("/tmp", `v_${Date.now()}.m4a`);
+  const fieldMask = [
+    "places.displayName",
+    "places.formattedAddress",
+    "places.location",
+    "places.rating",
+    "places.userRatingCount",
+    "places.googleMapsUri",
+    "places.nationalPhoneNumber",
+    "places.websiteUri",
+    "places.id",
+  ].join(",");
+
+  const controller = new AbortController();
+  const t = setTimeout(() => controller.abort(), PLACES_TIMEOUT_MS);
 
   try {
-    fs.writeFileSync(tempPath, Buffer.from(audioBase64, "base64"));
-
-    const result = await client.audio.transcriptions.create({
-      file: fs.createReadStream(tempPath),
-      model: "whisper-1",
-      prompt:
-        "Automotive diagnostic audio. Identify the type of sound and where it likely comes from: engine bay vs wheels/brakes. Include context cues: rpm-related vs speed-related. Short concise transcript.",
+    const f = await ensureFetch();
+    const res = await f(url, {
+      method: "POST",
+      signal: controller.signal,
+      headers: {
+        "Content-Type": "application/json",
+        "X-Goog-Api-Key": key,
+        "X-Goog-FieldMask": fieldMask,
+      },
+      body: JSON.stringify(body),
     });
 
-    const text = (result?.text || "").trim();
-    return { text, ok: Boolean(text) };
-  } catch (err) {
-    console.error("Audio Error:", err?.message || err);
-    return { text: "", ok: false };
+    // IMPORTANT: handle non-2xx safely
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      console.error("Google Places (New) non-OK:", res.status, data?.error?.message || data);
+      return [];
+    }
+
+    const places = Array.isArray(data?.places) ? data.places : [];
+
+    const mapped = places.slice(0, safeMax).map((p) => ({
+      name: p?.displayName?.text || "Workshop",
+      address: p?.formattedAddress || "",
+      rating: p?.rating ?? null,
+      ratings_total: p?.userRatingCount ?? null,
+      phone: p?.nationalPhoneNumber || "",
+      website: p?.websiteUri || "",
+      maps_url: p?.googleMapsUri || "",
+      place_id: p?.id || "",
+      lat: p?.location?.latitude ?? null,
+      lng: p?.location?.longitude ?? null,
+      source: "google_places_new",
+    }));
+
+    const deduped = uniqBy(mapped, (x) => x.place_id || x.maps_url || `${x.name}::${x.address}`);
+
+    cacheSet(cacheKey, deduped, PLACES_CACHE_TTL_MS);
+    return deduped;
+  } catch (e) {
+    console.error("Google Places (New) error:", e?.message || e);
+    return [];
   } finally {
-    if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
+    clearTimeout(t);
   }
 }
 
-// -----------------------------
-// Main Handler
-// -----------------------------
-export async function handleFixLensRequest(req) {
-  const body = req.body || {};
+async function googlePlacesWorkshops(userQuery, userLocation, locale, maxResults = 5, placesRadiusMeters = 25000) {
+  const languageCode = normalizeLocale(locale);
+  const gps = parseLatLng(userLocation);
 
-  const text = body.text || "";
-  const history = Array.isArray(body.history) ? body.history : [];
+  const mode = detectModeFromText(userQuery);
+  const q = buildQueryForMode(mode);
 
-  // If client sends a BCP-47 locale, keep it.
-  // Otherwise infer from history/text.
-  let locale = inferLocale({ locale: body.locale, text, history });
+  const requestedRadius = Number(placesRadiusMeters || 25000);
 
-  // ✅ worldwide: never default to a city
-  const user_location = body.user_location || "Global";
-
-  const effective_location =
-    typeof user_location === "string" ? user_location : JSON.stringify(user_location);
-
-  // ✅ Keep original behavior but avoid confusion:
-  // Accept both image_base_64 + image_base64 and audio_base_64 + audio_base64
-  const image_base_64 = body.image_base_64 || body.image_base64 || "";
-  const audio_base_64 = body.audio_base_64 || body.audio_base64 || "";
-
-  const debugMode = Boolean(body.debug);
-
-  try {
-    // 1) audio transcript
-    const audioResult = await transcribeAudio(audio_base_64);
-    const voiceText = audioResult.text;
-
-    // Full input used for DIAGNOSIS context (NOT for places intent)
-    const fullInput = `${text} ${voiceText}`.trim();
-
-    // ✅ Locale lock (important):
-    // If body.locale exists, we keep it as authority.
-    // If missing, infer primarily from the user's typed text.
-    // (Audio transcript can be English even when the user writes Arabic.)
-    const hasClientLocale = Boolean(normalizeLocale(body.locale));
-    if (!hasClientLocale) {
-      const langFromTyped = detectTextLanguage(text || "");
-      if (langFromTyped) locale = langFromTyped;
-      else {
-        const langFromAudio = detectTextLanguage(voiceText || "");
-        if (langFromAudio) locale = langFromAudio;
-      }
-    }
-
-    // 2) Search (local KB + places)
-    let VERIFIED_DATA = [];
-    let VERIFIED_WORKSHOPS = [];
-
-    // ✅ Places intent should be based on what the user asked, not what Whisper guessed.
-    const placesIntentFromTypedText = looksLikePlacesRequest(text || "");
-    const placesAllow = Boolean(placesIntentFromTypedText);
-
-    // ✅ Query strategy:
-    // - For KB relevance: use fullInput (typed + audio) because it helps diagnosis
-    // - For Places: allowPlaces gates the expensive call; intent comes from typed text only
-    const queryForSearch = fullInput || text;
-
-    try {
-      const searchPack = await performSearch(queryForSearch, user_location, {
-        locale,
-        placesRadiusMeters: Number(body.places_radius_meters || 25000),
-        allowPlaces: placesAllow,
-      });
-
-      VERIFIED_DATA = Array.isArray(searchPack?.verified_data) ? searchPack.verified_data : [];
-      VERIFIED_WORKSHOPS = Array.isArray(searchPack?.verified_workshops) ? searchPack.verified_workshops : [];
-    } catch (searchErr) {
-      console.error("Search Error:", searchErr?.message || searchErr);
-      VERIFIED_DATA = [];
-      VERIFIED_WORKSHOPS = [];
-    }
-
-    // 3) If places request -> return deterministic list (then rewrite to locale)
-    const isPlaces = placesIntentFromTypedText;
-
-    console.log("[FixLens][places_check]", {
-      isPlaces,
-      locale,
-      user_location_type: typeof user_location,
-      effective_location,
-      workshops_count: Array.isArray(VERIFIED_WORKSHOPS) ? VERIFIED_WORKSHOPS.length : 0,
+  // 1) GPS bias (best)
+  if (gps) {
+    const first = await placesSearchText({
+      textQuery: q,
+      languageCode,
+      maxResults,
+      locationBias: { lat: gps.lat, lng: gps.lng, radiusMeters: requestedRadius },
     });
 
-    if (isPlaces) {
-      const baseReply =
-        VERIFIED_WORKSHOPS.length > 0
-          ? formatWorkshopsReplyBase(VERIFIED_WORKSHOPS)
-          : formatNoWorkshopsReplyBase(effective_location);
+    // If 0 results, try wider radius once (still capped)
+    if (!first || first.length === 0) {
+      const second = await placesSearchText({
+        textQuery: q,
+        languageCode,
+        maxResults,
+        locationBias: { lat: gps.lat, lng: gps.lng, radiusMeters: Math.min(PLACES_RADIUS_CAP, Math.max(requestedRadius, 35000)) },
+      });
+      return second || [];
+    }
 
-      // Provide a stronger Arabic base (if Arabic) before rewrite.
-      const arBase =
-        VERIFIED_WORKSHOPS.length > 0
-          ? "هذه ورش/ميكانيك قريبة حسب موقعك:\n\n" +
-            VERIFIED_WORKSHOPS.slice(0, 5)
-              .map((w, i) => {
-                const name = w?.name || "ورشة";
-                const address = w?.address ? `\nالعنوان: ${w.address}` : "";
-                const rating =
-                  w?.rating && Number(w.rating) > 0
-                    ? `\nالتقييم: ${w.rating}${w?.ratings_total ? ` (${w.ratings_total} مراجعة)` : ""}`
-                    : "";
-                const phone = w?.phone ? `\nالهاتف: ${w.phone}` : "";
-                const maps = w?.maps_url ? `\nخرائط Google: ${w.maps_url}` : "";
-                return `${i + 1}) ${name}${address}${rating}${phone}${maps}`;
-              })
-              .join("\n\n") +
-            "\n\nإذا تكتب اسم المنطقة/الحي أو نوع المشكلة (فرامل/إطارات/قير) أرتّب لك قائمة أدق."
-          : `وصلني موقعك: ${String(effective_location || "").trim() || "غير معروف"}.\nلكن البحث ما رجّع ورش الآن. هذا غالبًا بسبب أن GPS غير متاح أو Google Places غير شغّال/مقيّد.\nجرّب تفعيل GPS، أو اكتب (المدينة + المنطقة/معلم قريب + الدولة إذا لازم) وأعيد لك قائمة أدق.`;
+    return first;
+  }
 
-      const reply = await rewriteToLocale(localeToLangTag(locale) === "ar" ? arBase : baseReply, locale);
+  // 2) No GPS: use provided location text OR extract from query (ZIP/city)
+  let locText = safeCityText(userLocation);
+  if (!locText || locText.toLowerCase() === "global") {
+    locText = extractLocationFromQuery(userQuery);
+  }
+
+  // If still empty but query has ZIP -> use ZIP
+  if (!locText) {
+    const zip = extractZipFromText(userQuery);
+    if (zip) locText = zip;
+  }
+
+  if (!locText) return [];
+
+  // Try two strategies:
+  // A) "tire shop in <loc>"
+  const first = await placesSearchText({
+    textQuery: `${q} in ${locText}`,
+    languageCode,
+    maxResults,
+    locationBias: null,
+  });
+
+  if (first && first.length > 0) return first;
+
+  // B) "tire shop <loc>" (works better for ZIP sometimes)
+  const second = await placesSearchText({
+    textQuery: `${q} ${locText}`,
+    languageCode,
+    maxResults,
+    locationBias: null,
+  });
+
+  return second || [];
+}
+
+// -----------------------------
+// Main exported search
+// -----------------------------
+export async function performSearch(userQuery, userLocation, opts = {}) {
+  // Ensure KB is loaded once (and uses your /data to reduce cost)
+  loadKBOnce();
+
+  const {
+    maxResults = 3,
+    locale = "en",
+    placesRadiusMeters = 25000,
+    allowPlaces = null,
+  } = opts;
+
+  // -------------------------
+  // 1) Local KB search (CHEAP)
+  // -------------------------
+  let verified_data = [];
+  const q = String(userQuery || "").trim();
+
+  if (q.length >= 2 && KB.length > 0) {
+    const limit = Math.max(1, Math.min(Number(maxResults || 3), 10));
+
+    const scored = KB
+      .map((r) => {
+        const t = toText(r);
+        const s = scoreMatch(q, t, r);
+        return { r, s };
+      })
+      .filter((x) => x.s > 0)
+      .sort((a, b) => b.s - a.s)
+      .slice(0, limit);
+
+    verified_data = scored.map(({ r, s }) => {
+      const title = r.title || r.name || r.problem || "Verified item";
+
+      // Support your data schema (likely_causes/recommended_checks/etc)
+      const causes =
+        r.causes ||
+        r.cause ||
+        r.likely_causes ||
+        r.likelyCauses ||
+        "";
+
+      const checks =
+        r.checks ||
+        r.tests ||
+        r.recommended_checks ||
+        r.recommendedChecks ||
+        "";
+
+      const steps =
+        r.steps ||
+        r.action_steps ||
+        r.actions ||
+        "";
+
+      const tags = r.tags || r.category || r.system || "";
 
       return {
-        ok: true,
-        reply,
-        locale,
-        workshops_count: VERIFIED_WORKSHOPS.length,
-        ...(debugMode
-          ? {
-              debug: {
-                stage: "places_short_circuit",
-                model: process.env.FIXLENS_MODEL || "gpt-4o",
-                has_workshops: VERIFIED_WORKSHOPS.length > 0,
-                user_location_type: typeof user_location,
-                places_intent_from_typed: placesIntentFromTypedText,
-              },
-            }
-          : {}),
+        title: String(title),
+        score: s,
+        source: r.__source || "data",
+        causes,
+        checks,
+        steps,
+        tags,
       };
-    }
-
-    // ✅ Detect "teach me fix" intent
-    const teachFix = looksLikeTeachMeFixRequest(fullInput || text);
-
-    // ✅ Estimate price range (heuristic)
-    const estimatedRange = estimateRepairCostRange(fullInput || text);
-
-    // 4) Build message content for model (STRICT_CONTEXT)
-    const messageContent = [];
-
-    const audioBlock =
-      audio_base_64 && !audioResult.ok
-        ? "\nAUDIO_NOTE: No clear transcript. Ask ONE short follow-up to resend 10–15s close to the source. Do not guess from audio."
-        : "";
-
-    messageContent.push({
-      type: "text",
-      text: `STRICT_CONTEXT
-LOCALE: ${locale}
-LOCATION: ${typeof user_location === "string" ? user_location : JSON.stringify(user_location)}
-
-LANGUAGE_RULES:
-- Respond ONLY in the language implied by LOCALE.
-- The user must feel this is a real "Doctor Mechanic" (human, confident, specific, not generic).
-- No bilingual output unless the user explicitly asks.
-- Worldwide: never assume country/city/fuel/regulations/units unless provided.
-
-INTENT_RULES:
-- If the user asks for nearby shops/garages: use VERIFIED_WORKSHOPS_JSON and provide top options.
-- If the user asks "teach me / how to fix": switch to TEACH_MODE with safety + tools + step-by-step.
-- Otherwise: DIAGNOSE_MODE with a precise check plan, likely causes ranked, and what to test next.
-
-CURRENT_INTENT:
-- TEACH_MODE: ${teachFix ? "YES" : "NO"}
-- PRICE_ESTIMATE_REQUEST: ${estimatedRange ? "POSSIBLE" : "UNKNOWN"}
-
-PRICE_ESTIMATE (HEURISTIC):
-- If relevant, provide an estimate range like: ${estimatedRange || "(no estimate)"}.
-- Always phrase as estimate and ask for location if needed. Do not claim certainty.
-
-SAFETY_RULES (IMPORTANT WHEN TEACH_MODE):
-- Include PPE + safe lifting (jack stands), battery disconnect, hot parts warning, fuel vapors, ventilation.
-- If any step is risky: recommend professional help.
-
-SEARCH_RULES:
-- Use VERIFIED_DATA_JSON only if relevant.
-- Use VERIFIED_WORKSHOPS_JSON when the user asks for places.
-
-AUDIO_TRANSCRIPT_OK: ${audioResult.ok ? "YES" : audio_base_64 ? "NO" : "NO_AUDIO"}
-AUDIO_TRANSCRIPT: ${voiceText || ""}${audioBlock}
-
-VERIFIED_DATA_JSON: ${JSON.stringify(VERIFIED_DATA)}
-VERIFIED_WORKSHOPS_JSON: ${JSON.stringify(VERIFIED_WORKSHOPS)}
-
-USER_INPUT: ${(text || "").trim()}`,
     });
 
-    if (image_base_64) {
-      messageContent.push({
-        type: "image_url",
-        image_url: { url: `data:image/jpeg;base64,${image_base_64}`, detail: "high" },
-      });
-      messageContent.push({
-        type: "text",
-        text: "Use the photo to identify visible parts, leaks, wear, cracks, residue, alignment. Tie findings to ONE most probable diagnosis.",
-      });
-    }
-
-    // 5) Model response
-    const response = await client.chat.completions.create({
-      model: process.env.FIXLENS_MODEL || "gpt-4o",
-      messages: [
-        { role: "system", content: buildDoctorSystemPrompt() },
-        ...history.slice(-8),
-        { role: "user", content: messageContent },
-      ],
-      temperature: 0.2,
-    });
-
-    const outRaw = response?.choices?.[0]?.message?.content || "";
-    let out = ensureNonEmptyReply(outRaw, locale);
-
-    // ✅ enforce locale output for ALL languages
-    out = await rewriteToLocale(out, locale);
-
-    return {
-      ok: true,
-      reply: out,
-      locale,
-      workshops_count: VERIFIED_WORKSHOPS.length,
-      ...(debugMode ? { debug: { stage: "ok", model: process.env.FIXLENS_MODEL || "gpt-4o" } } : {}),
-    };
-  } catch (error) {
-    const dbg = getErrorDebug(error);
-    console.error("FixLens Error:", dbg);
-
-    let safeReply = fallbackMessageBase(locale);
-    safeReply = await rewriteToLocale(safeReply, locale);
-
-    return {
-      ok: false,
-      reply: safeReply,
-      locale,
-      workshops_count: 0,
-      ...(debugMode ? { debug: { stage: "catch", ...dbg } } : {}),
-    };
+    // Dedup by title+source
+    verified_data = uniqBy(verified_data, (x) => `${String(x.title || "").toLowerCase()}::${x.source}`);
   }
+
+  // ---------------------------------------------
+  // 2) Places workshops ONLY when explicitly asked
+  // ---------------------------------------------
+  let verified_workshops = [];
+
+  // Robust decision:
+  // - If allowPlaces is true => ALWAYS allow
+  // - If allowPlaces is null => auto-detect
+  // - If allowPlaces is false => normally block,
+  //   BUT if query is a strong places request and includes a location signal (ZIP/GPS/city),
+  //   we still allow unless PLACES_STRICT_ALLOW_FALSE=true
+  const autoIntent = detectPlacesIntent(userQuery);
+  const hasLocationSignal =
+    Boolean(parseLatLng(userLocation)) ||
+    Boolean(extractLocationFromQuery(userQuery)) ||
+    Boolean(extractZipFromText(userQuery)) ||
+    (typeof userLocation === "string" && userLocation.trim() && userLocation.trim().toLowerCase() !== "global");
+
+  let wantsPlaces =
+    typeof allowPlaces === "boolean"
+      ? allowPlaces
+      : autoIntent;
+
+  if (typeof allowPlaces === "boolean" && allowPlaces === false) {
+    if (!PLACES_STRICT_ALLOW_FALSE && autoIntent && hasLocationSignal) {
+      wantsPlaces = true;
+    }
+  }
+
+  // Cost control: if Places not requested -> return local only
+  if (!wantsPlaces) return { verified_data, verified_workshops: [] };
+
+  // If no API key OR Places disabled -> return local only
+  if (!process.env.GOOGLE_PLACES_API_KEY) return { verified_data, verified_workshops: [] };
+  if (!PLACES_ENABLED) return { verified_data, verified_workshops: [] };
+
+  try {
+    const placesMax = Math.max(1, Math.min(PLACES_MAX_RESULTS_DEFAULT, 10));
+    verified_workshops = await googlePlacesWorkshops(
+      userQuery,
+      userLocation,
+      locale,
+      placesMax,
+      Number(placesRadiusMeters || 25000)
+    );
+  } catch (e) {
+    console.error("Workshops search error:", e?.message || e);
+    verified_workshops = [];
+  }
+
+  // Final dedupe safety
+  verified_workshops = uniqBy(
+    verified_workshops,
+    (x) => x?.place_id || x?.maps_url || `${String(x?.name || "").toLowerCase()}::${String(x?.address || "").toLowerCase()}`
+  );
+
+  return { verified_data, verified_workshops };
 }
