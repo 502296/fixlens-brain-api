@@ -5,22 +5,25 @@ import path from "path";
 const DATA_DIR = path.join(process.cwd(), "data");
 
 // -----------------------------
-// Load local KB JSON once
+// Load local KB JSON once (CHEAP) + safe normalization
 // -----------------------------
 let KB = [];
 try {
   if (fs.existsSync(DATA_DIR)) {
     const files = fs.readdirSync(DATA_DIR).filter((f) => f.endsWith(".json"));
+
     for (const f of files) {
       const p = path.join(DATA_DIR, f);
       const raw = fs.readFileSync(p, "utf-8");
       const parsed = JSON.parse(raw);
 
+      const attachSource = (x) => ({ ...x, __source: f });
+
       if (Array.isArray(parsed)) {
-        KB.push(...parsed.map((x) => ({ ...x, __source: f })));
+        KB.push(...parsed.map(attachSource));
       } else if (parsed && typeof parsed === "object") {
-        if (Array.isArray(parsed.items)) KB.push(...parsed.items.map((x) => ({ ...x, __source: f })));
-        else KB.push({ ...parsed, __source: f });
+        if (Array.isArray(parsed.items)) KB.push(...parsed.items.map(attachSource));
+        else KB.push(attachSource(parsed));
       }
     }
   }
@@ -29,13 +32,67 @@ try {
   KB = [];
 }
 
+// -----------------------------
+// Small helpers (Unicode safe)
+// -----------------------------
+function safeStr(v) {
+  try {
+    if (v == null) return "";
+    if (typeof v === "string") return v;
+    if (typeof v === "number" || typeof v === "boolean") return String(v);
+    if (Array.isArray(v)) return v.map(safeStr).join(" ");
+    if (typeof v === "object") return JSON.stringify(v);
+    return String(v);
+  } catch (_) {
+    return "";
+  }
+}
+
+function normalizeSpace(s) {
+  return String(s || "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function normalizeLocale(locale) {
+  const v = String(locale || "").trim();
+  if (!v) return "en";
+  return v.split("-")[0].toLowerCase() || "en";
+}
+
+function normalizeForSearch(s) {
+  // Keep letters/numbers across languages + spaces
+  return normalizeSpace(
+    String(s || "")
+      .toLowerCase()
+      .replace(/[^\p{L}\p{N}\s]/gu, " ")
+  );
+}
+
+function uniqBy(arr, keyFn) {
+  const seen = new Set();
+  const out = [];
+  for (const x of arr || []) {
+    const k = keyFn(x);
+    if (!k) continue;
+    if (seen.has(k)) continue;
+    seen.add(k);
+    out.push(x);
+  }
+  return out;
+}
+
+// -----------------------------
+// KB -> searchable text
+// (field boosts will be applied in scoring)
+// -----------------------------
 function toText(record) {
   const fields = [
     record.title,
     record.name,
+    record.problem,
     record.symptom,
     record.symptoms,
-    record.problem,
     record.description,
     record.causes,
     record.checks,
@@ -45,32 +102,73 @@ function toText(record) {
 
   let s = "";
   for (const v of fields) {
-    if (!v) continue;
-    if (Array.isArray(v)) s += " " + v.join(" ");
-    else if (typeof v === "object") s += " " + JSON.stringify(v);
-    else s += " " + String(v);
+    const chunk = safeStr(v);
+    if (!chunk) continue;
+    s += " " + chunk;
   }
 
-  if (!s.trim()) s = JSON.stringify(record);
-  return s.toLowerCase();
+  if (!s.trim()) s = safeStr(record);
+  return normalizeForSearch(s);
 }
 
-// ✅ UPDATED: Unicode-safe tokenization (supports all languages, not only a-z/0-9/ar)
-function scoreMatch(query, text) {
-  const q = String(query || "")
-    .toLowerCase()
-    // keep letters/numbers across languages + spaces
-    .replace(/[^\p{L}\p{N}\s]/gu, " ");
+// -----------------------------
+// Smarter scoring (Enterprise-ish)
+// - Unicode tokenization
+// - phrase bonus
+// - field-aware boosts (when present)
+// -----------------------------
+function tokenize(query) {
+  const q = normalizeForSearch(query);
+  const tokens = q.split(" ").filter(Boolean);
 
-  const tokens = q.split(/\s+/).filter(Boolean);
+  // remove extremely short tokens
+  return tokens.filter((t) => t.length >= 2).slice(0, 20);
+}
+
+function containsWord(text, token) {
+  // simple boundary-ish: spaces around; still ok cross-lang
+  return text.includes(" " + token + " ") || text.startsWith(token + " ") || text.endsWith(" " + token) || text === token;
+}
+
+function scoreMatch(query, recordText, recordObj) {
+  const qNorm = normalizeForSearch(query);
+  const text = " " + String(recordText || "") + " ";
+  const tokens = tokenize(qNorm);
   if (tokens.length === 0) return 0;
 
+  // Phrase bonus for longer queries
   let score = 0;
+  if (qNorm.length >= 10 && text.includes(" " + qNorm + " ")) score += 10;
+
+  // Token scoring
   for (const t of tokens) {
-    if (t.length < 2) continue;
+    // base contains
     if (text.includes(t)) score += 2;
-    if (t.length >= 4 && text.includes(" " + t + " ")) score += 1;
+
+    // word-boundary-ish bonus
+    if (t.length >= 4 && containsWord(text, t)) score += 2;
+
+    // extra weight for diagnostic codes like P0300
+    if (/^p0\d{3}$/i.test(t)) {
+      if (text.includes(t.toLowerCase())) score += 8;
+    }
   }
+
+  // Field boosts: if query tokens appear in key fields, boost slightly
+  // (Keeps cost cheap but improves relevance)
+  const title = normalizeForSearch(recordObj?.title || recordObj?.name || "");
+  const problem = normalizeForSearch(recordObj?.problem || "");
+  const symptom = normalizeForSearch(recordObj?.symptom || "");
+  const tags = normalizeForSearch(safeStr(recordObj?.tags || recordObj?.category || ""));
+
+  for (const t of tokens) {
+    if (t.length < 3) continue;
+    if (title && title.includes(t)) score += 3;
+    if (problem && problem.includes(t)) score += 2;
+    if (symptom && symptom.includes(t)) score += 2;
+    if (tags && tags.includes(t)) score += 1;
+  }
+
   return score;
 }
 
@@ -136,9 +234,10 @@ function detectPlacesIntent(userQuery = "") {
 // -----------------------------
 function detectModeFromText(text) {
   const t = (text || "").toLowerCase();
-  if (t.includes("كفر") || t.includes("إطار") || t.includes("اطار") || t.includes("tire")) return "tire";
+  if (t.includes("كفر") || t.includes("إطار") || t.includes("اطار") || t.includes("tire") || t.includes("tyre")) return "tire";
   if (t.includes("فرامل") || t.includes("brake")) return "brake";
   if (t.includes("قير") || t.includes("جير") || t.includes("ناقل") || t.includes("transmission")) return "transmission";
+  if (t.includes("بطارية") || t.includes("battery") || t.includes("starter") || t.includes("alternator")) return "electrical";
   return "auto_repair";
 }
 
@@ -146,18 +245,13 @@ function buildQueryForMode(mode) {
   if (mode === "tire") return "tire shop";
   if (mode === "brake") return "brake repair";
   if (mode === "transmission") return "transmission shop";
+  if (mode === "electrical") return "battery alternator starter shop";
   return "auto repair shop";
 }
 
 // -----------------------------
 // Location parsing helpers
 // -----------------------------
-function normalizeLocale(locale) {
-  const v = String(locale || "").trim();
-  if (!v) return "en";
-  return v.split("-")[0].toLowerCase() || "en";
-}
-
 function parseLatLng(input) {
   if (!input) return null;
 
@@ -194,12 +288,21 @@ function safeCityText(userLocation) {
   return "";
 }
 
+// ZIP-only (US-style): 40218 or 40218-1234 (also useful as fallback)
+function isZipOnly(text = "") {
+  const t = String(text || "").trim();
+  return /^\d{5}(-\d{4})?$/.test(t);
+}
+
 // ✅ Extract location from the user query itself (works when GPS is off)
 function extractLocationFromQuery(userQuery = "") {
   const q = String(userQuery || "").trim();
   if (!q) return "";
 
-  // English pattern: "in Louisville, KY" / "in Paris" etc.
+  // If user just typed ZIP
+  if (isZipOnly(q)) return q;
+
+  // English: "in Louisville, KY" / "in Paris" etc.
   const m1 = q.match(/\bin\s+([A-Za-z][A-Za-z\s\.\-']{2,})(?:,\s*([A-Za-z]{2,}))?/i);
   if (m1 && (m1[1] || m1[2])) {
     const city = (m1[1] || "").trim();
@@ -219,21 +322,67 @@ function extractLocationFromQuery(userQuery = "") {
 }
 
 // -----------------------------
-// Google Places API (New)
+// Google Places API (New) — EXPENSIVE
+// + Cache to reduce cost
 // -----------------------------
+const PLACES_CACHE = new Map();
+// Default: 10 minutes cache (reduce costs)
+const PLACES_CACHE_TTL_MS = Number(process.env.PLACES_CACHE_TTL_MS || 10 * 60 * 1000);
+// Safety caps
+const PLACES_TIMEOUT_MS = Number(process.env.PLACES_TIMEOUT_MS || 6500);
+const PLACES_MAX_RESULTS_DEFAULT = Number(process.env.PLACES_MAX_RESULTS || 5);
+const PLACES_RADIUS_CAP = Number(process.env.PLACES_RADIUS_CAP || 50000); // avoid huge radius costs
+
+function cacheGet(key) {
+  const hit = PLACES_CACHE.get(key);
+  if (!hit) return null;
+  if (Date.now() > hit.expiresAt) {
+    PLACES_CACHE.delete(key);
+    return null;
+  }
+  return hit.value;
+}
+
+function cacheSet(key, value, ttlMs) {
+  PLACES_CACHE.set(key, { value, expiresAt: Date.now() + (ttlMs || PLACES_CACHE_TTL_MS) });
+}
+
+function makePlacesCacheKey({ textQuery, languageCode, locationBias }) {
+  const bias =
+    locationBias?.lat != null && locationBias?.lng != null
+      ? `${Number(locationBias.lat).toFixed(3)},${Number(locationBias.lng).toFixed(3)}:${Number(locationBias.radiusMeters || 0)}`
+      : "no_bias";
+  return `${languageCode}::${textQuery}::${bias}`;
+}
+
 async function placesSearchText({ textQuery, languageCode = "en", maxResults = 5, locationBias = null }) {
   const key = process.env.GOOGLE_PLACES_API_KEY;
   if (!key) return [];
 
+  // Allow turning off Places globally to control cost
+  if (String(process.env.PLACES_ENABLED || "true").toLowerCase() === "false") return [];
+
+  const safeMax = Math.max(1, Math.min(Number(maxResults || 5), 10));
+  const safeRadius = Math.max(1000, Math.min(Number(locationBias?.radiusMeters || 25000), PLACES_RADIUS_CAP));
+
+  const cacheKey = makePlacesCacheKey({
+    textQuery,
+    languageCode,
+    locationBias: locationBias ? { ...locationBias, radiusMeters: safeRadius } : null,
+  });
+
+  const cached = cacheGet(cacheKey);
+  if (cached) return cached;
+
   const url = "https://places.googleapis.com/v1/places:searchText";
 
-  const body = { textQuery, maxResultCount: maxResults, languageCode };
+  const body = { textQuery, maxResultCount: safeMax, languageCode };
 
   if (locationBias?.lat != null && locationBias?.lng != null) {
     body.locationBias = {
       circle: {
         center: { latitude: locationBias.lat, longitude: locationBias.lng },
-        radius: Number(locationBias.radiusMeters || 25000),
+        radius: safeRadius,
       },
     };
   }
@@ -251,7 +400,7 @@ async function placesSearchText({ textQuery, languageCode = "en", maxResults = 5
   ].join(",");
 
   const controller = new AbortController();
-  const t = setTimeout(() => controller.abort(), 6500);
+  const t = setTimeout(() => controller.abort(), PLACES_TIMEOUT_MS);
 
   try {
     const res = await fetch(url, {
@@ -268,11 +417,11 @@ async function placesSearchText({ textQuery, languageCode = "en", maxResults = 5
     const data = await res.json().catch(() => ({}));
     const places = Array.isArray(data?.places) ? data.places : [];
 
-    return places.slice(0, maxResults).map((p) => ({
+    const mapped = places.slice(0, safeMax).map((p) => ({
       name: p?.displayName?.text || "Workshop",
       address: p?.formattedAddress || "",
       rating: p?.rating ?? null,
-      ratings_total: p?.userRatingCount ?? null, // ✅ unified name
+      ratings_total: p?.userRatingCount ?? null, // unified name
       phone: p?.nationalPhoneNumber || "",
       website: p?.websiteUri || "",
       maps_url: p?.googleMapsUri || "",
@@ -281,6 +430,12 @@ async function placesSearchText({ textQuery, languageCode = "en", maxResults = 5
       lng: p?.location?.longitude ?? null,
       source: "google_places_new",
     }));
+
+    // Deduplicate by place_id or maps_url or name+address
+    const deduped = uniqBy(mapped, (x) => x.place_id || x.maps_url || `${x.name}::${x.address}`);
+
+    cacheSet(cacheKey, deduped, PLACES_CACHE_TTL_MS);
+    return deduped;
   } catch (e) {
     console.error("Google Places (New) error:", e?.message || e);
     return [];
@@ -296,26 +451,28 @@ async function googlePlacesWorkshops(userQuery, userLocation, locale, maxResults
   const mode = detectModeFromText(userQuery);
   const q = buildQueryForMode(mode);
 
+  const requestedRadius = Number(placesRadiusMeters || 25000);
+
   // ✅ If GPS available -> bias circle
   if (gps) {
     return await placesSearchText({
       textQuery: q,
       languageCode,
       maxResults,
-      locationBias: { lat: gps.lat, lng: gps.lng, radiusMeters: placesRadiusMeters },
+      locationBias: { lat: gps.lat, lng: gps.lng, radiusMeters: requestedRadius },
     });
   }
 
-  // ✅ If no GPS -> try userLocation text, else extract from query
+  // ✅ If no GPS -> try userLocation text, else extract from query, else ZIP-only query
   let locText = safeCityText(userLocation);
 
-  // If app sent Global/empty, pull location from query like "in Louisville, KY" or "في لوفل كنتاكي"
   if (!locText || locText.toLowerCase() === "global") {
     locText = extractLocationFromQuery(userQuery);
   }
 
   if (!locText) return [];
 
+  // If locText is ZIP, Places text search still works well
   return await placesSearchText({
     textQuery: `${q} in ${locText}`,
     languageCode,
@@ -328,39 +485,73 @@ async function googlePlacesWorkshops(userQuery, userLocation, locale, maxResults
 // Main exported search
 // -----------------------------
 export async function performSearch(userQuery, userLocation, opts = {}) {
-  const { maxResults = 3, locale = "en", placesRadiusMeters = 25000, allowPlaces = null } = opts;
+  const {
+    maxResults = 3,
+    locale = "en",
+    placesRadiusMeters = 25000,
+    allowPlaces = null,
+  } = opts;
 
+  // -------------------------
   // 1) Local KB search (CHEAP)
+  // -------------------------
   let verified_data = [];
-  if (userQuery && userQuery.trim().length >= 2) {
+
+  const q = String(userQuery || "").trim();
+  if (q.length >= 2 && KB.length > 0) {
     const scored = KB
       .map((r) => {
         const t = toText(r);
-        const s = scoreMatch(userQuery, t);
+        const s = scoreMatch(q, t, r);
         return { r, s };
       })
       .filter((x) => x.s > 0)
       .sort((a, b) => b.s - a.s)
-      .slice(0, maxResults);
+      .slice(0, Math.max(1, Math.min(Number(maxResults || 3), 10)));
 
+    // Build a stable “verified” pack (keep it short and usable)
     verified_data = scored.map(({ r, s }) => {
       const title = r.title || r.name || r.problem || "Verified item";
       const causes = r.causes || r.cause || "";
       const steps = r.steps || r.action_steps || r.actions || "";
+      const checks = r.checks || r.tests || "";
       const tags = r.tags || r.category || "";
-      return { title: String(title), score: s, source: r.__source || "data", causes, steps, tags };
+      return {
+        title: String(title),
+        score: s,
+        source: r.__source || "data",
+        causes,
+        checks,
+        steps,
+        tags,
+      };
     });
+
+    // Dedup by title+source (avoid repeats across files)
+    verified_data = uniqBy(verified_data, (x) => `${String(x.title || "").toLowerCase()}::${x.source}`);
   }
 
-  // 2) Places workshops ONLY when explicitly asked (EXPENSIVE)
+  // ---------------------------------------------
+  // 2) Places workshops ONLY when explicitly asked
+  // ---------------------------------------------
   let verified_workshops = [];
   const wantsPlaces = typeof allowPlaces === "boolean" ? allowPlaces : detectPlacesIntent(userQuery);
 
+  // Cost control: if Places not requested -> return local only
   if (!wantsPlaces) return { verified_data, verified_workshops: [] };
 
+  // Additional cost control: if no API key -> return empty workshops
+  if (!process.env.GOOGLE_PLACES_API_KEY) return { verified_data, verified_workshops: [] };
+
   try {
-    const placesMax = Number(process.env.PLACES_MAX_RESULTS || 5);
-    verified_workshops = await googlePlacesWorkshops(userQuery, userLocation, locale, placesMax, placesRadiusMeters);
+    const placesMax = Math.max(1, Math.min(PLACES_MAX_RESULTS_DEFAULT, 10));
+    verified_workshops = await googlePlacesWorkshops(
+      userQuery,
+      userLocation,
+      locale,
+      placesMax,
+      Number(placesRadiusMeters || 25000)
+    );
   } catch (e) {
     console.error("Workshops search error:", e?.message || e);
     verified_workshops = [];
