@@ -1,4 +1,4 @@
-// search.js — Local KB + Smart Google Places (Parts/Tools + PriceLevel)
+// search.js — Local KB + Smart Google Places (Mechanic + Parts/Tools + PriceLevel) — PRO
 
 import fs from "fs";
 import path from "path";
@@ -35,11 +35,11 @@ function loadKBOnce() {
       const parsed = JSON.parse(raw);
 
       if (Array.isArray(parsed)) KB.push(...parsed.map((x) => ({ ...x, __source: f })));
-      else if (parsed?.items) KB.push(...parsed.items.map((x) => ({ ...x, __source: f })));
-      else if (typeof parsed === "object") KB.push({ ...parsed, __source: f });
+      else if (parsed?.items && Array.isArray(parsed.items)) KB.push(...parsed.items.map((x) => ({ ...x, __source: f })));
+      else if (parsed && typeof parsed === "object") KB.push({ ...parsed, __source: f });
     }
   } catch (e) {
-    console.error("KB load error:", e?.message);
+    console.error("KB load error:", e?.message || e);
     KB = [];
   }
 }
@@ -48,7 +48,7 @@ function loadKBOnce() {
    UTILITIES
 ========================================================= */
 function normalizeText(s = "") {
-  return String(s)
+  return String(s || "")
     .toLowerCase()
     .replace(/[^\p{L}\p{N}\s]/gu, " ")
     .replace(/\s+/g, " ")
@@ -67,6 +67,19 @@ function uniqBy(arr, keyFn) {
   return out;
 }
 
+function safeStr(v) {
+  try {
+    if (v == null) return "";
+    if (typeof v === "string") return v;
+    if (typeof v === "number" || typeof v === "boolean") return String(v);
+    if (Array.isArray(v)) return v.map(safeStr).join(" ");
+    if (typeof v === "object") return JSON.stringify(v);
+    return String(v);
+  } catch (_) {
+    return "";
+  }
+}
+
 /* =========================================================
    LOCAL KB SEARCH
 ========================================================= */
@@ -76,10 +89,17 @@ function scoreMatch(query, recordText) {
   if (!q || !text) return 0;
 
   let score = 0;
-  if (text.includes(q)) score += 10;
 
-  const tokens = q.split(" ").filter(Boolean);
-  for (const t of tokens) if (text.includes(t)) score += 2;
+  // phrase bonus
+  if (q.length >= 10 && text.includes(q)) score += 10;
+
+  // token scoring
+  const tokens = q.split(" ").filter(Boolean).slice(0, 24);
+  for (const t of tokens) {
+    if (t.length < 2) continue;
+    if (text.includes(t)) score += 2;
+    if (/^p0\d{3}$/i.test(t) && text.includes(t.toLowerCase())) score += 8;
+  }
 
   return score;
 }
@@ -88,8 +108,10 @@ function recordToText(r) {
   return normalizeText(
     [
       r.title,
+      r.name,
       r.problem,
       r.symptom,
+      r.symptoms,
       r.description,
       r.likely_causes,
       r.recommended_checks,
@@ -99,6 +121,7 @@ function recordToText(r) {
       r.system,
     ]
       .filter(Boolean)
+      .map(safeStr)
       .join(" ")
   );
 }
@@ -107,7 +130,10 @@ function recordToText(r) {
    PLACES INTENT + MODE (MECHANIC vs PARTS/TOOLS)
 ========================================================= */
 function looksLikePlacesIntent(q = "") {
-  const t = String(q).toLowerCase();
+  const t = String(q || "").toLowerCase();
+
+  // Strong signal: ZIP in query
+  if (/\b\d{5}(?:-\d{4})?\b/.test(t)) return true;
 
   // Mechanic/shops
   const shopWords = [
@@ -121,7 +147,9 @@ function looksLikePlacesIntent(q = "") {
     "location",
     "map",
     "google maps",
+    "workshop",
     "ورشة",
+    "ورش",
     "ميكانيك",
     "ميكانيكي",
     "كراج",
@@ -130,6 +158,8 @@ function looksLikePlacesIntent(q = "") {
     "عنوان",
     "موقع",
     "خرائط",
+    "وين اصلح",
+    "وين اروح",
   ];
 
   // Parts & tools
@@ -158,34 +188,38 @@ function looksLikePlacesIntent(q = "") {
 }
 
 function detectModeFromText(q = "") {
-  const t = String(q).toLowerCase();
+  const t = String(q || "").toLowerCase();
 
   // parts/tools intent
-  if (
-    t.includes("auto parts") ||
-    t.includes("car parts") ||
-    t.includes("parts store") ||
-    t.includes("hardware store") ||
-    t.includes("tool store") ||
-    t.includes("autozone") ||
-    t.includes("o'reilly") ||
-    t.includes("advance auto") ||
-    t.includes("napa") ||
-    t.includes("قطع غيار") ||
-    t.includes("محل قطع") ||
-    t.includes("محل أدوات") ||
-    t.includes("ادوات") ||
-    t.includes("أدوات")
-  ) {
-    return "parts_tools";
-  }
+  const partsSignals = [
+    "auto parts",
+    "car parts",
+    "parts store",
+    "hardware store",
+    "tool store",
+    "tools store",
+    "autozone",
+    "o'reilly",
+    "oreilly",
+    "advance auto",
+    "napa",
+    "قطع غيار",
+    "محل قطع",
+    "محل قطع غيار",
+    "محل أدوات",
+    "محل ادوات",
+    "ادوات",
+    "أدوات",
+  ];
+  if (partsSignals.some((w) => t.includes(w))) return "parts_tools";
 
   return "auto_repair";
 }
 
 function buildPlacesQuery(mode) {
-  if (mode === "parts_tools") return "auto parts store OR tool store OR hardware store";
-  return "auto repair shop OR mechanic";
+  // IMPORTANT: keep query simple; Google Places understands it better than OR-heavy queries
+  if (mode === "parts_tools") return "auto parts store";
+  return "auto repair shop";
 }
 
 /* =========================================================
@@ -193,12 +227,26 @@ function buildPlacesQuery(mode) {
 ========================================================= */
 function parseLatLng(input) {
   if (!input) return null;
+
+  // object
   if (typeof input === "object") {
     const lat = Number(input.lat ?? input.latitude);
     const lng = Number(input.lng ?? input.longitude);
     if (Number.isFinite(lat) && Number.isFinite(lng)) return { lat, lng };
+    return null;
   }
-  return null;
+
+  // string: "lat,lng" or "lat lng"
+  const s = String(input).trim();
+  const m =
+    s.match(/(-?\d+(\.\d+)?)\s*,\s*(-?\d+(\.\d+)?)/) ||
+    s.match(/(-?\d+(\.\d+)?)\s+(-?\d+(\.\d+)?)/);
+  if (!m) return null;
+
+  const lat = Number(m[1]);
+  const lng = Number(m[3]);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  return { lat, lng };
 }
 
 function normalizeLocale(locale = "en") {
@@ -208,21 +256,40 @@ function normalizeLocale(locale = "en") {
 }
 
 function extractZip(text = "") {
-  const m = String(text).match(/\b\d{5}\b/);
-  return m ? m[0] : "";
+  const m = String(text || "").match(/\b(\d{5})(?:-\d{4})?\b/);
+  return m ? m[1] : "";
+}
+
+// if user_location is string like "Louisville, KY" or object {city,state,country}
+function safeCityText(userLocation) {
+  if (!userLocation) return "";
+  if (typeof userLocation === "string") {
+    const v = userLocation.trim();
+    if (!v || v.toLowerCase() === "global") return "";
+    return v;
+  }
+  if (typeof userLocation === "object") {
+    const city = userLocation.city || userLocation.locality || "";
+    const region = userLocation.region || userLocation.state || "";
+    const country = userLocation.country || "";
+    return [city, region, country].filter(Boolean).join(", ").trim();
+  }
+  return "";
 }
 
 /* =========================================================
    PRICE LEVEL MAPPING
 ========================================================= */
-function mapPriceLevel(level) {
+function mapPriceLevel(level, locale = "en") {
   const v = String(level || "").toUpperCase().trim();
   if (!v || v.includes("UNSPECIFIED")) return { label: "", meaning: "" };
 
-  if (v.includes("INEXPENSIVE")) return { label: "$", meaning: "اقتصادي" };
-  if (v.includes("MODERATE")) return { label: "$$", meaning: "متوسط" };
-  if (v.includes("EXPENSIVE")) return { label: "$$$", meaning: "مرتفع" };
-  if (v.includes("VERY_EXPENSIVE")) return { label: "$$$$", meaning: "فاخر" };
+  const isAr = normalizeLocale(locale) === "ar";
+
+  if (v.includes("INEXPENSIVE")) return { label: "$", meaning: isAr ? "اقتصادي" : "Inexpensive" };
+  if (v.includes("MODERATE")) return { label: "$$", meaning: isAr ? "متوسط" : "Moderate" };
+  if (v.includes("EXPENSIVE")) return { label: "$$$", meaning: isAr ? "مرتفع" : "Expensive" };
+  if (v.includes("VERY_EXPENSIVE")) return { label: "$$$$", meaning: isAr ? "فاخر" : "Very expensive" };
 
   return { label: "", meaning: "" };
 }
@@ -249,21 +316,22 @@ function cacheSet(key, value) {
   PLACES_CACHE.set(key, { value, expiry: Date.now() + CACHE_TTL });
 }
 
-async function searchPlaces({ query, userLocation, locale }) {
+function makeCacheKey({ languageCode, textQuery, gps, locText }) {
+  const g = gps ? `${Number(gps.lat).toFixed(3)},${Number(gps.lng).toFixed(3)}` : "no_gps";
+  const l = locText ? normalizeText(locText).slice(0, 60) : "no_loc";
+  return `${languageCode}::${textQuery}::${g}::${l}`;
+}
+
+async function placesSearchText({ textQuery, userLocation, locale, useGpsBias = true }) {
   const apiKey = process.env.GOOGLE_PLACES_API_KEY;
   if (!apiKey) return [];
 
   const languageCode = normalizeLocale(locale);
   const gps = parseLatLng(userLocation);
-  const zip = extractZip(query);
 
-  const mode = detectModeFromText(query);
-  const textQueryBase = buildPlacesQuery(mode);
+  const locText = safeCityText(userLocation);
+  const cacheKey = makeCacheKey({ languageCode, textQuery, gps: useGpsBias ? gps : null, locText: useGpsBias ? "" : locText });
 
-  // If user gave something like "40218" or includes ZIP, help the search
-  const textQuery = zip ? `${textQueryBase} ${zip}` : textQueryBase;
-
-  const cacheKey = `${languageCode}::${textQuery}::${gps ? `${gps.lat.toFixed(3)},${gps.lng.toFixed(3)}` : "no_gps"}`;
   const cached = cacheGet(cacheKey);
   if (cached) return cached;
 
@@ -273,7 +341,8 @@ async function searchPlaces({ query, userLocation, locale }) {
     languageCode,
   };
 
-  if (gps) {
+  // GPS Bias (best)
+  if (useGpsBias && gps) {
     body.locationBias = {
       circle: {
         center: { latitude: gps.lat, longitude: gps.lng },
@@ -293,7 +362,6 @@ async function searchPlaces({ query, userLocation, locale }) {
       headers: {
         "Content-Type": "application/json",
         "X-Goog-Api-Key": apiKey,
-        // IMPORTANT: include priceLevel in FieldMask
         "X-Goog-FieldMask": [
           "places.displayName",
           "places.formattedAddress",
@@ -318,7 +386,7 @@ async function searchPlaces({ query, userLocation, locale }) {
     const places = Array.isArray(data?.places) ? data.places : [];
     const mapped = places.slice(0, PLACES_MAX).map((p) => {
       const pl = p?.priceLevel ?? "";
-      const mappedPL = mapPriceLevel(pl);
+      const mappedPL = mapPriceLevel(pl, locale);
 
       return {
         name: p?.displayName?.text || "",
@@ -330,9 +398,8 @@ async function searchPlaces({ query, userLocation, locale }) {
         phone: p?.nationalPhoneNumber || "",
         website: p?.websiteUri || "",
         price_level: pl || "",
-        price_label: mappedPL.label,     // "$$"
-        price_meaning: mappedPL.meaning, // "متوسط"
-        mode: detectModeFromText(query), // "parts_tools" or "auto_repair"
+        price_label: mappedPL.label,       // "$$"
+        price_meaning: mappedPL.meaning,   // "متوسط"
         source: "google_places_new",
       };
     });
@@ -346,6 +413,46 @@ async function searchPlaces({ query, userLocation, locale }) {
   } finally {
     clearTimeout(timeout);
   }
+}
+
+async function searchPlacesSmart({ query, userLocation, locale }) {
+  const mode = detectModeFromText(query);
+  const base = buildPlacesQuery(mode);
+
+  // If user typed ZIP, help the search
+  const zip = extractZip(query);
+
+  // 1) GPS flow (best)
+  const gps = parseLatLng(userLocation);
+  if (gps) {
+    const q1 = zip ? `${base} ${zip}` : base;
+    const first = await placesSearchText({ textQuery: q1, userLocation, locale, useGpsBias: true });
+    if (first && first.length) {
+      return first.map((x) => ({ ...x, mode }));
+    }
+
+    // widen query slightly (still gps biased)
+    const second = await placesSearchText({ textQuery: `${base} near me`, userLocation, locale, useGpsBias: true });
+    return (second || []).map((x) => ({ ...x, mode }));
+  }
+
+  // 2) No GPS: use user_location city text
+  const locText = safeCityText(userLocation);
+  const qBase = zip ? `${base} ${zip}` : base;
+
+  if (locText) {
+    // Strategy A: "base in loc"
+    const a = await placesSearchText({ textQuery: `${qBase} in ${locText}`, userLocation, locale, useGpsBias: false });
+    if (a && a.length) return a.map((x) => ({ ...x, mode }));
+
+    // Strategy B: "base loc"
+    const b = await placesSearchText({ textQuery: `${qBase} ${locText}`, userLocation, locale, useGpsBias: false });
+    if (b && b.length) return b.map((x) => ({ ...x, mode }));
+  }
+
+  // 3) No GPS + no locText: fallback to base only (less accurate but better than nothing)
+  const c = await placesSearchText({ textQuery: qBase, userLocation, locale, useGpsBias: false });
+  return (c || []).map((x) => ({ ...x, mode }));
 }
 
 /* =========================================================
@@ -362,6 +469,7 @@ export async function performSearch(userQuery, userLocation, opts = {}) {
 
   if (q.length >= 2 && KB.length > 0) {
     const limit = Math.max(1, Math.min(Number(maxResults || 3), 10));
+
     const scored = KB
       .map((r) => ({ r, score: scoreMatch(q, recordToText(r)) }))
       .filter((x) => x.score > 0)
@@ -370,7 +478,7 @@ export async function performSearch(userQuery, userLocation, opts = {}) {
 
     verified_data = uniqBy(
       scored.map(({ r, score }) => ({
-        title: r.title || r.problem || "Verified item",
+        title: r.title || r.problem || r.name || "Verified item",
         score,
         source: r.__source || "data",
         causes: r.likely_causes || r.causes || "",
@@ -382,10 +490,14 @@ export async function performSearch(userQuery, userLocation, opts = {}) {
     );
   }
 
-  // 2) Places (expensive) — only when allowed AND intent is places-like
+  // 2) Places (expensive) — only when allowed AND query is places-like
   let verified_workshops = [];
   if (allowPlaces && looksLikePlacesIntent(userQuery)) {
-    verified_workshops = await searchPlaces({ query: userQuery, userLocation, locale });
+    verified_workshops = await searchPlacesSmart({ query: userQuery, userLocation, locale });
+    verified_workshops = uniqBy(
+      verified_workshops,
+      (x) => x?.place_id || x?.maps_url || `${String(x?.name || "").toLowerCase()}::${String(x?.address || "").toLowerCase()}`
+    );
   }
 
   return { verified_data, verified_workshops };
