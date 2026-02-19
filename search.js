@@ -208,10 +208,11 @@ function scoreMatch(query, recordText, recordObj) {
 
 // -----------------------------
 // Places Intent: only if explicitly asked
+// (Stronger: includes tire/shop/address/zip/location keywords)
 // -----------------------------
 function detectPlacesIntent(userQuery = "") {
-  const q = String(userQuery || "").toLowerCase().trim();
-  if (!q) return false;
+  const qRaw = String(userQuery || "");
+  const q = qRaw.toLowerCase();
 
   const stopSignals = [
     "اسكت",
@@ -224,6 +225,10 @@ function detectPlacesIntent(userQuery = "") {
   ];
   if (stopSignals.some((w) => q.includes(w))) return false;
 
+  // Strong location signals (ZIP / coordinates / "in <city>" / Arabic "في")
+  if (/\b\d{5}(?:-\d{4})?\b/.test(qRaw)) return true; // ZIP present => likely places
+  if (parseLatLng(qRaw)) return true;
+
   const intentKeywords = [
     // English
     "workshop",
@@ -232,37 +237,51 @@ function detectPlacesIntent(userQuery = "") {
     "auto repair",
     "repair shop",
     "car shop",
+    "tire shop",
+    "tyre shop",
+    "tire store",
+    "wheel alignment",
+    "alignment shop",
+    "brake shop",
     "near me",
     "closest",
     "nearby",
     "address",
+    "location",
     "google maps",
+    "map",
     "where can i fix",
     "where to fix",
-    "tire shop",
-    "tyre shop",
-    "alignment",
-    "oil change",
+    "find me",
+    "search for",
 
     // Arabic
     "ورشة",
+    "ورش",
     "كراج",
     "ميكانيك",
     "ميكانيكي",
+    "محل",
     "محل تصليح",
     "محل ميكانيك",
     "محل اطارات",
-    "إطارات",
+    "محل إطارات",
     "اطارات",
-    "تواير",
+    "إطارات",
     "ميزان",
     "ترصيص",
+    "سحب",
+    "محاذاة",
     "قريب مني",
     "اقرب",
+    "أقرب",
     "عنوان",
+    "موقع",
     "خرائط",
     "وين اصلح",
     "وين اروح",
+    "ابحث",
+    "تبحث",
 
     // Others (light)
     "taller",
@@ -276,15 +295,7 @@ function detectPlacesIntent(userQuery = "") {
     "근처",
   ];
 
-  const hasIntent = intentKeywords.some((w) => q.includes(w));
-  const hasZip = /\b\d{5}(-\d{4})?\b/.test(q);
-
-  // إذا كتب zip ومعه نية بحث (محل/ورشة/near) نخليه true
-  if (hasZip && (hasIntent || q.includes("near") || q.includes("قريب") || q.includes("اقرب"))) {
-    return true;
-  }
-
-  return hasIntent;
+  return intentKeywords.some((w) => q.includes(String(w).toLowerCase()));
 }
 
 // -----------------------------
@@ -292,30 +303,11 @@ function detectPlacesIntent(userQuery = "") {
 // -----------------------------
 function detectModeFromText(text) {
   const t = (text || "").toLowerCase();
-
-  if (
-    t.includes("كفر") ||
-    t.includes("إطار") ||
-    t.includes("اطار") ||
-    t.includes("اطارات") ||
-    t.includes("إطارات") ||
-    t.includes("تواير") ||
-    t.includes("tire") ||
-    t.includes("tyre") ||
-    t.includes("alignment") ||
-    t.includes("balancing") ||
-    t.includes("rotation")
-  )
-    return "tire";
-
+  if (t.includes("كفر") || t.includes("إطار") || t.includes("اطار") || t.includes("اطارات") || t.includes("إطارات") || t.includes("tire") || t.includes("tyre")) return "tire";
   if (t.includes("فرامل") || t.includes("brake")) return "brake";
-  if (t.includes("قير") || t.includes("جير") || t.includes("ناقل") || t.includes("transmission"))
-    return "transmission";
-  if (t.includes("بطارية") || t.includes("battery") || t.includes("starter") || t.includes("alternator"))
-    return "electrical";
-  if (t.includes("حرارة") || t.includes("overheat") || t.includes("coolant") || t.includes("radiator"))
-    return "cooling";
-
+  if (t.includes("قير") || t.includes("جير") || t.includes("ناقل") || t.includes("transmission")) return "transmission";
+  if (t.includes("بطارية") || t.includes("battery") || t.includes("starter") || t.includes("alternator")) return "electrical";
+  if (t.includes("حرارة") || t.includes("overheat") || t.includes("coolant") || t.includes("radiator")) return "cooling";
   return "auto_repair";
 }
 
@@ -373,14 +365,24 @@ function isZipOnly(text = "") {
   return /^\d{5}(-\d{4})?$/.test(t);
 }
 
+// Extract ZIP from any query text
+function extractZipFromText(userQuery = "") {
+  const s = String(userQuery || "");
+  const m = s.match(/\b(\d{5})(?:-\d{4})?\b/);
+  return m ? m[1] : "";
+}
+
 // Extract location from user query (works when GPS is off)
 function extractLocationFromQuery(userQuery = "") {
   const q = String(userQuery || "").trim();
   if (!q) return "";
 
-  // direct ZIP anywhere in the sentence
-  const zipMatch = q.match(/\b(\d{5}(?:-\d{4})?)\b/);
-  if (zipMatch?.[1]) return zipMatch[1];
+  // If the whole query is just ZIP
+  if (isZipOnly(q)) return q;
+
+  // If query contains ZIP anywhere
+  const zip = extractZipFromText(q);
+  if (zip) return zip;
 
   // English: "in Louisville, KY" / "in Paris"
   const m1 = q.match(/\bin\s+([A-Za-z][A-Za-z\s\.\-']{2,})(?:,\s*([A-Za-z]{2,}))?/i);
@@ -406,88 +408,37 @@ function extractLocationFromQuery(userQuery = "") {
 // + Cache to reduce cost
 // -----------------------------
 const PLACES_CACHE = new Map();
-const GEOCODE_CACHE = new Map();
 
 // Defaults
 const PLACES_CACHE_TTL_MS = Number(process.env.PLACES_CACHE_TTL_MS || 10 * 60 * 1000); // 10 min
-const GEOCODE_CACHE_TTL_MS = Number(process.env.GEOCODE_CACHE_TTL_MS || 24 * 60 * 60 * 1000); // 24h
 const PLACES_TIMEOUT_MS = Number(process.env.PLACES_TIMEOUT_MS || 6500);
-const GEOCODE_TIMEOUT_MS = Number(process.env.GEOCODE_TIMEOUT_MS || 5000);
 const PLACES_MAX_RESULTS_DEFAULT = Number(process.env.PLACES_MAX_RESULTS || 5);
 const PLACES_RADIUS_CAP = Number(process.env.PLACES_RADIUS_CAP || 50000); // cap radius
 const PLACES_ENABLED = String(process.env.PLACES_ENABLED || "true").toLowerCase() !== "false";
 
-function cacheGet(map, key) {
-  const hit = map.get(key);
+// Optional: if you ever want to force "allowPlaces=false" to be strictly respected
+const PLACES_STRICT_ALLOW_FALSE = String(process.env.PLACES_STRICT_ALLOW_FALSE || "false").toLowerCase() === "true";
+
+function cacheGet(key) {
+  const hit = PLACES_CACHE.get(key);
   if (!hit) return null;
   if (Date.now() > hit.expiresAt) {
-    map.delete(key);
+    PLACES_CACHE.delete(key);
     return null;
   }
   return hit.value;
 }
 
-function cacheSet(map, key, value, ttlMs) {
-  map.set(key, { value, expiresAt: Date.now() + (ttlMs || 0) });
+function cacheSet(key, value, ttlMs) {
+  PLACES_CACHE.set(key, { value, expiresAt: Date.now() + (ttlMs || PLACES_CACHE_TTL_MS) });
 }
 
 function makePlacesCacheKey({ textQuery, languageCode, locationBias }) {
   const bias =
     locationBias?.lat != null && locationBias?.lng != null
-      ? `${Number(locationBias.lat).toFixed(3)},${Number(locationBias.lng).toFixed(3)}:${Number(
-          locationBias.radiusMeters || 0
-        )}`
+      ? `${Number(locationBias.lat).toFixed(3)},${Number(locationBias.lng).toFixed(3)}:${Number(locationBias.radiusMeters || 0)}`
       : "no_bias";
   return `${languageCode}::${textQuery}::${bias}`;
-}
-
-// -----------------------------
-// Geocoding (ZIP / City -> lat,lng) (Optional but very useful)
-// Requires enabling Geocoding API in Google Cloud.
-// -----------------------------
-async function geocodeAddressToLatLng(addressText) {
-  const key = process.env.GOOGLE_PLACES_API_KEY;
-  if (!key) return null;
-
-  const addr = String(addressText || "").trim();
-  if (!addr) return null;
-
-  const cacheKey = addr.toLowerCase();
-  const cached = cacheGet(GEOCODE_CACHE, cacheKey);
-  if (cached) return cached;
-
-  const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(
-    addr
-  )}&key=${encodeURIComponent(key)}`;
-
-  const controller = new AbortController();
-  const t = setTimeout(() => controller.abort(), GEOCODE_TIMEOUT_MS);
-
-  try {
-    const f = await ensureFetch();
-    const res = await f(url, { method: "GET", signal: controller.signal });
-
-    const data = await res.json().catch(() => ({}));
-    const first = Array.isArray(data?.results) ? data.results[0] : null;
-    const loc = first?.geometry?.location;
-
-    const lat = Number(loc?.lat);
-    const lng = Number(loc?.lng);
-    if (Number.isFinite(lat) && Number.isFinite(lng)) {
-      const out = { lat, lng };
-      cacheSet(GEOCODE_CACHE, cacheKey, out, GEOCODE_CACHE_TTL_MS);
-      return out;
-    }
-
-    // cache negative for short time to avoid spam
-    cacheSet(GEOCODE_CACHE, cacheKey, null, 15 * 60 * 1000);
-    return null;
-  } catch (e) {
-    console.error("Geocode error:", e?.message || e);
-    return null;
-  } finally {
-    clearTimeout(t);
-  }
 }
 
 async function placesSearchText({ textQuery, languageCode = "en", maxResults = 5, locationBias = null }) {
@@ -504,12 +455,11 @@ async function placesSearchText({ textQuery, languageCode = "en", maxResults = 5
     locationBias: locationBias ? { ...locationBias, radiusMeters: safeRadius } : null,
   });
 
-  const cached = cacheGet(PLACES_CACHE, cacheKey);
+  const cached = cacheGet(cacheKey);
   if (cached) return cached;
 
   const url = "https://places.googleapis.com/v1/places:searchText";
 
-  // NOTE: languageCode affects UI strings; results are still fine in most locales.
   const body = { textQuery, maxResultCount: safeMax, languageCode };
 
   if (locationBias?.lat != null && locationBias?.lng != null) {
@@ -531,8 +481,6 @@ async function placesSearchText({ textQuery, languageCode = "en", maxResults = 5
     "places.nationalPhoneNumber",
     "places.websiteUri",
     "places.id",
-    "places.primaryType",
-    "places.types",
   ].join(",");
 
   const controller = new AbortController();
@@ -551,11 +499,17 @@ async function placesSearchText({ textQuery, languageCode = "en", maxResults = 5
       body: JSON.stringify(body),
     });
 
+    // IMPORTANT: handle non-2xx safely
     const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      console.error("Google Places (New) non-OK:", res.status, data?.error?.message || data);
+      return [];
+    }
+
     const places = Array.isArray(data?.places) ? data.places : [];
 
     const mapped = places.slice(0, safeMax).map((p) => ({
-      name: p?.displayName?.text || "Shop",
+      name: p?.displayName?.text || "Workshop",
       address: p?.formattedAddress || "",
       rating: p?.rating ?? null,
       ratings_total: p?.userRatingCount ?? null,
@@ -565,14 +519,12 @@ async function placesSearchText({ textQuery, languageCode = "en", maxResults = 5
       place_id: p?.id || "",
       lat: p?.location?.latitude ?? null,
       lng: p?.location?.longitude ?? null,
-      types: p?.types || [],
-      primaryType: p?.primaryType || "",
       source: "google_places_new",
     }));
 
     const deduped = uniqBy(mapped, (x) => x.place_id || x.maps_url || `${x.name}::${x.address}`);
 
-    cacheSet(PLACES_CACHE, cacheKey, deduped, PLACES_CACHE_TTL_MS);
+    cacheSet(cacheKey, deduped, PLACES_CACHE_TTL_MS);
     return deduped;
   } catch (e) {
     console.error("Google Places (New) error:", e?.message || e);
@@ -582,61 +534,72 @@ async function placesSearchText({ textQuery, languageCode = "en", maxResults = 5
   }
 }
 
-// -----------------------------
-// Places: main path
-// - GPS -> bias directly
-// - No GPS -> try geocode ZIP/city -> bias -> better results
-// - If geocode fails -> fallback to text query with "near"
-// -----------------------------
 async function googlePlacesWorkshops(userQuery, userLocation, locale, maxResults = 5, placesRadiusMeters = 25000) {
-  // Keep locale for strings, but if it's something odd, fallback to en
-  const lc = normalizeLocale(locale);
-  const languageCode = lc || "en";
-
+  const languageCode = normalizeLocale(locale);
   const gps = parseLatLng(userLocation);
+
   const mode = detectModeFromText(userQuery);
   const q = buildQueryForMode(mode);
 
   const requestedRadius = Number(placesRadiusMeters || 25000);
 
-  // 1) GPS best
+  // 1) GPS bias (best)
   if (gps) {
-    return await placesSearchText({
+    const first = await placesSearchText({
       textQuery: q,
       languageCode,
       maxResults,
       locationBias: { lat: gps.lat, lng: gps.lng, radiusMeters: requestedRadius },
     });
+
+    // If 0 results, try wider radius once (still capped)
+    if (!first || first.length === 0) {
+      const second = await placesSearchText({
+        textQuery: q,
+        languageCode,
+        maxResults,
+        locationBias: { lat: gps.lat, lng: gps.lng, radiusMeters: Math.min(PLACES_RADIUS_CAP, Math.max(requestedRadius, 35000)) },
+      });
+      return second || [];
+    }
+
+    return first;
   }
 
-  // 2) Try textual location: from user_location object/string or extracted from query
+  // 2) No GPS: use provided location text OR extract from query (ZIP/city)
   let locText = safeCityText(userLocation);
   if (!locText || locText.toLowerCase() === "global") {
     locText = extractLocationFromQuery(userQuery);
   }
-  locText = String(locText || "").trim();
-  if (!locText) return [];
 
-  // 2a) Try geocode it -> bias search (BEST when GPS off)
-  const geo = await geocodeAddressToLatLng(locText);
-  if (geo?.lat != null && geo?.lng != null) {
-    return await placesSearchText({
-      textQuery: q,
-      languageCode,
-      maxResults,
-      locationBias: { lat: geo.lat, lng: geo.lng, radiusMeters: requestedRadius },
-    });
+  // If still empty but query has ZIP -> use ZIP
+  if (!locText) {
+    const zip = extractZipFromText(userQuery);
+    if (zip) locText = zip;
   }
 
-  // 2b) Fallback: plain text search with "near"
-  // (works even if Geocoding API is not enabled)
-  const textQuery = `${q} near ${locText}`;
-  return await placesSearchText({
-    textQuery,
+  if (!locText) return [];
+
+  // Try two strategies:
+  // A) "tire shop in <loc>"
+  const first = await placesSearchText({
+    textQuery: `${q} in ${locText}`,
     languageCode,
     maxResults,
     locationBias: null,
   });
+
+  if (first && first.length > 0) return first;
+
+  // B) "tire shop <loc>" (works better for ZIP sometimes)
+  const second = await placesSearchText({
+    textQuery: `${q} ${locText}`,
+    languageCode,
+    maxResults,
+    locationBias: null,
+  });
+
+  return second || [];
 }
 
 // -----------------------------
@@ -675,6 +638,7 @@ export async function performSearch(userQuery, userLocation, opts = {}) {
     verified_data = scored.map(({ r, s }) => {
       const title = r.title || r.name || r.problem || "Verified item";
 
+      // Support your data schema (likely_causes/recommended_checks/etc)
       const causes =
         r.causes ||
         r.cause ||
@@ -717,7 +681,29 @@ export async function performSearch(userQuery, userLocation, opts = {}) {
   // ---------------------------------------------
   let verified_workshops = [];
 
-  const wantsPlaces = typeof allowPlaces === "boolean" ? allowPlaces : detectPlacesIntent(userQuery);
+  // Robust decision:
+  // - If allowPlaces is true => ALWAYS allow
+  // - If allowPlaces is null => auto-detect
+  // - If allowPlaces is false => normally block,
+  //   BUT if query is a strong places request and includes a location signal (ZIP/GPS/city),
+  //   we still allow unless PLACES_STRICT_ALLOW_FALSE=true
+  const autoIntent = detectPlacesIntent(userQuery);
+  const hasLocationSignal =
+    Boolean(parseLatLng(userLocation)) ||
+    Boolean(extractLocationFromQuery(userQuery)) ||
+    Boolean(extractZipFromText(userQuery)) ||
+    (typeof userLocation === "string" && userLocation.trim() && userLocation.trim().toLowerCase() !== "global");
+
+  let wantsPlaces =
+    typeof allowPlaces === "boolean"
+      ? allowPlaces
+      : autoIntent;
+
+  if (typeof allowPlaces === "boolean" && allowPlaces === false) {
+    if (!PLACES_STRICT_ALLOW_FALSE && autoIntent && hasLocationSignal) {
+      wantsPlaces = true;
+    }
+  }
 
   // Cost control: if Places not requested -> return local only
   if (!wantsPlaces) return { verified_data, verified_workshops: [] };
@@ -739,6 +725,12 @@ export async function performSearch(userQuery, userLocation, opts = {}) {
     console.error("Workshops search error:", e?.message || e);
     verified_workshops = [];
   }
+
+  // Final dedupe safety
+  verified_workshops = uniqBy(
+    verified_workshops,
+    (x) => x?.place_id || x?.maps_url || `${String(x?.name || "").toLowerCase()}::${String(x?.address || "").toLowerCase()}`
+  );
 
   return { verified_data, verified_workshops };
 }
