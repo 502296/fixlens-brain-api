@@ -255,6 +255,14 @@ function detectPlacesIntent(userQuery = "") {
     "find me",
     "search for",
 
+    // Parts / tools / hardware
+    "auto parts",
+    "parts store",
+    "hardware store",
+    "tool store",
+    "tools store",
+    "supply store",
+
     // Arabic
     "ورشة",
     "ورش",
@@ -283,6 +291,15 @@ function detectPlacesIntent(userQuery = "") {
     "ابحث",
     "تبحث",
 
+    // Arabic parts/tools
+    "قطع",
+    "قطع غيار",
+    "محل قطع",
+    "محل ادوات",
+    "محل أدوات",
+    "ادوات",
+    "أدوات",
+
     // Others (light)
     "taller",
     "mecanico",
@@ -303,11 +320,33 @@ function detectPlacesIntent(userQuery = "") {
 // -----------------------------
 function detectModeFromText(text) {
   const t = (text || "").toLowerCase();
-  if (t.includes("كفر") || t.includes("إطار") || t.includes("اطار") || t.includes("اطارات") || t.includes("إطارات") || t.includes("tire") || t.includes("tyre")) return "tire";
+  if (
+    t.includes("كفر") ||
+    t.includes("إطار") ||
+    t.includes("اطار") ||
+    t.includes("اطارات") ||
+    t.includes("إطارات") ||
+    t.includes("tire") ||
+    t.includes("tyre")
+  ) return "tire";
+
   if (t.includes("فرامل") || t.includes("brake")) return "brake";
   if (t.includes("قير") || t.includes("جير") || t.includes("ناقل") || t.includes("transmission")) return "transmission";
   if (t.includes("بطارية") || t.includes("battery") || t.includes("starter") || t.includes("alternator")) return "electrical";
   if (t.includes("حرارة") || t.includes("overheat") || t.includes("coolant") || t.includes("radiator")) return "cooling";
+
+  // parts / tools intent
+  if (
+    t.includes("قطع") ||
+    t.includes("قطع غيار") ||
+    t.includes("ادوات") ||
+    t.includes("أدوات") ||
+    t.includes("tool") ||
+    t.includes("tools") ||
+    t.includes("hardware") ||
+    t.includes("parts")
+  ) return "parts_tools";
+
   return "auto_repair";
 }
 
@@ -317,6 +356,7 @@ function buildQueryForMode(mode) {
   if (mode === "transmission") return "transmission shop";
   if (mode === "electrical") return "battery alternator starter shop";
   if (mode === "cooling") return "radiator coolant repair shop";
+  if (mode === "parts_tools") return "auto parts store OR hardware store OR tool store";
   return "auto repair shop";
 }
 
@@ -471,6 +511,7 @@ async function placesSearchText({ textQuery, languageCode = "en", maxResults = 5
     };
   }
 
+  // Added priceLevel in field mask (when available)
   const fieldMask = [
     "places.displayName",
     "places.formattedAddress",
@@ -481,6 +522,7 @@ async function placesSearchText({ textQuery, languageCode = "en", maxResults = 5
     "places.nationalPhoneNumber",
     "places.websiteUri",
     "places.id",
+    "places.priceLevel",
   ].join(",");
 
   const controller = new AbortController();
@@ -509,7 +551,7 @@ async function placesSearchText({ textQuery, languageCode = "en", maxResults = 5
     const places = Array.isArray(data?.places) ? data.places : [];
 
     const mapped = places.slice(0, safeMax).map((p) => ({
-      name: p?.displayName?.text || "Workshop",
+      name: p?.displayName?.text || "Place",
       address: p?.formattedAddress || "",
       rating: p?.rating ?? null,
       ratings_total: p?.userRatingCount ?? null,
@@ -519,6 +561,7 @@ async function placesSearchText({ textQuery, languageCode = "en", maxResults = 5
       place_id: p?.id || "",
       lat: p?.location?.latitude ?? null,
       lng: p?.location?.longitude ?? null,
+      price_level: p?.priceLevel ?? null, // may be missing
       source: "google_places_new",
     }));
 
@@ -558,7 +601,11 @@ async function googlePlacesWorkshops(userQuery, userLocation, locale, maxResults
         textQuery: q,
         languageCode,
         maxResults,
-        locationBias: { lat: gps.lat, lng: gps.lng, radiusMeters: Math.min(PLACES_RADIUS_CAP, Math.max(requestedRadius, 35000)) },
+        locationBias: {
+          lat: gps.lat,
+          lng: gps.lng,
+          radiusMeters: Math.min(PLACES_RADIUS_CAP, Math.max(requestedRadius, 35000)),
+        },
       });
       return second || [];
     }
@@ -581,7 +628,7 @@ async function googlePlacesWorkshops(userQuery, userLocation, locale, maxResults
   if (!locText) return [];
 
   // Try two strategies:
-  // A) "tire shop in <loc>"
+  // A) "<query> in <loc>"
   const first = await placesSearchText({
     textQuery: `${q} in ${locText}`,
     languageCode,
@@ -591,7 +638,7 @@ async function googlePlacesWorkshops(userQuery, userLocation, locale, maxResults
 
   if (first && first.length > 0) return first;
 
-  // B) "tire shop <loc>" (works better for ZIP sometimes)
+  // B) "<query> <loc>" (works better for ZIP sometimes)
   const second = await placesSearchText({
     textQuery: `${q} ${locText}`,
     languageCode,
