@@ -10,27 +10,34 @@ const app = express();
 // Trust proxy (Render behind proxy)
 app.set("trust proxy", 1);
 
+// =====================
 // CORS allowlist (optional)
+// =====================
 const allowedOrigins = (process.env.ALLOWED_ORIGINS || "")
   .split(",")
   .map((s) => s.trim())
   .filter(Boolean);
 
+function isAllowedOrigin(origin) {
+  if (!origin) return true;
+  if (allowedOrigins.length === 0) return true;
+  return allowedOrigins.includes(origin);
+}
+
 app.use(
   cors({
     origin: (origin, cb) => {
-      if (!origin) return cb(null, true);
-      if (allowedOrigins.length === 0) return cb(null, true);
-      return allowedOrigins.includes(origin)
-        ? cb(null, true)
-        : cb(new Error("CORS_NOT_ALLOWED"));
+      if (isAllowedOrigin(origin)) return cb(null, true);
+      return cb(new Error("CORS_NOT_ALLOWED"));
     },
     credentials: true,
   })
 );
 
 app.use(morgan("combined"));
-app.use(express.json({ limit: "25mb" }));
+
+// ✅ Slightly higher limit for image/audio base64 payloads
+app.use(express.json({ limit: process.env.JSON_LIMIT || "35mb" }));
 
 // =====================
 // Helpers
@@ -58,6 +65,13 @@ function extractUserText(body) {
 
 function hasAnyText(x) {
   return typeof x === "string" && x.trim().length > 0;
+}
+
+function safePick(obj, keys) {
+  for (const k of keys) {
+    if (obj && obj[k] != null) return obj[k];
+  }
+  return undefined;
 }
 
 // =====================
@@ -133,6 +147,7 @@ app.get("/health", (req, res) => {
     time: new Date().toISOString(),
     has_google_places_key: Boolean(GOOGLE_PLACES_API_KEY),
     has_openai_key: Boolean(OPENAI_API_KEY),
+    allowed_origins_count: allowedOrigins.length,
   });
 });
 
@@ -159,10 +174,51 @@ app.post("/api/places", async (req, res) => {
   }
 });
 
-// ✅ IMPORTANT: App endpoints ALWAYS return FixLens reply (never "mode: places")
+// ✅ IMPORTANT: App endpoints ALWAYS return FixLens reply
 const apiHandler = async (req, res, name) => {
+  // Optional request debug (enable by sending { debug: true } or header x-fixlens-debug: 1)
+  const debugFlag =
+    Boolean(req.body?.debug) ||
+    String(req.headers["x-fixlens-debug"] || "") === "1" ||
+    String(req.query?.debug || "") === "1";
+
+  // Small visibility: what the server actually received (helps fix locale/GPS issues fast)
+  if (debugFlag) {
+    const ul = safePick(req.body, ["user_location", "location", "gps", "latlng"]);
+    const loc = safePick(req.body, ["locale", "lang", "language"]);
+    const text = safePick(req.body, ["text", "message", "prompt", "input"]);
+    console.log("[FixLens][REQ_DEBUG]", {
+      route: name,
+      origin: req.headers.origin || null,
+      locale: loc || null,
+      user_location_type: ul == null ? null : typeof ul,
+      user_location: ul || null,
+      text_preview: typeof text === "string" ? text.slice(0, 120) : null,
+      has_image:
+        Boolean(req.body?.image_base_64 || req.body?.image_base64) ||
+        Boolean(req.body?.image),
+      has_audio:
+        Boolean(req.body?.audio_base_64 || req.body?.audio_base64) ||
+        Boolean(req.body?.audio),
+      history_len: Array.isArray(req.body?.history) ? req.body.history.length : 0,
+    });
+  }
+
+  // Simple timeout guard (prevents hanging requests)
+  const TIMEOUT_MS = Number(process.env.API_TIMEOUT_MS || 22000);
+
   try {
-    const out = await handleFixLensRequest(req);
+    const out = await Promise.race([
+      handleFixLensRequest(req),
+      new Promise((_, reject) =>
+        setTimeout(() => {
+          const e = new Error("REQUEST_TIMEOUT");
+          e.status = 504;
+          reject(e);
+        }, TIMEOUT_MS)
+      ),
+    ]);
+
     return res.status(200).json(out);
   } catch (err) {
     const status = Number(err?.status || err?.statusCode || 500);
@@ -195,6 +251,7 @@ const server = app.listen(PORT, () => {
   console.log(`FixLens Brain API running on port ${PORT}`);
   console.log(`Google Places key present: ${Boolean(GOOGLE_PLACES_API_KEY)}`);
   console.log(`OpenAI key present: ${Boolean(OPENAI_API_KEY)}`);
+  console.log(`Allowed origins: ${allowedOrigins.length > 0 ? allowedOrigins.join(", ") : "(all)"}`);
 });
 
 process.on("SIGTERM", () => {
