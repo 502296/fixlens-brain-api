@@ -78,12 +78,10 @@ async function withRetry(fn, tries = 2, baseDelay = 250) {
 
 /* =========================================================
    PLACES INTENT (typed text ONLY)
-   - prevents voice transcript from triggering Places
 ========================================================= */
 function looksLikePlacesRequest(input = "") {
   const t = String(input || "").toLowerCase();
 
-  // shops / mechanic
   const shop = [
     "mechanic",
     "garage",
@@ -109,7 +107,6 @@ function looksLikePlacesRequest(input = "") {
     "وين اصلح",
   ];
 
-  // parts / tools
   const parts = [
     "auto parts",
     "car parts",
@@ -134,114 +131,26 @@ function looksLikePlacesRequest(input = "") {
   return shop.some((w) => t.includes(w)) || parts.some((w) => t.includes(w));
 }
 
-/* =========================================================
-   🔥 NEW: Symptom detector
-   - prevents “priorPlaces + hint” from hijacking diagnosis
-========================================================= */
-function looksLikeSymptomText(text = "") {
-  const t = String(text || "").toLowerCase();
-
-  const words = [
-    // Arabic symptoms
-    "رجفة",
-    "رجة",
-    "اهتزاز",
-    "يهتز",
-    "يرجف",
-    "صوت",
-    "صرير",
-    "طقطقة",
-    "خبط",
-    "دقة",
-    "صفير",
-    "رائحة",
-    "حرق",
-    "حرارة",
-    "يسخن",
-    "تقطيع",
-    "تفتفة",
-    "ضعف",
-    "ثقل",
-    "سحب",
-    "انحراف",
-    "دركسون",
-    "فرامل",
-    "بريك",
-    "مكابح",
-    "تاير",
-    "تواير",
-    "إطار",
-    "اطار",
-    "كفر",
-    "محرك",
-    "مكينة",
-    "قير",
-    "جير",
-    "ناقل",
-    "بطارية",
-    "دينمو",
-    "ستارتر",
-    "تشليح",
-    "لمبة",
-    "تشيك انجن",
-    "check engine",
-
-    // English symptoms
-    "vibration",
-    "shake",
-    "shaking",
-    "noise",
-    "squeal",
-    "grinding",
-    "clicking",
-    "knocking",
-    "rattle",
-    "smell",
-    "burning",
-    "overheat",
-    "stall",
-    "misfire",
-    "rpm",
-    "engine",
-    "brake",
-    "brakes",
-    "tire",
-    "tyre",
-    "steering",
-    "pulling",
-    "alignment",
-  ];
-
-  return words.some((w) => t.includes(w));
-}
-
-/* =========================================================
-   ✅ FIXED: Location hint ONLY
-   - must be explicit location (ZIP / coordinates / "Louisville, KY" / "انا في ...")
-   - never triggers from generic "في/بال"
-========================================================= */
 function looksLikeLocationHintOnly(text = "") {
-  const t = String(text || "").trim();
+  const t = String(text || "").toLowerCase().trim();
   if (!t) return false;
 
-  const lower = t.toLowerCase();
+  if (/^\d{5}(-\d{4})?$/.test(t)) return true;
+  if (/(-?\d+(\.\d+)?)\s*,\s*(-?\d+(\.\d+)?)/.test(t)) return true;
 
-  // ZIP only or coordinates
-  if (/^\d{5}(-\d{4})?$/.test(lower)) return true;
-  if (/^\s*-?\d+(\.\d+)?\s*,\s*-?\d+(\.\d+)?\s*$/.test(lower)) return true;
-
-  // "Louisville, KY" or "Louisville KY"
-  if (/[a-zA-Z].*,\s*[A-Z]{2}\b/.test(t)) return true;
-  if (/[a-zA-Z]+\s+[A-Z]{2}\b/.test(t)) return true;
-
-  // Arabic explicit location (only)
-  // Examples: "انا في لوفل كنتاكي" / "موقعي لوفل" / "المدينة لوفل"
-  if (/(^|\s)(انا في|أني في|موقعي|المدينة|الولاية|zip)\b/i.test(t)) {
-    // if it's long -> likely symptoms not location
-    if (t.length <= 40) return true;
-  }
-
-  return false;
+  const hints = [
+    "i am in",
+    "i'm in",
+    "my location",
+    "zip",
+    "city",
+    "state",
+    "انا في",
+    "أني في",
+    "المنطقة",
+    "الحي",
+  ];
+  return hints.some((w) => t.includes(w));
 }
 
 function lastUserAskedForPlaces(history = []) {
@@ -253,8 +162,9 @@ function lastUserAskedForPlaces(history = []) {
     const c = msg?.content;
     let text = "";
     if (typeof c === "string") text = c;
-    else if (Array.isArray(c))
+    else if (Array.isArray(c)) {
       text = c.map((x) => (typeof x?.text === "string" ? x.text : "")).join(" ");
+    }
 
     text = String(text || "").trim();
     if (!text) continue;
@@ -265,8 +175,8 @@ function lastUserAskedForPlaces(history = []) {
 }
 
 /* =========================================================
-   AUDIO TRANSCRIPTION (safe for NON-SPEECH)
-   - If transcript looks like "smell/burning" while user didn't say it, we ignore it.
+   AUDIO: Detect speech vs non-speech (ENGINE/BRAKES)
+   - Uses verbose_json segments no_speech_prob when available
 ========================================================= */
 function containsSmellWords(s = "") {
   const t = String(s || "").toLowerCase();
@@ -281,37 +191,95 @@ function containsSmellWords(s = "") {
   );
 }
 
-async function transcribeAudio(audioBase64) {
-  if (!audioBase64 || String(audioBase64).length < 50) return { text: "", ok: false };
+function estimateSpeechFromWhisperVerbose(verbose) {
+  // verbose_json from Whisper often contains segments with no_speech_prob
+  const segments = Array.isArray(verbose?.segments) ? verbose.segments : [];
+  if (segments.length === 0) return { hasSpeech: null, score: 0 };
+
+  // If most segments say "no_speech_prob" high => it's likely non-speech
+  let speechVotes = 0;
+  let total = 0;
+
+  for (const s of segments) {
+    const p = Number(s?.no_speech_prob);
+    if (!Number.isFinite(p)) continue;
+    total += 1;
+    if (p < 0.6) speechVotes += 1; // lower = more speech
+  }
+
+  if (total === 0) return { hasSpeech: null, score: 0 };
+  const ratio = speechVotes / total;
+
+  // ratio >= 0.5 => likely speech; <= 0.25 => likely non-speech
+  if (ratio >= 0.5) return { hasSpeech: true, score: ratio };
+  if (ratio <= 0.25) return { hasSpeech: false, score: ratio };
+  return { hasSpeech: null, score: ratio };
+}
+
+async function transcribeAudioSmart(audioBase64, locale, audioKind = "") {
+  if (!audioBase64 || String(audioBase64).length < 50) {
+    return { ok: false, text: "", audio_type: "none", speech_score: 0 };
+  }
 
   const tempPath = path.join("/tmp", `v_${Date.now()}.m4a`);
   try {
     fs.writeFileSync(tempPath, Buffer.from(audioBase64, "base64"));
 
-    const result = await withRetry(() =>
+    const res = await withRetry(() =>
       withTimeout(
         client.audio.transcriptions.create({
           file: fs.createReadStream(tempPath),
           model: "whisper-1",
-          // IMPORTANT: tell whisper this is often non-speech car sound
+          // Ask for verbose info so we can detect non-speech
+          response_format: "verbose_json",
+          // Guide behavior: do NOT invent smells
           prompt:
-            "This is often non-speech automotive sound. If no clear spoken words, return a very short description like: 'NON_SPEECH_ENGINE_SOUND' or 'NON_SPEECH_BRAKE_SOUND'. Do not invent smells.",
+            "Audio may be non-speech automotive sounds (engine/brakes). If no clear spoken words, keep text extremely short or empty. Do not invent smells.",
+          // Optional: if locale starts with ar/ja/.. whisper can still auto-detect
+          language: String(locale || "").split("-")[0] || undefined,
         }),
         Number(process.env.WHISPER_TIMEOUT_MS || 15000),
         "whisper_timeout"
       )
     );
 
-    const text = String(result?.text || "").trim();
-    if (!text) return { text: "", ok: false };
+    const text = String(res?.text || "").trim();
 
-    // If whisper output is extremely long, likely garbage for non-speech
-    if (text.length > 240) return { text: "", ok: false };
+    // If caller explicitly says it's car-sound, we treat it as non-speech even if Whisper guesses words
+    const forcedNonSpeech =
+      ["engine", "brakes", "car_sound", "sound", "noise"].includes(String(audioKind || "").toLowerCase());
 
-    return { text, ok: true };
+    const speechEst = estimateSpeechFromWhisperVerbose(res);
+
+    // Hard rules:
+    // - very long transcript => garbage
+    // - forced car sound => don't use transcript
+    // - clear non-speech by segments => don't use transcript
+    if (text.length > 240) {
+      return { ok: true, text: "", audio_type: "non_speech", speech_score: speechEst.score };
+    }
+    if (forcedNonSpeech) {
+      return { ok: true, text: "", audio_type: "non_speech", speech_score: speechEst.score };
+    }
+    if (speechEst.hasSpeech === false) {
+      return { ok: true, text: "", audio_type: "non_speech", speech_score: speechEst.score };
+    }
+
+    // If likely speech, keep text
+    if (speechEst.hasSpeech === true && text) {
+      return { ok: true, text, audio_type: "speech", speech_score: speechEst.score };
+    }
+
+    // Ambiguous: if text is short and looks like real words, keep it; otherwise drop it
+    const looksWordy = /[a-zA-Z\u0600-\u06FF]{3,}/.test(text);
+    if (text && text.length <= 80 && looksWordy) {
+      return { ok: true, text, audio_type: "speech_maybe", speech_score: speechEst.score };
+    }
+
+    return { ok: true, text: "", audio_type: "non_speech", speech_score: speechEst.score };
   } catch (err) {
     console.error("Audio Error:", err?.message || err);
-    return { text: "", ok: false };
+    return { ok: false, text: "", audio_type: "error", speech_score: 0 };
   } finally {
     try {
       if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
@@ -367,14 +335,15 @@ export async function handleFixLensRequest(req) {
 
   let locale = inferLocale({ locale: body.locale, text });
 
-  // ✅ location: string or object (gps)
   const user_location = normalizeUserLocation(body.user_location);
   const image_base_64 = body.image_base_64 || body.image_base64 || "";
   const audio_base_64 = body.audio_base_64 || body.audio_base64 || "";
   const debugMode = Boolean(body.debug);
 
+  // OPTIONAL (recommended from Flutter): "voice" | "engine" | "brakes" | "car_sound"
+  const audio_kind = String(body.audio_kind || "").trim();
+
   try {
-    // Empty guard
     if (!text.trim() && !audio_base_64 && !image_base_64) {
       return {
         ok: false,
@@ -387,31 +356,26 @@ export async function handleFixLensRequest(req) {
       };
     }
 
-    // ===== AUDIO =====
-    const audioResult = await transcribeAudio(audio_base_64);
-    let voiceText = audioResult.ok ? audioResult.text : "";
+    // ===== AUDIO (smart) =====
+    const audioSmart = await transcribeAudioSmart(audio_base_64, locale, audio_kind);
+    let voiceText = audioSmart.ok ? String(audioSmart.text || "").trim() : "";
+    const audioType = audioSmart.audio_type || "none";
 
-    // 🔥 IMPORTANT: prevent "smell/burning" hallucination from non-speech
-    // If user didn't type smell but transcript contains smell words -> drop transcript.
+    // Extra guard: prevent smell hallucination
     if (!containsSmellWords(text) && containsSmellWords(voiceText)) {
       voiceText = "";
     }
 
-    const fullInput = `${text} ${voiceText}`.trim();
+    // IMPORTANT: if audio is NON-SPEECH we do NOT mix it into fullInput text
+    const fullInput = `${text} ${audioType === "speech" || audioType === "speech_maybe" ? voiceText : ""}`.trim();
 
     // ===== PLACES INTENT (typed text only + smart continuation) =====
     const typedPlaces = looksLikePlacesRequest(text);
     const priorPlaces = lastUserAskedForPlaces(history);
     const locHintOnly = looksLikeLocationHintOnly(text);
+    const placesIntent = typedPlaces || (priorPlaces && locHintOnly);
 
-    // ✅ KEY FIX: if message contains symptoms, do NOT hijack to places
-    const hasSymptoms = looksLikeSymptomText(text);
-
-    const placesIntent =
-      typedPlaces ||
-      (priorPlaces && locHintOnly && !hasSymptoms);
-
-    // ===== SEARCH (KB + Places when allowed) =====
+    // ===== SEARCH =====
     const searchPack = await withRetry(
       () =>
         withTimeout(
@@ -444,7 +408,8 @@ export async function handleFixLensRequest(req) {
                 typedPlaces,
                 priorPlaces,
                 locHintOnly,
-                hasSymptoms,
+                audioType,
+                speech_score: audioSmart.speech_score,
                 has_places_key: Boolean(process.env.GOOGLE_PLACES_API_KEY),
                 location_type: typeof user_location,
               },
@@ -456,10 +421,10 @@ export async function handleFixLensRequest(req) {
     // ===== DIAGNOSIS MODE =====
     const messageContent = [];
 
-    // If audio exists but transcript is empty -> tell model it is NON-SPEECH sound and ask ONE key question.
+    // If audio exists but it's non-speech: tell the model explicitly
     const audioNote =
-      audio_base_64 && !voiceText
-        ? "\nAUDIO_NOTE: Non-speech car sound. Do NOT infer smells. Diagnose based on typical sound patterns and ask ONE short question: does it increase with RPM or vehicle speed?"
+      audio_base_64 && (audioType === "non_speech" || !voiceText)
+        ? `\nAUDIO_NOTE: NON_SPEECH_CAR_SOUND (${audio_kind || "unspecified"}). Do NOT invent smells. Use the user's typed symptoms as primary. Ask ONE short question only if needed.`
         : "";
 
     messageContent.push({
@@ -470,12 +435,14 @@ LOCATION: ${typeof user_location === "string" ? user_location : JSON.stringify(u
 
 RULES:
 - Respond ONLY in LOCALE language.
-- No filler.
+- Use user's typed symptoms as primary truth.
+- No filler. No invention.
 - Rank likely causes + exact next checks.
 - Ask at most ONE question only if it changes diagnosis.
 
 VERIFIED_DATA_JSON: ${JSON.stringify(VERIFIED_DATA)}
-AUDIO_TRANSCRIPT: ${voiceText || ""}${audioNote}
+AUDIO_TYPE: ${audioType}
+AUDIO_TRANSCRIPT: ${(audioType === "speech" || audioType === "speech_maybe") ? voiceText : ""}${audioNote}
 
 USER_INPUT: ${text.trim()}`,
     });
@@ -508,14 +475,16 @@ USER_INPUT: ${text.trim()}`,
 
     const reply =
       String(response?.choices?.[0]?.message?.content || "").trim() ||
-      (String(locale || "").toLowerCase().startsWith("ar") ? "صار خلل مؤقت، أعد المحاولة." : "Temporary issue, please retry.");
+      (String(locale || "").toLowerCase().startsWith("ar")
+        ? "صار خلل مؤقت، أعد المحاولة."
+        : "Temporary issue, please retry.");
 
     return {
       ok: true,
       reply,
       locale,
       workshops_count: VERIFIED_WORKSHOPS.length,
-      ...(debugMode ? { debug: { stage: "ok" } } : {}),
+      ...(debugMode ? { debug: { stage: "ok", audioType, speech_score: audioSmart.speech_score } } : {}),
     };
   } catch (error) {
     console.error("FixLens Fatal:", error?.message || error);
