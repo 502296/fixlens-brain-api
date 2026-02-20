@@ -1,0 +1,316 @@
+[
+  {
+    "pattern_id": "EN01",
+    "category": "engine_noise",
+    "signature": {
+      "sound_type": "tick",
+      "rpm_relation": "follows_rpm",
+      "temperature_relation": "cold_only",
+      "load_relation": "no_change",
+      "location_hint": "top_engine"
+    },
+    "likely_causes": [
+      { "id": "hydraulic_lifter_tick", "weight": 0.55, "why": "Fast light tick at cold start from top end often matches lifter bleed-down." },
+      { "id": "timing_chain_tensioner_rattle_light", "weight": 0.30, "why": "Cold start top-end rattle/tick can be weak tensioner until oil pressure builds." },
+      { "id": "injector_tick_normal", "weight": 0.15, "why": "Some injectors make rhythmic tick that tracks RPM, especially at idle." }
+    ],
+    "confirming_tests": [
+      "Start cold, listen for 30–60s: if it fades as it warms, lifters/tensioner moves up.",
+      "Lightly raise RPM to 1500: if tick stays same character but speeds up, top-end tick pattern fits."
+    ],
+    "red_flags": ["Tick becomes loud knock", "Oil pressure warning appears"],
+    "common_mistakes": ["Repeating 'check oil level' after the user already changed oil without deeper top-end checks."]
+  },
+  {
+    "pattern_id": "EN02",
+    "category": "engine_noise",
+    "signature": {
+      "sound_type": "rattle",
+      "rpm_relation": "follows_rpm",
+      "temperature_relation": "cold_only",
+      "load_relation": "no_change",
+      "location_hint": "top_engine"
+    },
+    "likely_causes": [
+      { "id": "timing_chain_tensioner_rattle", "weight": 0.60, "why": "Brief cold rattle that tracks RPM points to chain slack before full oil pressure." },
+      { "id": "vvt_cam_phaser_rattle", "weight": 0.25, "why": "Some phasers rattle on start when oil control is delayed." },
+      { "id": "heat_shield_rattle", "weight": 0.15, "why": "Thin metal rattle at start can be loose shield, often changes with RPM." }
+    ],
+    "confirming_tests": [
+      "Cold start: does rattle disappear within 1–3 seconds? Strong chain/tensioner clue.",
+      "Light tap on suspected shields (engine off/cool): if it buzzes, it’s external."
+    ],
+    "red_flags": ["Rattle persists warm", "Misfire + rattle"],
+    "common_mistakes": ["Calling it rod knock without checking cold-only behavior."]
+  },
+  {
+    "pattern_id": "EN03",
+    "category": "engine_noise",
+    "signature": {
+      "sound_type": "knock",
+      "rpm_relation": "follows_rpm",
+      "temperature_relation": "both",
+      "load_relation": "worse_under_load",
+      "location_hint": "bottom_engine"
+    },
+    "likely_causes": [
+      { "id": "rod_bearing_knock", "weight": 0.65, "why": "Deep knock that gets louder under load and follows RPM is classic rod bearing." },
+      { "id": "detonation_ping", "weight": 0.20, "why": "Knock under load can be spark knock; usually higher-pitch, not deep." },
+      { "id": "crank_pulley_failure", "weight": 0.15, "why": "Failing harmonic balancer can knock/clunk and worsen under load changes." }
+    ],
+    "confirming_tests": [
+      "Hold RPM ~2000 in park: if deep knock still follows RPM, bottom-end is likely.",
+      "If safe: very light throttle test—if knock rises with load, rod-bearing stays top."
+    ],
+    "red_flags": ["Oil pressure light", "Metal flakes in oil"],
+    "common_mistakes": ["Treating deep knock as 'needs oil change'."]
+  },
+  {
+    "pattern_id": "EN04",
+    "category": "engine_noise",
+    "signature": {
+      "sound_type": "knock",
+      "rpm_relation": "follows_rpm",
+      "temperature_relation": "both",
+      "load_relation": "worse_under_load",
+      "location_hint": "top_engine"
+    },
+    "likely_causes": [
+      { "id": "detonation_ping", "weight": 0.50, "why": "Higher-pitch knock/ping under acceleration often indicates detonation." },
+      { "id": "vvt_issue", "weight": 0.30, "why": "VVT faults can cause abnormal combustion timing under load." },
+      { "id": "spark_plug_issue", "weight": 0.20, "why": "Wrong gap/heat range can promote ping under load." }
+    ],
+    "confirming_tests": [
+      "Does it happen only on acceleration and disappear when you lift? That’s ping behavior.",
+      "Try higher-octane once: if it improves, detonation climbs to #1."
+    ],
+    "red_flags": ["Severe loss of power", "Overheating"],
+    "common_mistakes": ["Calling ping a rod knock without listening to pitch + load behavior."]
+  },
+  {
+    "pattern_id": "EN05",
+    "category": "engine_noise",
+    "signature": {
+      "sound_type": "whine",
+      "rpm_relation": "follows_rpm",
+      "temperature_relation": "both",
+      "load_relation": "no_change",
+      "location_hint": "front_accessory"
+    },
+    "likely_causes": [
+      { "id": "serpentine_belt_idler_bearing", "weight": 0.45, "why": "Steady whine at the front can be idler/pulley bearing." },
+      { "id": "alternator_bearing", "weight": 0.35, "why": "Alternator bearings often whine with RPM." },
+      { "id": "power_steering_pump_whine", "weight": 0.20, "why": "PS pump whines, often changes when steering is turned." }
+    ],
+    "confirming_tests": [
+      "Turn steering wheel slightly at idle: if whine changes, PS pump moves up.",
+      "Listen near alternator/pulleys: strongest point helps isolate."
+    ],
+    "red_flags": ["Belt smell from user text", "Charging light"],
+    "common_mistakes": ["Blaming transmission for a front-accessory whine."]
+  },
+  {
+    "pattern_id": "EN06",
+    "category": "engine_noise",
+    "signature": {
+      "sound_type": "squeal",
+      "rpm_relation": "follows_rpm",
+      "temperature_relation": "cold_only",
+      "load_relation": "no_change",
+      "location_hint": "front_accessory"
+    },
+    "likely_causes": [
+      { "id": "serpentine_belt_slip", "weight": 0.60, "why": "Cold squeal that fades is classic belt slip." },
+      { "id": "belt_tensioner_weak", "weight": 0.25, "why": "Weak tensioner lets belt slip on cold start." },
+      { "id": "pulley_bearing_squeal", "weight": 0.15, "why": "A dry bearing can squeal, often persists longer." }
+    ],
+    "confirming_tests": [
+      "Cold start: squeal for 1–10 seconds then gone = belt slip pattern.",
+      "Briefly turn on headlights/defrost: if squeal increases, belt load slip."
+    ],
+    "red_flags": ["Squeal persists warm", "Visible belt cracks if image shows it"],
+    "common_mistakes": ["Calling squeal 'engine internal'."]
+  },
+  {
+    "pattern_id": "EN07",
+    "category": "engine_noise",
+    "signature": {
+      "sound_type": "grind",
+      "rpm_relation": "follows_rpm",
+      "temperature_relation": "both",
+      "load_relation": "no_change",
+      "location_hint": "front_accessory"
+    },
+    "likely_causes": [
+      { "id": "ac_compressor_bearing", "weight": 0.45, "why": "Grinding from front can be A/C compressor clutch/bearing." },
+      { "id": "idler_bearing_failure", "weight": 0.35, "why": "A failing pulley bearing can grind, not just whine." },
+      { "id": "alternator_bearing_failure", "weight": 0.20, "why": "Alternator can grind when bearing is far gone." }
+    ],
+    "confirming_tests": [
+      "Toggle A/C on/off: if grind changes, compressor/clutch climbs.",
+      "If safe: listen with hood open—grinding is usually localized."
+    ],
+    "red_flags": ["Belt damage", "Smoke (only if user states)"],
+    "common_mistakes": ["Assuming brakes when noise is clearly at idle in park."]
+  },
+  {
+    "pattern_id": "EN08",
+    "category": "engine_noise",
+    "signature": {
+      "sound_type": "rattle",
+      "rpm_relation": "follows_speed",
+      "temperature_relation": "both",
+      "load_relation": "worse_coasting",
+      "location_hint": "rear"
+    },
+    "likely_causes": [
+      { "id": "exhaust_heat_shield_rattle", "weight": 0.55, "why": "Rattle on coast at speed often comes from exhaust shields/hangers." },
+      { "id": "loose_exhaust_hanger", "weight": 0.25, "why": "Loose hanger makes rattle especially over bumps/coast." },
+      { "id": "rear_suspension_link_rattle", "weight": 0.20, "why": "Rear links can rattle more when load shifts off throttle." }
+    ],
+    "confirming_tests": [
+      "Does rattle appear more when you lift off gas? Exhaust/hanger common.",
+      "Lightly tap exhaust (cool) to reproduce buzz."
+    ],
+    "red_flags": ["Rattle becomes thump/dragging"],
+    "common_mistakes": ["Calling it transmission without checking exhaust hardware."]
+  },
+  {
+    "pattern_id": "EN09",
+    "category": "engine_noise",
+    "signature": {
+      "sound_type": "hiss",
+      "rpm_relation": "follows_rpm",
+      "temperature_relation": "both",
+      "load_relation": "worse_under_load",
+      "location_hint": "top_engine"
+    },
+    "likely_causes": [
+      { "id": "intake_vacuum_leak", "weight": 0.50, "why": "Hiss that changes with throttle often indicates vacuum leak." },
+      { "id": "boost_leak_turbo", "weight": 0.30, "why": "On turbo cars, hiss under load can be boost leak." },
+      { "id": "pcv_valve_issue", "weight": 0.20, "why": "PCV faults can hiss and cause idle issues." }
+    ],
+    "confirming_tests": [
+      "At idle: does hiss change when you lightly blip throttle? Vacuum/boost path.",
+      "Look for rough idle + lean codes if user mentions P0171."
+    ],
+    "red_flags": ["Severe misfire", "Stalling at idle"],
+    "common_mistakes": ["Inventing smoke/smell from audio only."]
+  },
+  {
+    "pattern_id": "EN10",
+    "category": "engine_noise",
+    "signature": {
+      "sound_type": "rattle",
+      "rpm_relation": "follows_rpm",
+      "temperature_relation": "both",
+      "load_relation": "worse_under_load",
+      "location_hint": "front_accessory"
+    },
+    "likely_causes": [
+      { "id": "loose_pulley_or_tensioner", "weight": 0.50, "why": "Accessory rattle that worsens with RPM/load points to tensioner/pulley play." },
+      { "id": "ac_compressor_clutch_rattle", "weight": 0.30, "why": "A/C clutch can rattle under certain loads." },
+      { "id": "harmonic_balancer_wobble", "weight": 0.20, "why": "Balancer wobble can make rattle/clunk at the front." }
+    ],
+    "confirming_tests": [
+      "A/C on/off: does rattle change? Clutch/compressor.",
+      "Visual (if image): wobble at crank pulley suggests balancer."
+    ],
+    "red_flags": ["Belt walking off pulley"],
+    "common_mistakes": ["Calling it internal engine knock without front-of-engine checks."]
+  },
+
+  { "pattern_id":"BR01","category":"brakes","signature":{"sound_type":"squeal","rpm_relation":"follows_speed","temperature_relation":"both","load_relation":"no_change","location_hint":"wheel_area"},"likely_causes":[{"id":"brake_pad_wear_indicator","weight":0.55,"why":"High-pitch squeal with speed, especially light braking, often wear indicator."},{"id":"glazed_pads_or_rotors","weight":0.25,"why":"Glazed friction surfaces squeal and feel less bite."},{"id":"dust_or_debris","weight":0.20,"why":"Small debris between pad/rotor can squeal intermittently."}],"confirming_tests":["Light brake at 20–30 mph: if squeal changes instantly, brake-related.","If it squeals even without braking, check dust shield contact."],"red_flags":["Grinding noise","Brake pedal vibration severe"],"common_mistakes":["Blaming wheel bearing when squeal changes with brake pedal."]},
+  { "pattern_id":"BR02","category":"brakes","signature":{"sound_type":"grind","rpm_relation":"follows_speed","temperature_relation":"both","load_relation":"no_change","location_hint":"wheel_area"},"likely_causes":[{"id":"pads_to_metal_grind","weight":0.65,"why":"Grinding with speed often means pad material is gone and metal is contacting rotor."},{"id":"stuck_caliper","weight":0.20,"why":"Stuck caliper can grind and overheat one wheel."},{"id":"dust_shield_contact","weight":0.15,"why":"Bent dust shield can scrape/grind consistently."}],"confirming_tests":["Does grinding get worse when braking? Pads-to-metal climbs.","Careful: after short drive, is one wheel much hotter? Stuck caliper clue."],"red_flags":["Brake fade","Burning smell (only if user states)"],"common_mistakes":["Telling user to keep driving with grinding."]},
+  { "pattern_id":"BR03","category":"brakes","signature":{"sound_type":"rattle","rpm_relation":"follows_speed","temperature_relation":"both","load_relation":"worse_coasting","location_hint":"wheel_area"},"likely_causes":[{"id":"loose_brake_hardware","weight":0.50,"why":"Rattle over bumps/coast can be loose pad clips/hardware."},{"id":"worn_sway_bar_link","weight":0.30,"why":"Front link rattle is common and sounds like brake rattle."},{"id":"loose_caliper_bolt","weight":0.20,"why":"Loose caliper bolt can rattle and is safety-critical."}],"confirming_tests":["Light brake touch: if rattle stops instantly, brake hardware climbs.","Bumps test at low speed: suspension link may rattle regardless of brake."],"red_flags":["Rattle + pulling while braking"],"common_mistakes":["Ignoring possible loose caliper bolt."]},
+
+  { "pattern_id":"ST01","category":"steering","signature":{"sound_type":"clunk","rpm_relation":"follows_speed","temperature_relation":"both","load_relation":"no_change","location_hint":"wheel_area"},"likely_causes":[{"id":"cv_axle_click_clunk_turning","weight":0.45,"why":"Click/clunk on turns often outer CV joint."},{"id":"tie_rod_end_play","weight":0.30,"why":"Tie rod play can clunk over bumps and steering input."},{"id":"strut_mount_clunk","weight":0.25,"why":"Strut mount can clunk when turning or over bumps."}],"confirming_tests":["Full lock turn in parking lot: rhythmic clicking = CV joint.","Steering left/right at standstill: clunk in column area suggests tie rod/strut mount."],"red_flags":["Steering feels loose","Pulling hard to one side"],"common_mistakes":["Calling it engine noise without turn-related testing."]},
+
+  { "pattern_id":"EL01","category":"electrical","signature":{"sound_type":"whine","rpm_relation":"follows_rpm","temperature_relation":"both","load_relation":"no_change","location_hint":"front_accessory"},"likely_causes":[{"id":"alternator_whine_bearing_or_diode","weight":0.55,"why":"Whine tracking RPM can be alternator bearing or diode noise."},{"id":"belt_drive_whine","weight":0.25,"why":"Accessory belt system can whine under certain tension."},{"id":"power_steering_whine","weight":0.20,"why":"Pump whine often changes with steering input."}],"confirming_tests":["Turn on electrical load (lights, rear defrost): alternator-related whine may change.","Turn steering slightly: PS whine changes."],"red_flags":["Battery light","Voltage warnings"],"common_mistakes":["Ignoring alternator when whine follows RPM closely."]},
+
+  { "pattern_id":"CO01","category":"cooling","signature":{"sound_type":"whine","rpm_relation":"follows_rpm","temperature_relation":"warm_only","load_relation":"no_change","location_hint":"front_accessory"},"likely_causes":[{"id":"water_pump_bearing", "weight":0.55,"why":"Warm-only front whine can be water pump bearing when hot."},{"id":"cooling_fan_contact","weight":0.25,"why":"Fan blade contact or shroud rub can sound like whine."},{"id":"idler_bearing", "weight":0.20,"why":"Pulley bearings can get noisier when hot."}],"confirming_tests":["Listen right after warm-up with hood open: strongest location helps isolate.","If the noise appears with fan on, suspect fan/shroud contact."],"red_flags":["Overheating","Coolant loss (only if user states)"],"common_mistakes":["Assuming internal engine when location is clearly front accessory."]},
+
+  { "pattern_id":"TR01","category":"transmission","signature":{"sound_type":"whine","rpm_relation":"follows_speed","temperature_relation":"both","load_relation":"worse_under_load","location_hint":"rear"},"likely_causes":[{"id":"differential_whine", "weight":0.55,"why":"Whine that follows speed and worsens under load often differential."},{"id":"wheel_bearing_hum", "weight":0.30,"why":"Wheel bearing hum/whine follows speed and changes with lane load shift."},{"id":"tire_cupping_noise", "weight":0.15,"why":"Cupped tires can whine with speed, often changes with road surface."}],"confirming_tests":["Gentle lane change: if noise changes when loading left/right, wheel bearing climbs.","If it only appears on throttle and fades on coast, differential climbs."],"red_flags":["Vibration + severe whine","Fluid leak (only if user states)"],"common_mistakes":["Blaming engine because driver hears it 'from front' while it is speed-related."]},
+
+  { "pattern_id":"SU01","category":"suspension","signature":{"sound_type":"clunk","rpm_relation":"follows_speed","temperature_relation":"both","load_relation":"no_change","location_hint":"wheel_area"},"likely_causes":[{"id":"worn_sway_bar_link", "weight":0.50,"why":"Clunk over bumps at low speed is classic sway bar link."},{"id":"control_arm_bushing", "weight":0.30,"why":"Worn bushings clunk under load transfer and braking."},{"id":"ball_joint_play", "weight":0.20,"why":"Ball joint play can clunk and is safety-critical."}],"confirming_tests":["Low-speed bumps: if clunk repeats on small bumps, link/bushing likely.","Light brake + bump: if clunk changes, control arm bushing climbs."],"red_flags":["Steering wander","Tire wear abnormal"],"common_mistakes":["Calling it brake issue when it happens with no brake input."]},
+
+  { "pattern_id":"EN11","category":"engine_noise","signature":{"sound_type":"tap","rpm_relation":"follows_rpm","temperature_relation":"both","load_relation":"no_change","location_hint":"top_engine"},"likely_causes":[{"id":"valve_train_tap", "weight":0.55,"why":"Sharp tap from top end tracking RPM fits valve train."},{"id":"injector_tick_normal","weight":0.25,"why":"Injectors can sound like tapping, especially direct injection."},{"id":"exhaust_leak_tap","weight":0.20,"why":"Small manifold leak can tick/tap near top side and increase with RPM."}],"confirming_tests":["Cold idle: exhaust leak tick often louder near manifold and may lessen warm.","Quick RPM blip: exhaust tick becomes faster and sharper."],"red_flags":["Loss of power","Exhaust smell (only if user states)"],"common_mistakes":["Calling injector tick a failure without any symptom change."]},
+
+  { "pattern_id":"EN12","category":"engine_noise","signature":{"sound_type":"hiss","rpm_relation":"follows_rpm","temperature_relation":"both","load_relation":"no_change","location_hint":"front_accessory"},"likely_causes":[{"id":"vacuum_hose_leak", "weight":0.55,"why":"Steady hiss at idle often vacuum hose leak."},{"id":"intake_gasket_leak","weight":0.25,"why":"Intake gasket leak can hiss and cause lean idle."},{"id":"brake_booster_leak", "weight":0.20,"why":"Booster leak can hiss and affect braking feel."}],"confirming_tests":["Does idle change when you press brake? Booster leak climbs.","If user mentions P0171/P0174, vacuum leak climbs."],"red_flags":["Hard brake pedal","Stalling"],"common_mistakes":["Inventing smoke/smell from a hiss."]},
+
+  { "pattern_id":"EN13","category":"engine_noise","signature":{"sound_type":"rattle","rpm_relation":"follows_rpm","temperature_relation":"warm_only","load_relation":"worse_under_load","location_hint":"top_engine"},"likely_causes":[{"id":"vvt_cam_phaser_rattle", "weight":0.50,"why":"Warm rattle under load can be VVT phaser/control issue."},{"id":"spark_knock_ping", "weight":0.30,"why":"Warm under-load rattle-like ping can be detonation."},{"id":"heat_shield_rattle", "weight":0.20,"why":"Warm expansion can make shields rattle more."}],"confirming_tests":["If it happens only under acceleration and stops on lift, ping/phaser rises.","Try higher octane once: improvement suggests detonation."],"red_flags":["Check engine flashing","Severe power drop"],"common_mistakes":["Confusing warm-only rattle with cold chain tensioner."]},
+
+  { "pattern_id":"EN14","category":"engine_noise","signature":{"sound_type":"squeal","rpm_relation":"follows_rpm","temperature_relation":"both","load_relation":"no_change","location_hint":"front_accessory"},"likely_causes":[{"id":"pulley_bearing_squeal", "weight":0.45,"why":"Continuous squeal can be bearing rather than belt slip."},{"id":"belt_misalignment", "weight":0.35,"why":"Misaligned pulley makes belt squeal persistently."},{"id":"ac_clutch_squeal", "weight":0.20,"why":"A/C clutch bearing can squeal especially with A/C on."}],"confirming_tests":["A/C on/off: change suggests clutch bearing.","If squeal persists warm and steady, bearing/misalignment rises."],"red_flags":["Belt fraying","Smoke (only if user states)"],"common_mistakes":["Assuming cold-only belt slip when squeal is constant."]},
+
+  { "pattern_id":"EN15","category":"engine_noise","signature":{"sound_type":"knock","rpm_relation":"follows_rpm","temperature_relation":"cold_only","load_relation":"worse_under_load","location_hint":"top_engine"},"likely_causes":[{"id":"piston_slap", "weight":0.45,"why":"Cold knock that fades warm can be piston slap on some engines."},{"id":"timing_chain_slack", "weight":0.35,"why":"Cold chain slack can sound like knock/rattle before oil pressure."},{"id":"detonation_ping", "weight":0.20,"why":"If only under acceleration, consider ping (usually higher pitch)." }],"confirming_tests":["Does it fade as engine warms? piston slap/tensioner rises.","Is it only on throttle? ping rises."],"red_flags":["Knock stays loud warm","Oil pressure light"],"common_mistakes":["Calling piston slap 'bad oil' after oil was already changed."]},
+
+  { "pattern_id":"EN16","category":"engine_noise","signature":{"sound_type":"rattle","rpm_relation":"follows_speed","temperature_relation":"both","load_relation":"no_change","location_hint":"wheel_area"},"likely_causes":[{"id":"loose_wheel_well_liner", "weight":0.45,"why":"Speed-related rattle can be liner or undertray flapping."},{"id":"loose_brake_dust_shield", "weight":0.35,"why":"Dust shield can rattle/scrape with speed and bumps."},{"id":"loose_caliper_hardware", "weight":0.20,"why":"Hardware rattle often changes when braking lightly."}],"confirming_tests":["Does rattle change when lightly braking? brake hardware rises.","Check liner fasteners if user recently hit pothole."],"red_flags":["Rattle becomes rubbing/grinding"],"common_mistakes":["Blaming engine when rpm does not matter."]},
+
+  { "pattern_id":"EN17","category":"engine_noise","signature":{"sound_type":"whine","rpm_relation":"follows_speed","temperature_relation":"both","load_relation":"no_change","location_hint":"wheel_area"},"likely_causes":[{"id":"wheel_bearing_hum", "weight":0.60,"why":"Whine/hum that follows speed and changes with left/right load is wheel bearing."},{"id":"tire_cupping_noise", "weight":0.25,"why":"Cupped tires roar/whine with speed and road surface."},{"id":"differential_whine", "weight":0.15,"why":"Diff whine often changes with throttle more than lane shift."}],"confirming_tests":["Gentle lane change: noise changes with side-load = bearing.","Different pavement: tire noise often changes."],"red_flags":["Heat at one hub","Play in wheel"],"common_mistakes":["Calling wheel bearing an engine problem because driver hears it up front."]},
+
+  { "pattern_id":"EN18","category":"engine_noise","signature":{"sound_type":"hiss","rpm_relation":"unknown","temperature_relation":"both","load_relation":"no_change","location_hint":"front_accessory"},"likely_causes":[{"id":"ac_refrigerant_hiss_normal", "weight":0.40,"why":"Brief hiss after A/C cycles can be normal expansion."},{"id":"vacuum_leak_small", "weight":0.35,"why":"A small vacuum leak can hiss at idle."},{"id":"coolant_system_pressure_hiss", "weight":0.25,"why":"Cooling system can hiss if pressure releasing (only if user reports overheating/coolant smell)." }],"confirming_tests":["Does hiss correlate with A/C turning on/off? If yes, A/C cycle rises.","If idle rough + lean code, vacuum leak rises."],"red_flags":["Overheating (if user says)","Coolant loss (if user says)"],"common_mistakes":["Inventing overheating from hiss alone."]},
+
+  { "pattern_id":"EN19","category":"engine_noise","signature":{"sound_type":"rattle","rpm_relation":"follows_rpm","temperature_relation":"both","load_relation":"worse_coasting","location_hint":"top_engine"},"likely_causes":[{"id":"timing_chain_guides_worn", "weight":0.50,"why":"Rattle on decel can occur when chain tension changes and guides are worn."},{"id":"exhaust_heat_shield_rattle", "weight":0.30,"why":"Decel vibration can excite loose heat shields."},{"id":"internal_engine_mount_issue", "weight":0.20,"why":"Mount slack can clunk/rattle on load transitions."}],"confirming_tests":["If rattle is strongest when lifting off throttle, chain guides/exhaust rise.","If it happens over bumps too, mounts/hardware rise."],"red_flags":["Rattle becomes constant and loud"],"common_mistakes":["Ignoring decel-specific behavior."]},
+
+  { "pattern_id":"EN20","category":"engine_noise","signature":{"sound_type":"tap","rpm_relation":"follows_rpm","temperature_relation":"warm_only","load_relation":"no_change","location_hint":"top_engine"},"likely_causes":[{"id":"exhaust_manifold_leak_warm", "weight":0.45,"why":"Warm tick/tap can appear as metal expands around a leak."},{"id":"valve_train_wear", "weight":0.35,"why":"Some taps get clearer warm when oil thins."},{"id":"injector_tick_normal", "weight":0.20,"why":"Injector tick stays consistent; if unchanged warm/cold, it may be normal."}],"confirming_tests":["Listen near manifold area (if safe): sharper tick near leak.","If tap changes with load slightly, leak can change with pressure."],"red_flags":["Power loss","Exhaust smell (if user says)"],"common_mistakes":["Calling it lifter tick when it starts warm only."]},
+
+  { "pattern_id":"EN21","category":"engine_noise","signature":{"sound_type":"knock","rpm_relation":"unknown","temperature_relation":"both","load_relation":"unknown","location_hint":"unknown"},"likely_causes":[{"id":"needs_more_info", "weight":0.50,"why":"Without RPM/speed/load relation, a 'knock' is ambiguous."},{"id":"detonation_ping", "weight":0.30,"why":"If it is only on acceleration, ping is common."},{"id":"rod_bearing_knock", "weight":0.20,"why":"If deep and load-related, rod knock is serious."}],"confirming_tests":["Ask: does it change with RPM or with road speed? That separates engine vs wheel/drivetrain.","Ask: does it worsen under acceleration or stay same?"],"red_flags":["Oil pressure light","Knock gets louder quickly"],"common_mistakes":["Jumping to rod knock without relation tests."]},
+
+  { "pattern_id":"EN22","category":"engine_noise","signature":{"sound_type":"rattle","rpm_relation":"unknown","temperature_relation":"both","load_relation":"unknown","location_hint":"unknown"},"likely_causes":[{"id":"heat_shield_rattle", "weight":0.45,"why":"Most random rattles are external heat shields or loose hardware."},{"id":"loose_undertray", "weight":0.30,"why":"Undertrays/liners rattle with speed/wind."},{"id":"timing_chain_tensioner_rattle", "weight":0.25,"why":"If clearly RPM-related especially at cold start, chain rises."}],"confirming_tests":["Ask: does it change with RPM in park? If yes, engine-side.","Tap shields/undertray (cool) to reproduce buzz."],"red_flags":["Rattle + misfire","Rattle becomes knock"],"common_mistakes":["Over-diagnosing internal engine from vague rattle."]},
+
+  { "pattern_id":"EN23","category":"engine_noise","signature":{"sound_type":"whine","rpm_relation":"follows_rpm","temperature_relation":"both","load_relation":"worse_under_load","location_hint":"front_accessory"},"likely_causes":[{"id":"supercharger_whine_normal", "weight":0.35,"why":"Some forced induction systems whine under load."},{"id":"power_steering_pump_whine", "weight":0.35,"why":"Whine can increase with steering load and RPM."},{"id":"alternator_load_whine", "weight":0.30,"why":"Under electrical load alternator may whine more."}],"confirming_tests":["Does it change when turning steering? PS pump rises.","Does it change when turning on big electrical load? alternator rises."],"red_flags":["Steering heavy","Battery light"],"common_mistakes":["Calling all whine 'bad transmission'."]},
+
+  { "pattern_id":"EN24","category":"engine_noise","signature":{"sound_type":"squeal","rpm_relation":"follows_speed","temperature_relation":"both","load_relation":"no_change","location_hint":"wheel_area"},"likely_causes":[{"id":"brake_dust_shield_scrape", "weight":0.45,"why":"Continuous squeal/scrape with speed can be dust shield touching rotor."},{"id":"small_stone_in_rotor", "weight":0.35,"why":"A stone can cause squeal that follows speed."},{"id":"wheel_bearing_noise", "weight":0.20,"why":"Bearings more often hum/whine than squeal, but can squeal when failing."}],"confirming_tests":["If squeal changes immediately with light brake, suspect brakes/shield/stone.","Reverse slowly: stone noise sometimes changes."],"red_flags":["Squeal turns into grinding"],"common_mistakes":["Assuming belt squeal when it only happens while rolling."]},
+
+  { "pattern_id":"EN25","category":"engine_noise","signature":{"sound_type":"grind","rpm_relation":"follows_rpm","temperature_relation":"both","load_relation":"worse_under_load","location_hint":"top_engine"},"likely_causes":[{"id":"valvetrain_severe", "weight":0.40,"why":"A harsh grind-like top noise can indicate severe valvetrain issue (rare but serious)."},{"id":"timing_component_contact", "weight":0.35,"why":"Timing components can grind/rub if guide/tensioner fails."},{"id":"accessory_bearing_grind", "weight":0.25,"why":"Accessory bearing grind can sound severe near top/front."}],"confirming_tests":["If grind is present at idle in park, wheel/brake issues drop down.","If A/C on/off changes it, accessory path rises."],"red_flags":["Do not drive if grinding is loud and constant","Oil pressure light"],"common_mistakes":["Treating grinding as harmless 'normal engine sound'."]},
+
+  { "pattern_id":"EN26","category":"engine_noise","signature":{"sound_type":"tick","rpm_relation":"follows_rpm","temperature_relation":"both","load_relation":"no_change","location_hint":"top_engine"},"likely_causes":[{"id":"injector_tick_normal", "weight":0.45,"why":"Direct injection engines often have noticeable injector tick that tracks RPM."},{"id":"valve_train_light_tick", "weight":0.35,"why":"Light valve tick can be present both cold and warm."},{"id":"exhaust_leak_tick", "weight":0.20,"why":"Small leak can tick especially on cold but may persist."}],"confirming_tests":["If no performance issues and tick is light/steady, injector tick may be normal.","If tick is loudest near manifold and changes warm, leak rises."],"red_flags":["Misfire","Loss of power"],"common_mistakes":["Over-diagnosing normal injector tick."]},
+
+  { "pattern_id":"EN27","category":"engine_noise","signature":{"sound_type":"rattle","rpm_relation":"follows_speed","temperature_relation":"both","load_relation":"no_change","location_hint":"front_accessory"},"likely_causes":[{"id":"loose_undertray", "weight":0.50,"why":"Wind-speed rattle can be undertray/liner flapping."},{"id":"loose_bumper_bracket", "weight":0.25,"why":"Front brackets can rattle at certain speeds."},{"id":"fan_shroud_contact", "weight":0.25,"why":"Some fan/shroud contacts resonate with vehicle speed airflow."}],"confirming_tests":["Does it happen only above a certain speed and not change with RPM in neutral? undertray rises.","Visual check: missing clips/screws."],"red_flags":["Part dragging on road"],"common_mistakes":["Chasing engine causes when RPM doesn’t matter."]},
+
+  { "pattern_id":"EN28","category":"engine_noise","signature":{"sound_type":"knock","rpm_relation":"follows_rpm","temperature_relation":"warm_only","load_relation":"worse_under_load","location_hint":"top_engine"},"likely_causes":[{"id":"detonation_ping", "weight":0.55,"why":"Warm under-load knock is often ping/knock from combustion."},{"id":"egr_or_lean_condition", "weight":0.25,"why":"Lean mix can increase knock under load."},{"id":"vvt_issue", "weight":0.20,"why":"Timing control issues can create knock under load."}],"confirming_tests":["Higher octane once: if it improves, detonation rises.","Ask if it happens only uphill/accel."],"red_flags":["Flashing check engine","Overheating"],"common_mistakes":["Calling warm ping a bottom-end knock."]},
+
+  { "pattern_id":"EN29","category":"engine_noise","signature":{"sound_type":"tap","rpm_relation":"follows_speed","temperature_relation":"both","load_relation":"no_change","location_hint":"wheel_area"},"likely_causes":[{"id":"stone_in_tire_tread", "weight":0.45,"why":"Rhythmic tap that follows speed can be stone stuck in tread."},{"id":"wheel_bearing_damage", "weight":0.30,"why":"Severe bearing can create cyclical noise with speed."},{"id":"brake_shield_contact", "weight":0.25,"why":"Shield can tap lightly once per wheel rotation."}],"confirming_tests":["Inspect tire tread quickly: stone tap is common and easy.","Light brake: if tap changes, brake contact rises."],"red_flags":["Tap becomes grind"],"common_mistakes":["Assuming engine because sound is 'in cabin'."]},
+
+  { "pattern_id":"EN30","category":"engine_noise","signature":{"sound_type":"hiss","rpm_relation":"follows_speed","temperature_relation":"both","load_relation":"worse_under_load","location_hint":"front_accessory"},"likely_causes":[{"id":"turbo_boost_leak", "weight":0.55,"why":"Hiss under acceleration/speed can be boost leak on turbo."},{"id":"intake_air_leak", "weight":0.25,"why":"Air leak can hiss when airflow increases."},{"id":"wind_noise_external", "weight":0.20,"why":"If only at highway speed with no RPM link, could be exterior wind."}],"confirming_tests":["Ask: does it happen only when accelerating? boost leak rises.","If it happens at steady speed no throttle, wind noise rises."],"red_flags":["Power loss","Check engine"],"common_mistakes":["Inventing turbo when car may not be turbo (ask 1 question if needed)."]},
+
+  { "pattern_id":"EN31","category":"engine_noise","signature":{"sound_type":"rattle","rpm_relation":"follows_rpm","temperature_relation":"both","load_relation":"worse_under_load","location_hint":"bottom_engine"},"likely_causes":[{"id":"preignition_detonation", "weight":0.40,"why":"Rattle under load can be combustion knock."},{"id":"rod_bearing_early", "weight":0.35,"why":"Early rod knock can be subtle but load-related."},{"id":"engine_mount_clunk", "weight":0.25,"why":"Mounts can clunk on load changes and mimic knock."}],"confirming_tests":["If sound appears exactly with throttle tip-in and disappears on lift, detonation/mounts rise.","If it follows RPM even in park under light load, rod path rises."],"red_flags":["Oil pressure light","Knock increasing fast"],"common_mistakes":["Ignoring mounts/load-transition clues."]},
+
+  { "pattern_id":"EN32","category":"engine_noise","signature":{"sound_type":"whine","rpm_relation":"follows_rpm","temperature_relation":"cold_only","load_relation":"no_change","location_hint":"front_accessory"},"likely_causes":[{"id":"power_steering_fluid_low", "weight":0.45,"why":"Cold whine can be low PS fluid/air in system (if hydraulic PS)." },{"id":"belt_slip_light", "weight":0.35,"why":"Cold belt slip can sound like whine."},{"id":"idler_bearing", "weight":0.20,"why":"Bearing can whine more when cold."}],"confirming_tests":["Turn steering slightly at idle: change suggests PS system.","If user says electric power steering, PS fluid cause drops."],"red_flags":["Steering heavy"],"common_mistakes":["Assuming PS fluid on cars with EPS (ask one question if needed)."]},
+
+  { "pattern_id":"EN33","category":"engine_noise","signature":{"sound_type":"rattle","rpm_relation":"follows_rpm","temperature_relation":"both","load_relation":"no_change","location_hint":"rear"},"likely_causes":[{"id":"exhaust_resonator_rattle", "weight":0.50,"why":"Rattle from rear at certain RPM can be internal exhaust baffle."},{"id":"loose_exhaust_hanger", "weight":0.30,"why":"Loose hanger rattles at specific resonance."},{"id":"spare_tire_jack_rattle", "weight":0.20,"why":"Loose jack/spare compartment can rattle and mimic exhaust."}],"confirming_tests":["Hold RPM at the range where it rattles while parked: if it happens, it’s exhaust/body, not wheels.","Check trunk/spare well for loose tools."],"red_flags":["Exhaust dragging"],"common_mistakes":["Chasing drivetrain when rattle happens in park at certain RPM."]},
+
+  { "pattern_id":"EN34","category":"engine_noise","signature":{"sound_type":"tick","rpm_relation":"follows_rpm","temperature_relation":"both","load_relation":"worse_under_load","location_hint":"top_engine"},"likely_causes":[{"id":"exhaust_leak_tick_under_load", "weight":0.45,"why":"Exhaust leak can tick louder under load as pressure rises."},{"id":"spark_knock_ping", "weight":0.30,"why":"Ping can sound like fast tick under load."},{"id":"valve_train_tick", "weight":0.25,"why":"Valvetrain noise can increase slightly with load/RPM."}],"confirming_tests":["If tick is loudest during acceleration and quiet on coast, exhaust leak/ping rise.","Higher octane test separates ping."],"red_flags":["Power loss","Exhaust smell (if user says)"],"common_mistakes":["Calling under-load tick 'normal injector'."]},
+
+  { "pattern_id":"EN35","category":"engine_noise","signature":{"sound_type":"grind","rpm_relation":"follows_speed","temperature_relation":"both","load_relation":"no_change","location_hint":"wheel_area"},"likely_causes":[{"id":"dust_shield_contact", "weight":0.45,"why":"Grinding that follows speed can be shield rubbing rotor."},{"id":"pads_to_metal_grind", "weight":0.35,"why":"Brake pads worn to metal grind with speed and braking."},{"id":"wheel_bearing_failure_severe", "weight":0.20,"why":"Severe bearing can grind, often with vibration."}],"confirming_tests":["Does it worsen when braking? pads-to-metal climbs.","If it changes with steering load shift, bearing climbs."],"red_flags":["Do not drive if grinding is strong and braking affected"],"common_mistakes":["Treating speed-related grind as engine issue."]},
+
+  { "pattern_id":"EN36","category":"engine_noise","signature":{"sound_type":"squeal","rpm_relation":"follows_speed","temperature_relation":"both","load_relation":"no_change","location_hint":"rear"},"likely_causes":[{"id":"rear_brake_squeal", "weight":0.45,"why":"Rear brake squeal follows speed and changes with braking."},{"id":"parking_brake_drag", "weight":0.35,"why":"Dragging parking brake can squeal/scrape at speed."},{"id":"stone_in_backing_plate", "weight":0.20,"why":"Stone can squeal near rear brakes."}],"confirming_tests":["Light brake: if squeal changes, brakes/parking brake rises.","Check if parking brake fully releases."],"red_flags":["Heat at rear wheel","Smell (if user says)"],"common_mistakes":["Assuming differential when squeal changes with brake pedal."]},
+
+  { "pattern_id":"EN37","category":"engine_noise","signature":{"sound_type":"rattle","rpm_relation":"follows_speed","temperature_relation":"both","load_relation":"worse_under_load","location_hint":"rear"},"likely_causes":[{"id":"driveshaft_u_joint_play", "weight":0.45,"why":"Rattle/clunk under load changes can be U-joint play (RWD)." },{"id":"differential_backlash", "weight":0.35,"why":"Backlash can clunk/rattle on throttle on/off."},{"id":"exhaust_hanger_rattle", "weight":0.20,"why":"Load shift can move exhaust and cause rattle."}],"confirming_tests":["Does it clunk when shifting D↔R? driveline play rises.","If it happens in FWD car, U-joint cause drops."],"red_flags":["Strong vibration at speed"],"common_mistakes":["Ignoring drivetrain layout (FWD vs RWD) — ask 1 question if needed."]},
+
+  { "pattern_id":"EN38","category":"engine_noise","signature":{"sound_type":"whine","rpm_relation":"follows_speed","temperature_relation":"warm_only","load_relation":"worse_under_load","location_hint":"rear"},"likely_causes":[{"id":"differential_whine_warm", "weight":0.50,"why":"Warm diff fluid can change whine; whine under load points to diff."},{"id":"transmission_whine", "weight":0.30,"why":"Some transmissions whine more warm under load."},{"id":"wheel_bearing_hum", "weight":0.20,"why":"Bearing hum often changes with lane shift more than throttle."}],"confirming_tests":["Throttle on/off at same speed: if whine changes, diff/trans rises.","Lane change: if changes, wheel bearing rises."],"red_flags":["Fluid leak (if user says)"],"common_mistakes":["Confusing lane-shift bearing noise with diff noise."]},
+
+  { "pattern_id":"EN39","category":"engine_noise","signature":{"sound_type":"tap","rpm_relation":"follows_rpm","temperature_relation":"both","load_relation":"no_change","location_hint":"front_accessory"},"likely_causes":[{"id":"ac_compressor_clutch_click", "weight":0.45,"why":"A/C clutch engagement can sound like a tap/click."},{"id":"idler_pulley_play", "weight":0.35,"why":"Pulley play can tap rhythmically with RPM."},{"id":"loose_bracket_tap", "weight":0.20,"why":"Loose bracket can tap at certain RPM resonance."}],"confirming_tests":["A/C on/off: if tap appears with A/C cycling, clutch rises.","If tap happens at idle without A/C and speeds with RPM, pulley rises."],"red_flags":["Belt wobble"],"common_mistakes":["Calling A/C clutch click an internal engine tick."]},
+
+  { "pattern_id":"EN40","category":"engine_noise","signature":{"sound_type":"hiss","rpm_relation":"follows_rpm","temperature_relation":"warm_only","load_relation":"worse_under_load","location_hint":"top_engine"},"likely_causes":[{"id":"boost_leak_intercooler_hose", "weight":0.55,"why":"Warm hoses expand; hiss under load suggests boost leak."},{"id":"intake_leak_post_maf", "weight":0.25,"why":"Air leak post-MAF can hiss with airflow."},{"id":"exhaust_leak_hiss", "weight":0.20,"why":"Some exhaust leaks hiss more under load."}],"confirming_tests":["Ask one question if needed: is the car turbo? If yes, boost leak rises.","If power dropped suddenly, boost leak rises."],"red_flags":["Sudden power loss","Check engine"],"common_mistakes":["Assuming turbo on NA cars without asking."]},
+
+  { "pattern_id":"EN41","category":"engine_noise","signature":{"sound_type":"rattle","rpm_relation":"follows_rpm","temperature_relation":"both","load_relation":"no_change","location_hint":"front_accessory"},"likely_causes":[{"id":"loose_heat_shield_front", "weight":0.40,"why":"Front heat shield can rattle at certain RPM."},{"id":"tensioner_chatter", "weight":0.35,"why":"Tensioner can chatter and rattle at idle."},{"id":"engine_mount_rattle", "weight":0.25,"why":"Mount slack can transmit rattle at idle."}],"confirming_tests":["Does rattle happen in park at idle? That’s engine bay hardware, not wheel noise.","If it changes when you turn steering or add electrical load, accessory drive rises."],"red_flags":["Rattle turns into squeal or belt walk"],"common_mistakes":["Calling idle rattle a wheel bearing."]},
+
+  { "pattern_id":"EN42","category":"engine_noise","signature":{"sound_type":"whine","rpm_relation":"follows_rpm","temperature_relation":"both","load_relation":"worse_coasting","location_hint":"rear"},"likely_causes":[{"id":"transmission_whine_decel", "weight":0.45,"why":"Decel whine can be transmission/diff behavior."},{"id":"differential_whine_decel", "weight":0.35,"why":"Some diffs whine more on coast."},{"id":"wheel_bearing_hum", "weight":0.20,"why":"Bearing often changes with lane shift, not throttle."}],"confirming_tests":["Does it change when you lift off gas at the same speed? drivetrain rises.","Lane shift test separates bearing."],"red_flags":["Whine becomes grind"],"common_mistakes":["Skipping the throttle on/off isolation test."]},
+
+  { "pattern_id":"EN43","category":"engine_noise","signature":{"sound_type":"tick","rpm_relation":"unknown","temperature_relation":"both","load_relation":"unknown","location_hint":"top_engine"},"likely_causes":[{"id":"needs_relation_data", "weight":0.45,"why":"Tick diagnosis depends on RPM/speed/temperature relation."},{"id":"injector_tick_normal", "weight":0.35,"why":"Many engines tick normally from injectors."},{"id":"valve_train_tick", "weight":0.20,"why":"If louder and new, valvetrain becomes likely."}],"confirming_tests":["Ask: does it speed up with RPM while parked? That separates engine from wheel noise.","Ask: cold-only or all the time?"],"red_flags":["New loud tick + misfire"],"common_mistakes":["Overconfident diagnosis with missing relation."]},
+
+  { "pattern_id":"EN44","category":"engine_noise","signature":{"sound_type":"rattle","rpm_relation":"follows_rpm","temperature_relation":"both","load_relation":"worse_under_load","location_hint":"top_engine"},"likely_causes":[{"id":"knock_sensor_false_retard", "weight":0.35,"why":"Timing control issues can create rattle/ping under load."},{"id":"detonation_ping", "weight":0.40,"why":"Under-load rattle is often ping."},{"id":"heat_shield_rattle", "weight":0.25,"why":"Some shields rattle only under certain vibration/load."}],"confirming_tests":["If rattle is tied to acceleration and disappears on lift, ping rises.","If it occurs in neutral revving, external rattle rises."],"red_flags":["Flashing CEL"],"common_mistakes":["Confusing neutral rev behavior with on-road load behavior."]},
+
+  { "pattern_id":"EN45","category":"engine_noise","signature":{"sound_type":"grind","rpm_relation":"follows_rpm","temperature_relation":"warm_only","load_relation":"no_change","location_hint":"front_accessory"},"likely_causes":[{"id":"water_pump_bearing_hot", "weight":0.45,"why":"Some bearings grind more after warming."},{"id":"idler_bearing_hot", "weight":0.35,"why":"Idler can grind louder hot."},{"id":"ac_compressor_hot", "weight":0.20,"why":"Compressor can grind more warm especially when engaged."}],"confirming_tests":["A/C on/off changes? compressor rises.","If overheating is mentioned, water pump rises."],"red_flags":["Overheating (if user says)"],"common_mistakes":["Ignoring temperature relation."]},
+
+  { "pattern_id":"EN46","category":"engine_noise","signature":{"sound_type":"squeal","rpm_relation":"follows_rpm","temperature_relation":"warm_only","load_relation":"no_change","location_hint":"front_accessory"},"likely_causes":[{"id":"belt_glaze_warm", "weight":0.45,"why":"Warm squeal can be glazed belt/pulley slip."},{"id":"pulley_bearing_squeal", "weight":0.35,"why":"Bearing can squeal when hot."},{"id":"ac_clutch_squeal", "weight":0.20,"why":"A/C clutch bearing can squeal warm."}],"confirming_tests":["If squeal starts after driving and gets worse with electrical load, belt slip rises.","A/C toggle can separate clutch bearing."],"red_flags":["Belt fraying"],"common_mistakes":["Assuming only cold-start squeal is possible."]},
+
+  { "pattern_id":"EN47","category":"engine_noise","signature":{"sound_type":"whine","rpm_relation":"unknown","temperature_relation":"both","load_relation":"unknown","location_hint":"front_accessory"},"likely_causes":[{"id":"needs_isolation_test", "weight":0.45,"why":"Whine diagnosis needs RPM vs speed isolation."},{"id":"alternator_whine", "weight":0.35,"why":"If it tracks RPM in park, alternator rises."},{"id":"wheel_bearing_hum", "weight":0.20,"why":"If only while moving and follows speed, bearing rises."}],"confirming_tests":["Rev in park: if whine changes, engine/accessory.","Hold speed constant and lift throttle: if no change, bearing/tire."],"red_flags":["Battery light"],"common_mistakes":["Skipping the park-rev isolation test."]},
+
+  { "pattern_id":"EN48","category":"engine_noise","signature":{"sound_type":"hiss","rpm_relation":"follows_rpm","temperature_relation":"cold_only","load_relation":"no_change","location_hint":"top_engine"},"likely_causes":[{"id":"vacuum_leak_cold", "weight":0.50,"why":"Cold rubber hoses can leak more and hiss at start."},{"id":"pcv_valve_stuck", "weight":0.30,"why":"PCV can hiss and settle as idle stabilizes."},{"id":"normal_evap_purge", "weight":0.20,"why":"Some purge actions can make brief hiss."}],"confirming_tests":["If idle is rough cold then improves, vacuum/PCV rises.","Ask if any lean codes are present."],"red_flags":["Stalling"],"common_mistakes":["Inventing overheating from cold hiss."]},
+
+  { "pattern_id":"EN49","category":"engine_noise","signature":{"sound_type":"rattle","rpm_relation":"follows_rpm","temperature_relation":"both","load_relation":"no_change","location_hint":"top_engine"},"likely_causes":[{"id":"loose_engine_cover", "weight":0.40,"why":"Plastic covers rattle at certain RPM."},{"id":"heat_shield_rattle", "weight":0.35,"why":"Thin shields buzz at specific frequencies."},{"id":"tensioner_chatter", "weight":0.25,"why":"Tensioner chatter can mimic cover rattle."}],"confirming_tests":["Press lightly on engine cover at idle: if rattle changes, cover is culprit.","Tap shields to reproduce buzz (cool engine)."],"red_flags":["Rattle grows louder quickly"],"common_mistakes":["Over-diagnosing internal engine without checking obvious covers/shields."]},
+
+  { "pattern_id":"EN50","category":"engine_noise","signature":{"sound_type":"knock","rpm_relation":"follows_speed","temperature_relation":"both","load_relation":"no_change","location_hint":"wheel_area"},"likely_causes":[{"id":"wheel_bearing_severe", "weight":0.40,"why":"Severe bearing can knock with wheel rotation."},{"id":"loose_wheel_lug_nuts", "weight":0.35,"why":"Loose lugs can knock/clunk and is urgent safety issue."},{"id":"cv_joint_issue", "weight":0.25,"why":"CV can clunk with speed, often worse on turns."}],"confirming_tests":["Ask: does it change on turns? CV/bearing clues.","If any vibration + clunk, stop and check lug tightness immediately (safety)."],"red_flags":["Do not drive if lug nuts suspected","Wheel wobble"],"common_mistakes":["Ignoring loose lug possibility."]}
+]
