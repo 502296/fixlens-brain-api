@@ -1,0 +1,35 @@
+[
+  {
+    "engine": "5.4L 3V Triton",
+    "issues": [
+      {
+        "name": "Timing chain tensioner bleed-down",
+        "keywords": ["cold rattle", "startup rattle", "timing noise"],
+        "severity": "medium",
+        "mechanism": "Rear hydraulic tensioner losing oil pressure overnight"
+      }
+    ]
+  },
+  {
+    "engine": "5.3L Vortec AFM",
+    "issues": [
+      {
+        "name": "AFM lifter collapse",
+        "keywords": ["ticking", "misfire", "engine knock at idle"],
+        "severity": "high",
+        "mechanism": "Active Fuel Management lifter failure"
+      }
+    ]
+  },
+  {
+    "engine": "N20",
+    "issues": [
+      {
+        "name": "Timing chain stretch",
+        "keywords": ["metallic rattle", "timing fault", "chain noise"],
+        "severity": "high",
+        "mechanism": "Chain elongation and guide wear"
+      }
+    ]
+  }
+]
