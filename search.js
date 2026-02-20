@@ -1,5 +1,5 @@
 // search.js — Local KB + Smart Google Places (Mechanic/Parts/Tools + PriceLevel)
-// Fix: City/ZIP anchoring when GPS is missing (prevents random TX results)
+// Fix: City/ZIP anchoring when GPS is missing + prevent Arabic false-location triggers (بالمحرك)
 
 import fs from "fs";
 import path from "path";
@@ -126,7 +126,7 @@ function looksLikePlacesIntent(q = "") {
     "mechanic", "garage", "auto repair", "repair shop", "near me", "closest",
     "address", "location", "map", "google maps",
     "ورشة", "ميكانيك", "ميكانيكي", "كراج", "اقرب", "أقرب", "عنوان", "موقع", "خرائط",
-    "وين", "وين اصلح"
+    "وين اصلح", "وين أصلح", "وين الورشة", "اقرب ورشة"
   ];
 
   const partsWords = [
@@ -141,13 +141,11 @@ function looksLikePlacesIntent(q = "") {
 function detectModeFromText(q = "") {
   const t = String(q).toLowerCase();
 
-  // tires / brakes / etc (optional)
   if (t.includes("tire") || t.includes("tyre") || t.includes("اطار") || t.includes("إطار") || t.includes("اطارات") || t.includes("إطارات")) {
     return "tire";
   }
   if (t.includes("brake") || t.includes("فرامل")) return "brake";
 
-  // parts/tools intent
   if (
     t.includes("auto parts") ||
     t.includes("car parts") ||
@@ -188,7 +186,6 @@ function parseLatLng(input) {
     const lng = Number(input.lng ?? input.longitude);
     if (Number.isFinite(lat) && Number.isFinite(lng)) return { lat, lng };
   }
-  // allow string "lat,lng"
   const s = String(input || "").trim();
   const m = s.match(/(-?\d+(\.\d+)?)\s*,\s*(-?\d+(\.\d+)?)/);
   if (!m) return null;
@@ -226,10 +223,18 @@ function extractLocationFromQuery(userQuery = "") {
     if (out.length >= 3) return out;
   }
 
-  // Arabic: "في طوكيو" / "في لوفل كنتاكي"
-  const m2 = q.match(/(?:\bفي\b|\bبال\b|\bبـ)(\s*[^\d]{3,60})/);
+  // Arabic: ONLY "في <مكان>"  (IMPORTANT: لا نستخدم بال/بـ لأنها تلتقط بالمحرك/بالسيارة)
+  const m2 = q.match(/\bفي\b\s+([^\d]{3,60})/);
   if (m2 && m2[1]) {
-    const cand = m2[1].replace(/[^\u0600-\u06FFa-zA-Z,\s\.\-]/g, " ").trim();
+    const cand = m2[1]
+      .replace(/[^\u0600-\u06FFa-zA-Z,\s\.\-]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+
+    // Prevent false locations like: "في المحرك"
+    const notLocation = ["المحرك", "السيارة", "المكينه", "الفرامل", "الإطارات", "القير", "الموتور"];
+    if (notLocation.some((w) => cand.includes(w))) return "";
+
     if (cand.length >= 3) return cand;
   }
 
@@ -255,7 +260,6 @@ function priceHint({ mode, priceLevelLabel, locale }) {
   const isAr = String(locale || "en").toLowerCase().startsWith("ar");
   if (!priceLevelLabel) return "";
 
-  // NOTE: This is NOT real part prices. It's only a store price tier hint.
   if (mode === "parts_tools") {
     return isAr
       ? `تصنيف سعر المتجر: ${priceLevelLabel} (تقريبي حسب Google)`
@@ -305,16 +309,13 @@ async function searchPlaces({ query, userLocation, locale }) {
     locText = extractLocationFromQuery(query);
   }
 
-  // If query has ZIP, it's a strong anchor
+  // ZIP anchor
   const zip = extractZip(query);
   if (zip) locText = zip;
 
-  // If NO GPS and NO location text => we must NOT call Places (results will drift)
+  // If NO GPS and NO location text => do not call Places
   if (!gps && !locText) return [];
 
-  // Text query strategy
-  // A) If no GPS: force "in <loc>"
-  // B) If GPS: base is enough (bias will handle)
   const textQuery = !gps ? `${base} in ${locText}` : base;
 
   const cacheKey = `${languageCode}::${textQuery}::${gps ? `${gps.lat.toFixed(3)},${gps.lng.toFixed(3)}:${RADIUS_METERS}` : "no_gps"}`;
@@ -384,9 +385,9 @@ async function searchPlaces({ query, userLocation, locale }) {
         phone: p?.nationalPhoneNumber || "",
         website: p?.websiteUri || "",
         price_level: pl || "",
-        price_label: plMap.label,              // "$$"
-        price_meaning_ar: plMap.meaning_ar,    // "متوسط"
-        price_meaning_en: plMap.meaning_en,    // "Moderate"
+        price_label: plMap.label,
+        price_meaning_ar: plMap.meaning_ar,
+        price_meaning_en: plMap.meaning_en,
         price_hint: priceHint({ mode: modeNow, priceLevelLabel: plMap.label, locale }),
         mode: modeNow,
         location_anchor: gps ? "gps" : String(locText),
