@@ -1,5 +1,6 @@
 // search.js — Local KB + Smart Google Places (Mechanic/Parts/Tools + PriceLevel)
-// Fix: City/ZIP anchoring when GPS is missing + prevent Arabic false-location triggers (بالمحرك)
+// Fix: Strong anchoring when GPS is missing (prevents random far results)
+// Fix: Locale handling + better Arabic location parsing + safer intent detection
 
 import fs from "fs";
 import path from "path";
@@ -36,11 +37,11 @@ function loadKBOnce() {
       const parsed = JSON.parse(raw);
 
       if (Array.isArray(parsed)) KB.push(...parsed.map((x) => ({ ...x, __source: f })));
-      else if (parsed?.items) KB.push(...parsed.items.map((x) => ({ ...x, __source: f })));
-      else if (typeof parsed === "object") KB.push({ ...parsed, __source: f });
+      else if (parsed?.items && Array.isArray(parsed.items)) KB.push(...parsed.items.map((x) => ({ ...x, __source: f })));
+      else if (parsed && typeof parsed === "object") KB.push({ ...parsed, __source: f });
     }
   } catch (e) {
-    console.error("KB load error:", e?.message);
+    console.error("KB load error:", e?.message || e);
     KB = [];
   }
 }
@@ -70,14 +71,25 @@ function uniqBy(arr, keyFn) {
 
 function safeCityText(userLocation) {
   if (!userLocation) return "";
-  if (typeof userLocation === "string") return userLocation.trim();
+  if (typeof userLocation === "string") {
+    const v = userLocation.trim();
+    if (!v) return "";
+    if (v.toLowerCase() === "global") return "";
+    return v;
+  }
   if (typeof userLocation === "object") {
-    const city = userLocation.city || userLocation.locality || "";
-    const region = userLocation.region || userLocation.state || "";
+    const city = userLocation.city || userLocation.locality || userLocation.town || "";
+    const region = userLocation.region || userLocation.state || userLocation.adminArea || "";
     const country = userLocation.country || "";
     return [city, region, country].filter(Boolean).join(", ").trim();
   }
   return "";
+}
+
+function normalizeLocale(locale = "en") {
+  const v = String(locale || "").trim();
+  if (!v || v.toLowerCase() === "auto") return "en";
+  return v.split("-")[0].toLowerCase() || "en";
 }
 
 /* =========================================================
@@ -89,10 +101,15 @@ function scoreMatch(query, recordText) {
   if (!q || !text) return 0;
 
   let score = 0;
-  if (text.includes(q)) score += 10;
+
+  // phrase boost
+  if (text.includes(q)) score += 12;
 
   const tokens = q.split(" ").filter(Boolean);
-  for (const t of tokens) if (text.includes(t)) score += 2;
+  for (const t of tokens) {
+    if (t.length < 2) continue;
+    if (text.includes(t)) score += 2;
+  }
 
   return score;
 }
@@ -120,38 +137,88 @@ function recordToText(r) {
    PLACES INTENT + MODE (MECHANIC vs PARTS/TOOLS)
 ========================================================= */
 function looksLikePlacesIntent(q = "") {
-  const t = String(q).toLowerCase();
+  const t = String(q || "").toLowerCase();
 
+  // IMPORTANT: only true when user is clearly asking for a place/shop
   const shopWords = [
-    "mechanic", "garage", "auto repair", "repair shop", "near me", "closest",
-    "address", "location", "map", "google maps",
-    "ورشة", "ميكانيك", "ميكانيكي", "كراج", "اقرب", "أقرب", "عنوان", "موقع", "خرائط",
-    "وين اصلح", "وين أصلح", "وين الورشة", "اقرب ورشة"
+    "mechanic",
+    "garage",
+    "auto repair",
+    "repair shop",
+    "near me",
+    "nearby",
+    "closest",
+    "address",
+    "location",
+    "map",
+    "google maps",
+    "workshop",
+    "shop near",
+    // Arabic
+    "ورشة",
+    "ورش",
+    "ميكانيك",
+    "ميكانيكي",
+    "كراج",
+    "اقرب",
+    "أقرب",
+    "عنوان",
+    "موقع",
+    "خرائط",
+    "وين اصلح",
+    "وين أُصلّح",
+    "وين اروح",
+    "دلّني",
   ];
 
   const partsWords = [
-    "auto parts", "car parts", "parts store", "tool store", "hardware store",
-    "autozone", "o'reilly", "oreilly", "advance auto", "napa",
-    "قطع غيار", "محل قطع", "محل قطع غيار", "محل ادوات", "محل أدوات", "أدوات", "ادوات"
+    "auto parts",
+    "car parts",
+    "parts store",
+    "tool store",
+    "hardware store",
+    "autozone",
+    "o'reilly",
+    "oreilly",
+    "advance auto",
+    "napa",
+    // Arabic
+    "قطع غيار",
+    "محل قطع",
+    "محل قطع غيار",
+    "محل ادوات",
+    "محل أدوات",
+    "ادوات",
+    "أدوات",
   ];
 
   return shopWords.some((w) => t.includes(w)) || partsWords.some((w) => t.includes(w));
 }
 
 function detectModeFromText(q = "") {
-  const t = String(q).toLowerCase();
+  const t = String(q || "").toLowerCase();
 
-  if (t.includes("tire") || t.includes("tyre") || t.includes("اطار") || t.includes("إطار") || t.includes("اطارات") || t.includes("إطارات")) {
+  // tires / brakes special
+  if (
+    t.includes("tire") ||
+    t.includes("tyre") ||
+    t.includes("اطار") ||
+    t.includes("إطار") ||
+    t.includes("اطارات") ||
+    t.includes("إطارات")
+  ) {
     return "tire";
   }
   if (t.includes("brake") || t.includes("فرامل")) return "brake";
 
+  // parts/tools intent
   if (
     t.includes("auto parts") ||
     t.includes("car parts") ||
     t.includes("parts store") ||
     t.includes("hardware store") ||
     t.includes("tool store") ||
+    t.includes("tools store") ||
     t.includes("autozone") ||
     t.includes("o'reilly") ||
     t.includes("oreilly") ||
@@ -181,28 +248,26 @@ function buildPlacesQuery(mode) {
 ========================================================= */
 function parseLatLng(input) {
   if (!input) return null;
+
   if (typeof input === "object") {
     const lat = Number(input.lat ?? input.latitude);
     const lng = Number(input.lng ?? input.longitude);
     if (Number.isFinite(lat) && Number.isFinite(lng)) return { lat, lng };
   }
+
   const s = String(input || "").trim();
   const m = s.match(/(-?\d+(\.\d+)?)\s*,\s*(-?\d+(\.\d+)?)/);
   if (!m) return null;
+
   const lat = Number(m[1]);
   const lng = Number(m[3]);
   if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+
   return { lat, lng };
 }
 
-function normalizeLocale(locale = "en") {
-  const v = String(locale || "").trim();
-  if (!v) return "en";
-  return v.split("-")[0].toLowerCase() || "en";
-}
-
 function extractZip(text = "") {
-  const m = String(text).match(/\b\d{5}(?:-\d{4})?\b/);
+  const m = String(text || "").match(/\b\d{5}(?:-\d{4})?\b/);
   return m ? m[0] : "";
 }
 
@@ -223,18 +288,11 @@ function extractLocationFromQuery(userQuery = "") {
     if (out.length >= 3) return out;
   }
 
-  // Arabic: ONLY "في <مكان>"  (IMPORTANT: لا نستخدم بال/بـ لأنها تلتقط بالمحرك/بالسيارة)
-  const m2 = q.match(/\bفي\b\s+([^\d]{3,60})/);
+  // Arabic: "في طوكيو" / "بالرياض" / "بـ لوفل"
+  // Keep it conservative: capture up to 40 chars.
+  const m2 = q.match(/(?:\bفي\b|\bبال\b|\bبـ\b|\bب)(\s*[\u0600-\u06FFa-zA-Z,\s\.\-]{3,40})/);
   if (m2 && m2[1]) {
-    const cand = m2[1]
-      .replace(/[^\u0600-\u06FFa-zA-Z,\s\.\-]/g, " ")
-      .replace(/\s+/g, " ")
-      .trim();
-
-    // Prevent false locations like: "في المحرك"
-    const notLocation = ["المحرك", "السيارة", "المكينه", "الفرامل", "الإطارات", "القير", "الموتور"];
-    if (notLocation.some((w) => cand.includes(w))) return "";
-
+    const cand = m2[1].replace(/[^\u0600-\u06FFa-zA-Z,\s\.\-]/g, " ").trim();
     if (cand.length >= 3) return cand;
   }
 
@@ -242,7 +300,7 @@ function extractLocationFromQuery(userQuery = "") {
 }
 
 /* =========================================================
-   PRICE LEVEL MAPPING + "SMART" HINT
+   PRICE LEVEL MAPPING + HINT
 ========================================================= */
 function mapPriceLevel(level) {
   const v = String(level || "").toUpperCase().trim();
@@ -260,6 +318,7 @@ function priceHint({ mode, priceLevelLabel, locale }) {
   const isAr = String(locale || "en").toLowerCase().startsWith("ar");
   if (!priceLevelLabel) return "";
 
+  // NOTE: This is NOT real part prices. It's only a store price tier hint.
   if (mode === "parts_tools") {
     return isAr
       ? `تصنيف سعر المتجر: ${priceLevelLabel} (تقريبي حسب Google)`
@@ -277,7 +336,7 @@ const PLACES_CACHE = new Map();
 const CACHE_TTL = Number(process.env.PLACES_CACHE_TTL_MS || 10 * 60 * 1000);
 const TIMEOUT = Number(process.env.PLACES_TIMEOUT_MS || 7000);
 const PLACES_MAX = Number(process.env.PLACES_MAX_RESULTS || 5);
-const RADIUS_METERS = Number(process.env.PLACES_RADIUS_METERS || 25000);
+const RADIUS_METERS_DEFAULT = Number(process.env.PLACES_RADIUS_METERS || 25000);
 
 function cacheGet(key) {
   const hit = PLACES_CACHE.get(key);
@@ -293,32 +352,38 @@ function cacheSet(key, value) {
   PLACES_CACHE.set(key, { value, expiry: Date.now() + CACHE_TTL });
 }
 
-async function searchPlaces({ query, userLocation, locale }) {
+async function searchPlaces({ query, userLocation, locale, radiusMeters }) {
   const apiKey = process.env.GOOGLE_PLACES_API_KEY;
   if (!apiKey) return [];
 
   const languageCode = normalizeLocale(locale);
   const gps = parseLatLng(userLocation);
-
   const mode = detectModeFromText(query);
   const base = buildPlacesQuery(mode);
 
   // Build location anchor (CRITICAL)
   let locText = safeCityText(userLocation);
-  if (!locText || locText.toLowerCase() === "global") {
+
+  // If userLocation was "global" or empty, try parse from query
+  if (!locText) {
     locText = extractLocationFromQuery(query);
   }
 
-  // ZIP anchor
+  // ZIP overrides (strong anchor)
   const zip = extractZip(query);
   if (zip) locText = zip;
 
-  // If NO GPS and NO location text => do not call Places
+  // NO GPS and NO location => do NOT call Places (prevents drift)
   if (!gps && !locText) return [];
 
+  // Text query strategy:
+  // - If no GPS: force "in <loc>"
+  // - If GPS: use base and locationBias
   const textQuery = !gps ? `${base} in ${locText}` : base;
 
-  const cacheKey = `${languageCode}::${textQuery}::${gps ? `${gps.lat.toFixed(3)},${gps.lng.toFixed(3)}:${RADIUS_METERS}` : "no_gps"}`;
+  const RADIUS_METERS = Number(radiusMeters || RADIUS_METERS_DEFAULT);
+
+  const cacheKey = `${languageCode}::${textQuery}::${gps ? `${gps.lat.toFixed(3)},${gps.lng.toFixed(3)}:${RADIUS_METERS}` : `no_gps:${locText}`}`;
   const cached = cacheGet(cacheKey);
   if (cached) return cached;
 
@@ -370,10 +435,10 @@ async function searchPlaces({ query, userLocation, locale }) {
     }
 
     const places = Array.isArray(data?.places) ? data.places : [];
+
     const mapped = places.slice(0, PLACES_MAX).map((p) => {
       const pl = p?.priceLevel ?? "";
       const plMap = mapPriceLevel(pl);
-      const modeNow = mode;
 
       return {
         name: p?.displayName?.text || "",
@@ -385,11 +450,11 @@ async function searchPlaces({ query, userLocation, locale }) {
         phone: p?.nationalPhoneNumber || "",
         website: p?.websiteUri || "",
         price_level: pl || "",
-        price_label: plMap.label,
+        price_label: plMap.label, // "$$"
         price_meaning_ar: plMap.meaning_ar,
         price_meaning_en: plMap.meaning_en,
-        price_hint: priceHint({ mode: modeNow, priceLevelLabel: plMap.label, locale }),
-        mode: modeNow,
+        price_hint: priceHint({ mode, priceLevelLabel: plMap.label, locale }),
+        mode,
         location_anchor: gps ? "gps" : String(locText),
         source: "google_places_new",
       };
@@ -412,14 +477,15 @@ async function searchPlaces({ query, userLocation, locale }) {
 export async function performSearch(userQuery, userLocation, opts = {}) {
   loadKBOnce();
 
-  const { locale = "en", allowPlaces = false, maxResults = 3 } = opts;
+  const { locale = "en", allowPlaces = false, maxResults = 3, placesRadiusMeters } = opts;
+
+  const q = String(userQuery || "").trim();
 
   // 1) Local KB (cheap)
   let verified_data = [];
-  const q = String(userQuery || "").trim();
-
   if (q.length >= 2 && KB.length > 0) {
     const limit = Math.max(1, Math.min(Number(maxResults || 3), 10));
+
     const scored = KB
       .map((r) => ({ r, score: scoreMatch(q, recordToText(r)) }))
       .filter((x) => x.score > 0)
@@ -440,10 +506,15 @@ export async function performSearch(userQuery, userLocation, opts = {}) {
     );
   }
 
-  // 2) Places (expensive) — only when allowed AND intent is places-like
+  // 2) Places (expensive) — ONLY when allowed AND user asked for places
   let verified_workshops = [];
-  if (allowPlaces && looksLikePlacesIntent(userQuery)) {
-    verified_workshops = await searchPlaces({ query: userQuery, userLocation, locale });
+  if (allowPlaces && looksLikePlacesIntent(q)) {
+    verified_workshops = await searchPlaces({
+      query: q,
+      userLocation,
+      locale,
+      radiusMeters: placesRadiusMeters,
+    });
   }
 
   return { verified_data, verified_workshops };
