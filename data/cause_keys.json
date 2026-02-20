@@ -1,0 +1,794 @@
+[
+  {
+    "id": "hydraulic_lifter_tick",
+    "title": "Hydraulic lifter tick",
+    "one_line": "Lifter loses pressure then ticks until oil pressure stabilizes.",
+    "quick_test": "Cold start: if tick fades within 30–90s, lifter/tensioner climbs.",
+    "risk_level": "medium",
+    "drive_advice": "ok_to_drive_limited"
+  },
+  {
+    "id": "timing_chain_tensioner_rattle",
+    "title": "Timing chain tensioner rattle",
+    "one_line": "Chain slack rattles briefly before full oil pressure tightens it.",
+    "quick_test": "Cold start: 1–3s rattle then gone strongly fits tensioner.",
+    "risk_level": "medium",
+    "drive_advice": "ok_to_drive_limited"
+  },
+  {
+    "id": "timing_chain_tensioner_rattle_light",
+    "title": "Light timing tensioner noise",
+    "one_line": "Mild start-up chatter from early chain slack.",
+    "quick_test": "If it’s only cold and disappears fast, it’s usually tensioner/guide behavior.",
+    "risk_level": "low",
+    "drive_advice": "ok_to_drive_limited"
+  },
+  {
+    "id": "timing_chain_guides_worn",
+    "title": "Timing chain guides worn",
+    "one_line": "Worn guides let the chain slap/rattle especially on decel/load transitions.",
+    "quick_test": "Rattle strongest on lift-off (decel) points to guide/tension behavior.",
+    "risk_level": "high",
+    "drive_advice": "ok_to_drive_limited"
+  },
+  {
+    "id": "vvt_cam_phaser_rattle",
+    "title": "VVT cam phaser rattle",
+    "one_line": "Phaser control can rattle when oil control is unstable under certain conditions.",
+    "quick_test": "Warm + under load rattle that stops when lifting can fit phaser/ping separation.",
+    "risk_level": "medium",
+    "drive_advice": "ok_to_drive_limited"
+  },
+  {
+    "id": "vvt_issue",
+    "title": "VVT control issue",
+    "one_line": "Timing control drift can cause abnormal combustion or valvetrain noise under load.",
+    "quick_test": "If symptom appears with acceleration and improves with steady throttle, VVT/ping rises.",
+    "risk_level": "medium",
+    "drive_advice": "ok_to_drive_limited"
+  },
+  {
+    "id": "injector_tick_normal",
+    "title": "Normal injector tick",
+    "one_line": "Many engines (especially direct injection) tick rhythmically and it’s normal.",
+    "quick_test": "If it’s light, steady, no performance issues, and tracks RPM evenly—often normal.",
+    "risk_level": "low",
+    "drive_advice": "ok_to_drive_limited"
+  },
+  {
+    "id": "valve_train_tap",
+    "title": "Valve train tap",
+    "one_line": "Top-end tap can be lash/rocker/lifter behavior that tracks RPM.",
+    "quick_test": "If it’s loudest from top engine and speeds up with RPM in park, valve train rises.",
+    "risk_level": "medium",
+    "drive_advice": "ok_to_drive_limited"
+  },
+  {
+    "id": "valve_train_tick",
+    "title": "Light valve train tick",
+    "one_line": "Light top-end tick from valvetrain components.",
+    "quick_test": "Rev to 1500: if it stays light/clean and no symptoms, it’s usually not urgent.",
+    "risk_level": "low",
+    "drive_advice": "ok_to_drive_limited"
+  },
+  {
+    "id": "valvetrain_severe",
+    "title": "Severe valvetrain issue",
+    "one_line": "Harsh grinding/tapping may indicate severe top-end mechanical contact.",
+    "quick_test": "If noise is loud at idle in park and worsens quickly, treat as urgent.",
+    "risk_level": "high",
+    "drive_advice": "do_not_drive"
+  },
+  {
+    "id": "exhaust_leak_tap",
+    "title": "Exhaust leak tick/tap",
+    "one_line": "Small manifold leak ticks like a sewing machine, faster with RPM.",
+    "quick_test": "Cold start near manifold: sharp tick that changes as it warms suggests leak.",
+    "risk_level": "low",
+    "drive_advice": "ok_to_drive_limited"
+  },
+  {
+    "id": "exhaust_manifold_leak_warm",
+    "title": "Warm manifold leak",
+    "one_line": "Expansion can open a leak and create warm-only ticking.",
+    "quick_test": "If tick appears warm-only and sharp near manifold area, leak rises.",
+    "risk_level": "low",
+    "drive_advice": "ok_to_drive_limited"
+  },
+  {
+    "id": "exhaust_leak_tick_under_load",
+    "title": "Exhaust leak louder under load",
+    "one_line": "Under load, exhaust pressure increases and the leak ticks louder.",
+    "quick_test": "If tick is strongest during acceleration and quiet on coast, exhaust leak rises.",
+    "risk_level": "low",
+    "drive_advice": "ok_to_drive_limited"
+  },
+  {
+    "id": "exhaust_heat_shield_rattle",
+    "title": "Exhaust heat shield rattle",
+    "one_line": "Loose shield buzzes/rattles at certain RPM or on decel.",
+    "quick_test": "Tap shield (cool) to reproduce the same buzz.",
+    "risk_level": "low",
+    "drive_advice": "ok_to_drive_limited"
+  },
+  {
+    "id": "loose_exhaust_hanger",
+    "title": "Loose exhaust hanger",
+    "one_line": "Hanger slack lets exhaust move and rattle on bumps/load change.",
+    "quick_test": "Rattle more on lift-off or bumps often matches hanger slack.",
+    "risk_level": "low",
+    "drive_advice": "ok_to_drive_limited"
+  },
+  {
+    "id": "exhaust_resonator_rattle",
+    "title": "Internal exhaust baffle rattle",
+    "one_line": "Inside resonator/muffler baffles can break and rattle at certain RPM.",
+    "quick_test": "Hold RPM at the rattle range while parked—if it happens, it’s exhaust/body, not wheels.",
+    "risk_level": "low",
+    "drive_advice": "ok_to_drive_limited"
+  },
+  {
+    "id": "heat_shield_rattle",
+    "title": "Heat shield rattle",
+    "one_line": "Thin shields buzz at a narrow frequency band.",
+    "quick_test": "Touch/press suspected shield (cool) and see if rattle changes.",
+    "risk_level": "low",
+    "drive_advice": "ok_to_drive_limited"
+  },
+  {
+    "id": "loose_engine_cover",
+    "title": "Loose engine cover",
+    "one_line": "Plastic cover resonates and rattles at certain RPM.",
+    "quick_test": "Press lightly on cover at idle—if rattle changes, you found it.",
+    "risk_level": "low",
+    "drive_advice": "ok_to_drive_limited"
+  },
+  {
+    "id": "loose_undertray",
+    "title": "Loose undertray/liner",
+    "one_line": "Undertray or wheel-well liner flaps and rattles with speed/wind.",
+    "quick_test": "If it appears only above a certain speed and not in park revving, undertray rises.",
+    "risk_level": "low",
+    "drive_advice": "ok_to_drive_limited"
+  },
+  {
+    "id": "loose_wheel_well_liner",
+    "title": "Loose wheel well liner",
+    "one_line": "Missing clips cause liner to flap and rattle with speed.",
+    "quick_test": "Visual check for missing fasteners; noise often changes with wind/speed not RPM.",
+    "risk_level": "low",
+    "drive_advice": "ok_to_drive_limited"
+  },
+  {
+    "id": "loose_brake_dust_shield",
+    "title": "Loose brake dust shield",
+    "one_line": "Shield touches rotor and makes scrape/squeal/rattle with speed.",
+    "quick_test": "Light brake: if noise changes instantly, shield/stone/brakes rise.",
+    "risk_level": "low",
+    "drive_advice": "ok_to_drive_limited"
+  },
+  {
+    "id": "dust_shield_contact",
+    "title": "Dust shield contact",
+    "one_line": "Bent dust shield scrapes the rotor and follows wheel speed.",
+    "quick_test": "Noise follows speed and may change when braking lightly.",
+    "risk_level": "low",
+    "drive_advice": "ok_to_drive_limited"
+  },
+  {
+    "id": "small_stone_in_rotor",
+    "title": "Stone in brake area",
+    "one_line": "Small stone trapped can squeal/scrape with wheel rotation.",
+    "quick_test": "Reverse slowly: sometimes the tone changes with a trapped stone.",
+    "risk_level": "low",
+    "drive_advice": "ok_to_drive_limited"
+  },
+  {
+    "id": "stone_in_tire_tread",
+    "title": "Stone in tire tread",
+    "one_line": "Rhythmic tap follows speed like a metronome—often just a stone.",
+    "quick_test": "Inspect tread quickly; remove stone and the tap disappears.",
+    "risk_level": "low",
+    "drive_advice": "ok_to_drive_limited"
+  },
+  {
+    "id": "pads_to_metal_grind",
+    "title": "Brake pads to metal",
+    "one_line": "Pad material is gone—metal backing plate grinds the rotor.",
+    "quick_test": "Grinding gets worse when braking = pads-to-metal highly likely.",
+    "risk_level": "high",
+    "drive_advice": "do_not_drive"
+  },
+  {
+    "id": "brake_pad_wear_indicator",
+    "title": "Brake wear indicator squeal",
+    "one_line": "A small metal tab squeals when pads are near end of life.",
+    "quick_test": "Light braking at 20–30 mph: squeal changes immediately.",
+    "risk_level": "medium",
+    "drive_advice": "ok_to_drive_limited"
+  },
+  {
+    "id": "glazed_pads_or_rotors",
+    "title": "Glazed pads/rotors",
+    "one_line": "Overheated surfaces get glossy and squeal with weaker bite.",
+    "quick_test": "Squeal + less initial bite after hard braking suggests glazing.",
+    "risk_level": "medium",
+    "drive_advice": "ok_to_drive_limited"
+  },
+  {
+    "id": "dust_or_debris",
+    "title": "Brake dust/debris noise",
+    "one_line": "Debris between pad/rotor causes intermittent squeal.",
+    "quick_test": "If it comes/goes and changes with braking, debris is plausible.",
+    "risk_level": "low",
+    "drive_advice": "ok_to_drive_limited"
+  },
+  {
+    "id": "stuck_caliper",
+    "title": "Stuck caliper",
+    "one_line": "Caliper doesn’t release fully, overheats one wheel and can grind.",
+    "quick_test": "After short drive, one wheel much hotter than others = stuck caliper clue.",
+    "risk_level": "high",
+    "drive_advice": "do_not_drive"
+  },
+  {
+    "id": "loose_brake_hardware",
+    "title": "Loose brake hardware/clips",
+    "one_line": "Pad clips/hardware rattle—often stops with light brake pressure.",
+    "quick_test": "Light brake touch: if rattle stops instantly, hardware rises.",
+    "risk_level": "medium",
+    "drive_advice": "ok_to_drive_limited"
+  },
+  {
+    "id": "loose_caliper_bolt",
+    "title": "Loose caliper bolt",
+    "one_line": "Dangerous—caliper movement can clunk and reduce braking safety.",
+    "quick_test": "If brake rattle is heavy and changes with braking, inspect bolts urgently.",
+    "risk_level": "high",
+    "drive_advice": "do_not_drive"
+  },
+  {
+    "id": "wheel_bearing_hum",
+    "title": "Wheel bearing hum/whine",
+    "one_line": "Noise follows speed and changes when the car weight shifts left/right.",
+    "quick_test": "Gentle lane change: if noise changes, bearing rises.",
+    "risk_level": "high",
+    "drive_advice": "ok_to_drive_limited"
+  },
+  {
+    "id": "wheel_bearing_noise",
+    "title": "Wheel bearing noise (general)",
+    "one_line": "Speed-related hum/whine that reacts to load shift.",
+    "quick_test": "Lane change test separates bearing from tire noise.",
+    "risk_level": "high",
+    "drive_advice": "ok_to_drive_limited"
+  },
+  {
+    "id": "wheel_bearing_failure_severe",
+    "title": "Severe wheel bearing failure",
+    "one_line": "Bearing can grind/knock with vibration—safety risk.",
+    "quick_test": "If noise is loud + vibration + heat at hub, treat as urgent.",
+    "risk_level": "high",
+    "drive_advice": "do_not_drive"
+  },
+  {
+    "id": "loose_wheel_lug_nuts",
+    "title": "Loose lug nuts",
+    "one_line": "Wheel can wobble/knock—this is an immediate safety stop.",
+    "quick_test": "If clunk + wobble: stop and verify lug tightness immediately.",
+    "risk_level": "high",
+    "drive_advice": "do_not_drive"
+  },
+  {
+    "id": "cv_axle_click_clunk_turning",
+    "title": "CV axle outer joint",
+    "one_line": "Rhythmic clicking on turns is classic outer CV joint.",
+    "quick_test": "Full-lock slow turn in a parking lot: clicking = CV joint.",
+    "risk_level": "high",
+    "drive_advice": "ok_to_drive_limited"
+  },
+  {
+    "id": "tie_rod_end_play",
+    "title": "Tie rod end play",
+    "one_line": "Steering looseness and clunks from worn tie rod ends.",
+    "quick_test": "Steering left/right at standstill: clunk + looseness suggests tie rod play.",
+    "risk_level": "high",
+    "drive_advice": "ok_to_drive_limited"
+  },
+  {
+    "id": "strut_mount_clunk",
+    "title": "Strut mount clunk",
+    "one_line": "Top strut mount can clunk when turning or over bumps.",
+    "quick_test": "Low-speed turn + bumps: clunk from one corner fits strut mount.",
+    "risk_level": "medium",
+    "drive_advice": "ok_to_drive_limited"
+  },
+  {
+    "id": "worn_sway_bar_link",
+    "title": "Worn sway bar link",
+    "one_line": "Common clunk/rattle over small bumps at low speed.",
+    "quick_test": "If it repeats on small bumps and doesn’t care about braking, link rises.",
+    "risk_level": "medium",
+    "drive_advice": "ok_to_drive_limited"
+  },
+  {
+    "id": "control_arm_bushing",
+    "title": "Control arm bushing wear",
+    "one_line": "Bushing slack clunks under braking and load transfer.",
+    "quick_test": "Clunk changes with light braking over bumps = bushing clue.",
+    "risk_level": "high",
+    "drive_advice": "ok_to_drive_limited"
+  },
+  {
+    "id": "ball_joint_play",
+    "title": "Ball joint play",
+    "one_line": "Ball joint play can clunk and is safety-critical if severe.",
+    "quick_test": "Clunk + wandering steering + uneven tire wear raises suspicion.",
+    "risk_level": "high",
+    "drive_advice": "ok_to_drive_limited"
+  },
+  {
+    "id": "serpentine_belt_slip",
+    "title": "Serpentine belt slip",
+    "one_line": "Cold squeal that fades is usually belt slip on start-up load.",
+    "quick_test": "Cold start squeal 1–10s then gone = belt slip pattern.",
+    "risk_level": "medium",
+    "drive_advice": "ok_to_drive_limited"
+  },
+  {
+    "id": "belt_slip_light",
+    "title": "Light belt slip",
+    "one_line": "Minor slip can sound like a whine/squeal under load.",
+    "quick_test": "Add load (lights/defrost): if noise increases, belt slip rises.",
+    "risk_level": "medium",
+    "drive_advice": "ok_to_drive_limited"
+  },
+  {
+    "id": "belt_tensioner_weak",
+    "title": "Weak belt tensioner",
+    "one_line": "Tensioner can’t hold belt tension, causes squeal/rattle and belt wear.",
+    "quick_test": "Noise worse on start and with load suggests weak tensioner.",
+    "risk_level": "medium",
+    "drive_advice": "ok_to_drive_limited"
+  },
+  {
+    "id": "belt_misalignment",
+    "title": "Belt misalignment",
+    "one_line": "Misaligned pulley makes belt squeal persistently.",
+    "quick_test": "Squeal constant warm + belt tracking off-center suggests misalignment.",
+    "risk_level": "medium",
+    "drive_advice": "ok_to_drive_limited"
+  },
+  {
+    "id": "serpentine_belt_idler_bearing",
+    "title": "Idler pulley bearing",
+    "one_line": "Worn idler bearing whines and can seize later.",
+    "quick_test": "Whine localized at one pulley area; changes with RPM.",
+    "risk_level": "medium",
+    "drive_advice": "ok_to_drive_limited"
+  },
+  {
+    "id": "idler_bearing",
+    "title": "Pulley bearing (general)",
+    "one_line": "Bearing noise can be whine, squeal, or grind depending on severity.",
+    "quick_test": "If A/C toggle doesn’t change it and noise is front accessory, pulley bearing rises.",
+    "risk_level": "medium",
+    "drive_advice": "ok_to_drive_limited"
+  },
+  {
+    "id": "idler_bearing_failure",
+    "title": "Idler bearing failure",
+    "one_line": "Grinding indicates bearing is near failure and can throw the belt.",
+    "quick_test": "Grinding localized at one pulley = urgent bearing.",
+    "risk_level": "high",
+    "drive_advice": "do_not_drive"
+  },
+  {
+    "id": "alternator_bearing",
+    "title": "Alternator bearing",
+    "one_line": "Alternator bearing can whine with RPM and worsen under electrical load.",
+    "quick_test": "Turn on high electrical load: if whine changes, alternator rises.",
+    "risk_level": "high",
+    "drive_advice": "ok_to_drive_limited"
+  },
+  {
+    "id": "alternator_bearing_failure",
+    "title": "Alternator bearing failure",
+    "one_line": "Grinding alternator bearing can fail suddenly and you’ll lose charging.",
+    "quick_test": "Grinding from alternator area + charging symptoms = urgent.",
+    "risk_level": "high",
+    "drive_advice": "do_not_drive"
+  },
+  {
+    "id": "alternator_whine_bearing_or_diode",
+    "title": "Alternator whine (bearing/diode)",
+    "one_line": "Whine tracking RPM can be bearing noise or electrical diode whine.",
+    "quick_test": "Load test (lights/defrost): change in whine supports alternator involvement.",
+    "risk_level": "high",
+    "drive_advice": "ok_to_drive_limited"
+  },
+  {
+    "id": "power_steering_pump_whine",
+    "title": "Power steering pump whine",
+    "one_line": "Pump whines more when steering is turned or fluid/air issues exist.",
+    "quick_test": "Turn wheel slightly at idle: if whine changes, PS pump rises.",
+    "risk_level": "medium",
+    "drive_advice": "ok_to_drive_limited"
+  },
+  {
+    "id": "power_steering_fluid_low",
+    "title": "Low PS fluid/air in system",
+    "one_line": "Low fluid or air makes the pump whine, especially cold.",
+    "quick_test": "Whine changes with steering input; check reservoir level (if hydraulic PS).",
+    "risk_level": "medium",
+    "drive_advice": "ok_to_drive_limited"
+  },
+  {
+    "id": "ac_compressor_bearing",
+    "title": "A/C compressor bearing",
+    "one_line": "A/C clutch/bearing can grind/whine especially when engaged.",
+    "quick_test": "Toggle A/C on/off: if noise changes, compressor path rises.",
+    "risk_level": "high",
+    "drive_advice": "ok_to_drive_limited"
+  },
+  {
+    "id": "ac_compressor_clutch_rattle",
+    "title": "A/C clutch rattle",
+    "one_line": "Clutch can rattle at idle or during engagement cycles.",
+    "quick_test": "Noise appears/disappears with A/C toggling or cycling.",
+    "risk_level": "medium",
+    "drive_advice": "ok_to_drive_limited"
+  },
+  {
+    "id": "ac_clutch_squeal",
+    "title": "A/C clutch bearing squeal",
+    "one_line": "Squeal can come from clutch bearing and worsen warm.",
+    "quick_test": "A/C on/off changes squeal = clutch bearing clue.",
+    "risk_level": "high",
+    "drive_advice": "ok_to_drive_limited"
+  },
+  {
+    "id": "ac_refrigerant_hiss_normal",
+    "title": "Normal A/C refrigerant hiss",
+    "one_line": "Brief hiss when A/C cycles can be normal expansion noise.",
+    "quick_test": "If it correlates exactly with A/C cycling, it’s often normal.",
+    "risk_level": "low",
+    "drive_advice": "ok_to_drive_limited"
+  },
+  {
+    "id": "water_pump_bearing",
+    "title": "Water pump bearing",
+    "one_line": "Bearing can whine and later leak/overheat.",
+    "quick_test": "Warm-only front noise + overheating complaint raises water pump.",
+    "risk_level": "high",
+    "drive_advice": "ok_to_drive_limited"
+  },
+  {
+    "id": "water_pump_bearing_hot",
+    "title": "Water pump bearing (hot)",
+    "one_line": "Some bearings get louder after warming.",
+    "quick_test": "If noise starts after warm-up and grows, treat as urgent bearing.",
+    "risk_level": "high",
+    "drive_advice": "do_not_drive"
+  },
+  {
+    "id": "cooling_fan_contact",
+    "title": "Cooling fan/shroud contact",
+    "one_line": "Fan can rub shroud and make whine/rattle when it kicks on.",
+    "quick_test": "If noise appears exactly when fan turns on, fan contact rises.",
+    "risk_level": "medium",
+    "drive_advice": "ok_to_drive_limited"
+  },
+  {
+    "id": "intake_vacuum_leak",
+    "title": "Vacuum leak",
+    "one_line": "Unmetered air causes hiss and often rough/lean idle.",
+    "quick_test": "Idle changes with throttle blip; lean codes (P0171) support it.",
+    "risk_level": "medium",
+    "drive_advice": "ok_to_drive_limited"
+  },
+  {
+    "id": "vacuum_hose_leak",
+    "title": "Vacuum hose leak",
+    "one_line": "Small hose crack hisses at idle and can cause lean symptoms.",
+    "quick_test": "If hiss is strongest at idle and reduces with throttle, hose leak rises.",
+    "risk_level": "medium",
+    "drive_advice": "ok_to_drive_limited"
+  },
+  {
+    "id": "intake_gasket_leak",
+    "title": "Intake gasket leak",
+    "one_line": "Gasket leak hisses and causes lean/rough idle especially cold.",
+    "quick_test": "Lean idle + hiss that changes with temperature supports gasket leak.",
+    "risk_level": "medium",
+    "drive_advice": "ok_to_drive_limited"
+  },
+  {
+    "id": "pcv_valve_issue",
+    "title": "PCV valve issue",
+    "one_line": "PCV stuck/open can hiss and disturb idle/fuel trim.",
+    "quick_test": "If idle hunts and hiss is near PCV area, PCV rises.",
+    "risk_level": "medium",
+    "drive_advice": "ok_to_drive_limited"
+  },
+  {
+    "id": "pcv_valve_stuck",
+    "title": "PCV valve stuck",
+    "one_line": "Stuck PCV can create steady hiss and rough idle.",
+    "quick_test": "Cold idle rough then stabilizes supports PCV/vacuum path.",
+    "risk_level": "medium",
+    "drive_advice": "ok_to_drive_limited"
+  },
+  {
+    "id": "brake_booster_leak",
+    "title": "Brake booster vacuum leak",
+    "one_line": "Booster leak hisses and can change brake feel.",
+    "quick_test": "If idle changes when pressing brake pedal, booster leak rises.",
+    "risk_level": "high",
+    "drive_advice": "ok_to_drive_limited"
+  },
+  {
+    "id": "boost_leak_turbo",
+    "title": "Turbo boost leak",
+    "one_line": "Hiss under acceleration with power loss fits boost leak.",
+    "quick_test": "If hiss appears only on boost/accel and power dropped, boost leak rises.",
+    "risk_level": "medium",
+    "drive_advice": "ok_to_drive_limited"
+  },
+  {
+    "id": "boost_leak_intercooler_hose",
+    "title": "Intercooler/boost hose leak",
+    "one_line": "Hose split can hiss under load and reduce power.",
+    "quick_test": "Under-load hiss + sudden power loss points to hose leak.",
+    "risk_level": "medium",
+    "drive_advice": "ok_to_drive_limited"
+  },
+  {
+    "id": "intake_air_leak",
+    "title": "Intake air leak",
+    "one_line": "Air leak can hiss when airflow increases and can affect mixture.",
+    "quick_test": "If hiss scales with throttle and engine feels weak, intake leak rises.",
+    "risk_level": "medium",
+    "drive_advice": "ok_to_drive_limited"
+  },
+  {
+    "id": "intake_leak_post_maf",
+    "title": "Post-MAF leak",
+    "one_line": "Leak after MAF causes lean running and can hiss under load.",
+    "quick_test": "Lean codes + hiss under throttle supports post-MAF leak.",
+    "risk_level": "medium",
+    "drive_advice": "ok_to_drive_limited"
+  },
+  {
+    "id": "detonation_ping",
+    "title": "Detonation / ping",
+    "one_line": "Combustion knock under acceleration, usually higher pitch than rod knock.",
+    "quick_test": "If it appears only on accel and improves with higher octane once, ping rises.",
+    "risk_level": "high",
+    "drive_advice": "ok_to_drive_limited"
+  },
+  {
+    "id": "spark_knock_ping",
+    "title": "Spark knock / ping",
+    "one_line": "Timing/fuel/heat can cause ping under load.",
+    "quick_test": "Only under load + disappears on lift = ping behavior.",
+    "risk_level": "high",
+    "drive_advice": "ok_to_drive_limited"
+  },
+  {
+    "id": "preignition_detonation",
+    "title": "Pre-ignition / severe knock risk",
+    "one_line": "Severe combustion knock can damage pistons quickly.",
+    "quick_test": "If knock is harsh under load and power drops, stop pushing throttle immediately.",
+    "risk_level": "high",
+    "drive_advice": "ok_to_drive_limited"
+  },
+  {
+    "id": "spark_plug_issue",
+    "title": "Spark plug issue",
+    "one_line": "Wrong gap/heat range or worn plug can promote ping/misfire.",
+    "quick_test": "If under-load ping + misfire symptoms, plugs/ignition rises.",
+    "risk_level": "medium",
+    "drive_advice": "ok_to_drive_limited"
+  },
+  {
+    "id": "egr_or_lean_condition",
+    "title": "EGR/lean condition",
+    "one_line": "Lean mixture or EGR issues can increase knock under load.",
+    "quick_test": "If ping appears after warm-up and fuel trims/lean codes present, lean path rises.",
+    "risk_level": "high",
+    "drive_advice": "ok_to_drive_limited"
+  },
+  {
+    "id": "rod_bearing_knock",
+    "title": "Rod bearing knock",
+    "one_line": "Deep knock that worsens under load—serious bottom-end wear.",
+    "quick_test": "Deep knock follows RPM and gets louder with load = rod bearing pattern.",
+    "risk_level": "high",
+    "drive_advice": "do_not_drive"
+  },
+  {
+    "id": "rod_bearing_early",
+    "title": "Early rod bearing noise",
+    "one_line": "Early knock can be subtle but load-related.",
+    "quick_test": "If knock increases with acceleration and persists even in park revving, treat seriously.",
+    "risk_level": "high",
+    "drive_advice": "ok_to_drive_limited"
+  },
+  {
+    "id": "piston_slap",
+    "title": "Piston slap",
+    "one_line": "Cold knock that fades warm on some engines due to skirt clearance.",
+    "quick_test": "If cold-only knock fades as warm, piston slap rises.",
+    "risk_level": "medium",
+    "drive_advice": "ok_to_drive_limited"
+  },
+  {
+    "id": "crank_pulley_failure",
+    "title": "Harmonic balancer / crank pulley failure",
+    "one_line": "Balancer separation can knock/clunk and cause belt issues.",
+    "quick_test": "If pulley looks like it wobbles (image/video), balancer rises.",
+    "risk_level": "high",
+    "drive_advice": "do_not_drive"
+  },
+  {
+    "id": "harmonic_balancer_wobble",
+    "title": "Crank pulley wobble",
+    "one_line": "Wobble causes vibration/noise and can throw the belt.",
+    "quick_test": "Visual wobble at crank pulley is a strong indicator.",
+    "risk_level": "high",
+    "drive_advice": "do_not_drive"
+  },
+  {
+    "id": "engine_mount_clunk",
+    "title": "Engine mount clunk",
+    "one_line": "Worn mount allows engine to shift and clunk on throttle on/off.",
+    "quick_test": "Clunk happens exactly when you go on/off throttle, not with steady RPM.",
+    "risk_level": "medium",
+    "drive_advice": "ok_to_drive_limited"
+  },
+  {
+    "id": "internal_engine_mount_issue",
+    "title": "Mount / drivetrain movement issue",
+    "one_line": "Mount slack transmits clunks/rattles during load transitions.",
+    "quick_test": "D↔R shift clunk and throttle tip-in clunk supports mount/driveline play.",
+    "risk_level": "medium",
+    "drive_advice": "ok_to_drive_limited"
+  },
+  {
+    "id": "differential_whine",
+    "title": "Differential whine",
+    "one_line": "Whine follows speed and often changes with throttle load.",
+    "quick_test": "Same speed, throttle on/off: if whine changes, diff rises.",
+    "risk_level": "high",
+    "drive_advice": "ok_to_drive_limited"
+  },
+  {
+    "id": "differential_whine_warm",
+    "title": "Warm differential whine",
+    "one_line": "Diff noise can appear/shift after warming, often load-related.",
+    "quick_test": "If it’s worse warm and changes with throttle, diff rises.",
+    "risk_level": "high",
+    "drive_advice": "ok_to_drive_limited"
+  },
+  {
+    "id": "differential_whine_decel",
+    "title": "Decel differential whine",
+    "one_line": "Some diffs whine more on coast than on throttle.",
+    "quick_test": "If it’s loudest on lift-off at the same speed, decel diff whine rises.",
+    "risk_level": "high",
+    "drive_advice": "ok_to_drive_limited"
+  },
+  {
+    "id": "transmission_whine",
+    "title": "Transmission whine",
+    "one_line": "Whine tied to speed/load can come from transmission gearing/bearings.",
+    "quick_test": "If whine changes with gear selection or load at same speed, trans rises.",
+    "risk_level": "high",
+    "drive_advice": "ok_to_drive_limited"
+  },
+  {
+    "id": "transmission_whine_decel",
+    "title": "Transmission whine on decel",
+    "one_line": "Whine can be louder on coast depending on wear pattern.",
+    "quick_test": "Same speed, lift throttle: louder on coast suggests decel trans/diff noise.",
+    "risk_level": "high",
+    "drive_advice": "ok_to_drive_limited"
+  },
+  {
+    "id": "differential_backlash",
+    "title": "Differential backlash/clunk",
+    "one_line": "Slack in gears causes clunk on throttle on/off.",
+    "quick_test": "Clunk exactly during throttle tip-in/off, not steady speed.",
+    "risk_level": "high",
+    "drive_advice": "ok_to_drive_limited"
+  },
+  {
+    "id": "driveshaft_u_joint_play",
+    "title": "Driveshaft U-joint play",
+    "one_line": "RWD driveline play can clunk/rattle on load transitions.",
+    "quick_test": "Clunk when shifting D↔R and on/off throttle suggests driveline play.",
+    "risk_level": "high",
+    "drive_advice": "ok_to_drive_limited"
+  },
+  {
+    "id": "tire_cupping_noise",
+    "title": "Tire cupping/road roar",
+    "one_line": "Uneven tire wear makes roaring/whining that follows speed and road surface.",
+    "quick_test": "Change pavement: tire noise often changes noticeably.",
+    "risk_level": "medium",
+    "drive_advice": "ok_to_drive_limited"
+  },
+  {
+    "id": "wind_noise_external",
+    "title": "External wind noise",
+    "one_line": "Wind noise appears at highway speed and doesn’t track RPM or throttle.",
+    "quick_test": "If it’s the same at steady speed regardless of throttle, wind/liner rises.",
+    "risk_level": "low",
+    "drive_advice": "ok_to_drive_limited"
+  },
+  {
+    "id": "fan_shroud_contact",
+    "title": "Fan shroud contact",
+    "one_line": "Fan/shroud rub can rattle/whine at certain times.",
+    "quick_test": "Noise appears with fan activation, not with RPM alone.",
+    "risk_level": "medium",
+    "drive_advice": "ok_to_drive_limited"
+  },
+  {
+    "id": "loose_pulley_or_tensioner",
+    "title": "Loose pulley/tensioner",
+    "one_line": "Play in tensioner/pulley causes rattle and can throw the belt.",
+    "quick_test": "Front rattle that scales with RPM and accessory load suggests pulley/tensioner play.",
+    "risk_level": "high",
+    "drive_advice": "ok_to_drive_limited"
+  },
+  {
+    "id": "ac_compressor_clutch_click",
+    "title": "A/C clutch click",
+    "one_line": "A/C clutch engagement can click/tap as it cycles—often normal unless harsh.",
+    "quick_test": "If it matches A/C cycling exactly, it’s likely clutch engagement sound.",
+    "risk_level": "low",
+    "drive_advice": "ok_to_drive_limited"
+  },
+  {
+    "id": "loose_bracket_tap",
+    "title": "Loose bracket/fastener tap",
+    "one_line": "A loose bracket can tap at a resonance RPM.",
+    "quick_test": "If pressing on the area changes the tap, it’s external hardware.",
+    "risk_level": "low",
+    "drive_advice": "ok_to_drive_limited"
+  },
+  {
+    "id": "normal_evap_purge",
+    "title": "EVAP purge/valve noise",
+    "one_line": "Some purge valves click/hiss lightly during normal operation.",
+    "quick_test": "Light repetitive ticking near purge valve with no other symptoms can be normal.",
+    "risk_level": "low",
+    "drive_advice": "ok_to_drive_limited"
+  },
+  {
+    "id": "needs_more_info",
+    "title": "Needs isolation data",
+    "one_line": "Diagnosis requires RPM vs speed vs load relation to avoid guessing.",
+    "quick_test": "Answer one question: does the sound change with RPM while parked, or only with road speed?",
+    "risk_level": "medium",
+    "drive_advice": "ok_to_drive_limited"
+  },
+  {
+    "id": "needs_relation_data",
+    "title": "Needs relation data",
+    "one_line": "Without relation tests, multiple causes overlap.",
+    "quick_test": "Tell me: cold-only or warm-only, and does it follow RPM or speed?",
+    "risk_level": "medium",
+    "drive_advice": "ok_to_drive_limited"
+  },
+  {
+    "id": "needs_isolation_test",
+    "title": "Needs isolation test",
+    "one_line": "One isolation test will separate engine/accessory from wheel/drivetrain noise.",
+    "quick_test": "Rev in park (engine test) vs steady-speed lane shift (wheel test).",
+    "risk_level": "medium",
+    "drive_advice": "ok_to_drive_limited"
+  }
+]
