@@ -1,0 +1,32 @@
+[
+  {
+    "make": "Ford",
+    "model": "F-150",
+    "year_range": [2004, 2010],
+    "engines": ["5.4L 3V Triton", "4.6L 3V"]
+  },
+  {
+    "make": "Ford",
+    "model": "F-150",
+    "year_range": [2011, 2017],
+    "engines": ["3.5L EcoBoost"]
+  },
+  {
+    "make": "Chevrolet",
+    "model": "Silverado",
+    "year_range": [2007, 2013],
+    "engines": ["5.3L Vortec AFM"]
+  },
+  {
+    "make": "BMW",
+    "model": "328i",
+    "year_range": [2012, 2015],
+    "engines": ["N20"]
+  },
+  {
+    "make": "Toyota",
+    "model": "Camry",
+    "year_range": [2007, 2011],
+    "engines": ["2AZ-FE"]
+  }
+]
