@@ -1,4 +1,4 @@
-// service.js — FixLens "Doctor Brain" v2.2 (Leak-Proof Parser + Hard Places Gate + DIAG_JSON + Search Loop)
+// service.js — FixLens "Doctor Brain" v2.2 (Hard Places Gate + DIAG_JSON + Search Loop + Engine Layer B)
 import OpenAI from "openai";
 import fs from "fs";
 import path from "path";
@@ -6,6 +6,123 @@ import { buildDoctorSystemPrompt } from "./doctorPrompt.js";
 import { performSearch } from "./search.js";
 
 const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+
+/* =========================================================
+   LOAD ENGINE INTELLIGENCE (US market) — from /data
+========================================================= */
+const DATA_DIR = path.join(process.cwd(), "data");
+const VEHICLE_MAP_PATH = path.join(DATA_DIR, "vehicle_engine_map.json");
+const ENGINE_PATTERNS_PATH = path.join(DATA_DIR, "engine_patterns.json");
+
+let VEHICLE_ENGINE_MAP = [];
+let ENGINE_PATTERNS = [];
+
+function safeLoadJson(filePath, fallback = []) {
+  try {
+    if (!fs.existsSync(filePath)) return fallback;
+    const raw = fs.readFileSync(filePath, "utf-8");
+    const parsed = JSON.parse(raw);
+    return parsed;
+  } catch {
+    return fallback;
+  }
+}
+
+// Load once on boot
+VEHICLE_ENGINE_MAP = safeLoadJson(VEHICLE_MAP_PATH, []);
+ENGINE_PATTERNS = safeLoadJson(ENGINE_PATTERNS_PATH, []);
+
+/* =========================================================
+   ENGINE LAYER (Option B): Vehicle -> Engine inference
+========================================================= */
+function normalizeToken(s = "") {
+  return String(s || "")
+    .toLowerCase()
+    .replace(/[\u2010-\u2015]/g, "-") // hyphen variants
+    .replace(/[^\p{L}\p{N}\-\s\.]/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function extractVehicleInfo(text = "") {
+  const t = normalizeToken(text);
+
+  // Year (very common)
+  const yearMatch = t.match(/\b(19|20)\d{2}\b/);
+  const year = yearMatch ? Number(yearMatch[0]) : null;
+
+  // Simple make/model list expansion is easy later.
+  // For now, we use the mapping file itself to detect mentions.
+  let make = null;
+  let model = null;
+
+  // Try exact mentions from map
+  for (const row of VEHICLE_ENGINE_MAP) {
+    const mk = normalizeToken(row?.make);
+    const md = normalizeToken(row?.model);
+
+    if (mk && t.includes(mk)) make = row.make;
+    // model match: allow hyphen variations (f-150 vs f150)
+    const mdLoose = md.replace(/-/g, "");
+    const tLoose = t.replace(/-/g, "");
+    if (md && (t.includes(md) || (mdLoose && tLoose.includes(mdLoose)))) model = row.model;
+
+    if (make && model) break;
+  }
+
+  return { make, model, year };
+}
+
+function detectEngineFromVehicle(make, model, year) {
+  if (!make || !model || !Number.isFinite(year)) return null;
+
+  const mk = normalizeToken(make);
+  const md = normalizeToken(model);
+
+  const found = VEHICLE_ENGINE_MAP.find((v) => {
+    const vmk = normalizeToken(v?.make);
+    const vmd = normalizeToken(v?.model);
+
+    const range = Array.isArray(v?.year_range) ? v.year_range : [];
+    const y0 = Number(range?.[0]);
+    const y1 = Number(range?.[1]);
+
+    if (!vmk || !vmd || !Number.isFinite(y0) || !Number.isFinite(y1)) return false;
+
+    const sameMake = vmk === mk;
+    const sameModel =
+      vmd === md ||
+      vmd.replace(/-/g, "") === md.replace(/-/g, "");
+
+    return sameMake && sameModel && year >= y0 && year <= y1;
+  });
+
+  if (!found || !Array.isArray(found.engines) || found.engines.length === 0) return null;
+
+  // Choose first engine as default (we can later refine by trim/engine size if user mentions it)
+  return String(found.engines[0] || "").trim() || null;
+}
+
+function findEnginePatterns(engineName = "") {
+  const e = String(engineName || "").trim();
+  if (!e) return [];
+
+  const hit = ENGINE_PATTERNS.find((x) => String(x?.engine || "").trim().toLowerCase() === e.toLowerCase());
+  const issues = Array.isArray(hit?.issues) ? hit.issues : [];
+  return issues.slice(0, 6);
+}
+
+function buildEngineContext(text = "") {
+  const info = extractVehicleInfo(text);
+  const detectedEngine = detectEngineFromVehicle(info.make, info.model, info.year);
+
+  if (!detectedEngine) {
+    return { vehicle: info, engine: null, patterns: [] };
+  }
+
+  const patterns = findEnginePatterns(detectedEngine);
+  return { vehicle: info, engine: detectedEngine, patterns };
+}
 
 /* =========================================================
    LOCATION NORMALIZER
@@ -228,58 +345,31 @@ async function transcribeAudioSmart(audioBase64, locale, audioKind = "car_sound"
 }
 
 /* =========================================================
-   PARSER: DIAG_JSON + FINAL_ANSWER (LEAK-PROOF)
+   PARSER: DIAG_JSON + FINAL_ANSWER
 ========================================================= */
 function extractDiagAndAnswer(raw = "") {
   const text = String(raw || "").trim();
 
-  const diagStart = text.indexOf("DIAG_JSON:");
-  const finalStart = text.indexOf("FINAL_ANSWER:");
+  const diagMatch = text.match(/DIAG_JSON\s*:\s*({[\s\S]*?})\s*FINAL_ANSWER\s*:/i);
+  const answerMatch = text.match(/FINAL_ANSWER\s*:\s*([\s\S]*)$/i);
 
   let diag = null;
   let finalAnswer = "";
 
-  if (diagStart !== -1 && finalStart !== -1 && finalStart > diagStart) {
-    const diagText = text
-      .substring(diagStart + "DIAG_JSON:".length, finalStart)
-      .trim();
-
+  if (diagMatch && diagMatch[1]) {
     try {
-      diag = JSON.parse(diagText);
+      diag = JSON.parse(diagMatch[1]);
     } catch {
       diag = null;
     }
-
-    finalAnswer = text
-      .substring(finalStart + "FINAL_ANSWER:".length)
-      .trim();
-  } else {
-    finalAnswer = text;
   }
 
+  if (answerMatch && answerMatch[1]) {
+    finalAnswer = String(answerMatch[1]).trim();
+  }
+
+  if (!finalAnswer) finalAnswer = text;
   return { diag, finalAnswer };
-}
-
-/* =========================================================
-   OUTPUT SANITIZER: never leak DIAG_JSON
-========================================================= */
-function stripInternalBlocks(s = "") {
-  const text = String(s || "");
-
-  const diagStart = text.indexOf("DIAG_JSON:");
-  const finalStart = text.indexOf("FINAL_ANSWER:");
-
-  // If both exist, return only what is after FINAL_ANSWER:
-  if (finalStart !== -1) {
-    return text.substring(finalStart + "FINAL_ANSWER:".length).trim();
-  }
-
-  // If only DIAG_JSON appears, drop everything from it:
-  if (diagStart !== -1) {
-    return text.substring(0, diagStart).trim();
-  }
-
-  return text.trim();
 }
 
 /* =========================================================
@@ -309,7 +399,6 @@ export async function handleFixLensRequest(req) {
   const audio_base_64 = body.audio_base_64 || body.audio_base64 || "";
   const debugMode = Boolean(body.debug);
 
-  // "voice" | "engine" | "brakes" | "car_sound"
   const audio_kind = String(body.audio_kind || "").trim();
   const audioKindFinal = audio_base_64 ? (audio_kind || "car_sound") : "";
 
@@ -337,7 +426,6 @@ export async function handleFixLensRequest(req) {
       voiceText = "";
     }
 
-    // Only mix transcript if it is speech
     const fullInput = `${text} ${audioType === "speech" ? voiceText : ""}`.trim();
 
     // ===== INTENT (HARD GATE) =====
@@ -346,6 +434,12 @@ export async function handleFixLensRequest(req) {
 
     // HARD RULE: If it looks like diagnosis, DO NOT allow places mode
     const placesIntent = Boolean(placesRequested && !diagnosisLikely);
+
+    // ===== ENGINE CONTEXT (Option B) =====
+    const enginePack = buildEngineContext(fullInput || text);
+    const engineDetected = enginePack?.engine || null;
+    const engineVehicle = enginePack?.vehicle || {};
+    const enginePatterns = Array.isArray(enginePack?.patterns) ? enginePack.patterns : [];
 
     // ===== SEARCH (KB always ok; places only if allowed) =====
     const searchPack = await withRetry(
@@ -370,6 +464,16 @@ export async function handleFixLensRequest(req) {
       ? `AUDIO_NOTE: PRIMARY_MECHANICAL_SOUND (${audioKindFinal || "car_sound"}). Treat audio as mechanical sound first. Do NOT invent smells.`
       : "";
 
+    const engineContextText = `
+ENGINE_CONTEXT (US engine intelligence):
+- VEHICLE_MENTION: ${JSON.stringify(engineVehicle)}
+- DETECTED_ENGINE: ${engineDetected ? engineDetected : "null"}
+- ENGINE_PATTERNS_JSON: ${JSON.stringify(enginePatterns)}
+RULE:
+- If DETECTED_ENGINE is not null AND patterns match the symptom, you MAY mention the engine explicitly to the user (Option B).
+- If engine is uncertain, do NOT guess. Ask at most one of your allowed questions to confirm (year/model/engine size).
+`.trim();
+
     const strictText = `
 STRICT_CONTEXT
 LOCALE: ${locale}
@@ -379,6 +483,8 @@ LOCATION: ${typeof user_location === "string" ? user_location : JSON.stringify(u
 ABSOLUTE_RULES:
 - If PLACES_INTENT:false => NEVER ask for ZIP/GPS/city, NEVER mention nearby shops/maps.
 - Diagnosis only. No place-search behavior.
+
+${engineContextText}
 
 VERIFIED_DATA_JSON: ${JSON.stringify(VERIFIED_DATA)}
 VERIFIED_WORKSHOPS_JSON: ${JSON.stringify(VERIFIED_WORKSHOPS)}
@@ -416,10 +522,11 @@ USER_INPUT: ${text.trim()}
               {
                 role: "user",
                 content:
-                  "Return EXACTLY:\nDIAG_JSON: {valid JSON}\nFINAL_ANSWER: <final answer>\nNo extra text.",
+                  "Return EXACTLY:\nDIAG_JSON: {valid JSON}\nFINAL_ANSWER: <final answer>\nNo extra text.\nFINAL_ANSWER must be mechanic-like, not cold-short, and not verbose. Ask max 2 questions only if they matter.",
               },
             ],
-            temperature: Number(process.env.FIXLENS_TEMPERATURE || 0.1),
+            // Make it less "cold-short"
+            temperature: Number(process.env.FIXLENS_TEMPERATURE || 0.55),
             max_tokens: Number(process.env.FIXLENS_MAX_TOKENS || 900),
           }),
           Number(process.env.CHAT_TIMEOUT_MS || 25000),
@@ -429,25 +536,32 @@ USER_INPUT: ${text.trim()}
     );
 
     const raw1 = String(response1?.choices?.[0]?.message?.content || "").trim();
-
-    // Strong parse + sanitize
     let { diag: diag1, finalAnswer: answer1 } = extractDiagAndAnswer(raw1);
-    answer1 = stripInternalBlocks(answer1 || raw1);
 
-    // If parsing failed, still never leak internals
+    // If parsing failed, return answer directly
     if (!diag1 || !diag1?.search_intent) {
-      const safe = stripInternalBlocks(answer1 || raw1);
       return {
         ok: true,
         reply:
-          safe ||
+          answer1 ||
           (String(locale || "").toLowerCase().startsWith("ar")
             ? "صار خلل مؤقت، أعد المحاولة."
             : "Temporary issue, please retry."),
         locale,
         workshops_count: VERIFIED_WORKSHOPS.length,
         ...(debugMode
-          ? { debug: { stage: "ok_no_diagjson", raw1, audioType, speech_score: audioSmart.speech_score, diagnosisLikely, placesIntent } }
+          ? {
+              debug: {
+                stage: "ok_no_diagjson",
+                raw1,
+                audioType,
+                speech_score: audioSmart.speech_score,
+                diagnosisLikely,
+                placesIntent,
+                engineDetected,
+                engineVehicle,
+              },
+            }
           : {}),
       };
     }
@@ -465,11 +579,11 @@ USER_INPUT: ${text.trim()}
                 {
                   role: "user",
                   content:
-                    "PLACES_INTENT is false. Output ONLY FINAL_ANSWER text (no DIAG_JSON). Do NOT ask for ZIP/GPS/city. Do NOT mention shops/maps. No headings/bullets/numbers. Be decisive and mechanic-like.",
+                    "PLACES_INTENT is false. Rewrite FINAL_ANSWER as a real mechanic diagnosis. Do NOT ask for ZIP/GPS/city. Do NOT mention shops/maps. No headings/bullets/numbering. Ask max 2 questions only if essential. Keep it clear and helpful (not too short).",
                 },
               ],
-              temperature: 0,
-              max_tokens: 650,
+              temperature: 0.35,
+              max_tokens: 750,
             }),
             Number(process.env.CHAT_TIMEOUT_MS || 25000),
             "chat_timeout"
@@ -477,9 +591,7 @@ USER_INPUT: ${text.trim()}
         2
       );
 
-      const forcedRaw = String(guardResponse?.choices?.[0]?.message?.content || "").trim();
-      const forced = stripInternalBlocks(forcedRaw);
-
+      const forced = String(guardResponse?.choices?.[0]?.message?.content || "").trim();
       if (forced) answer1 = forced;
     }
 
@@ -516,6 +628,11 @@ LOCALE: ${locale}
 PLACES_INTENT: ${placesIntent ? "true" : "false"}
 LOCATION: ${typeof user_location === "string" ? user_location : JSON.stringify(user_location)}
 
+ENGINE_CONTEXT (carry):
+- DETECTED_ENGINE: ${engineDetected ? engineDetected : "null"}
+- VEHICLE_MENTION: ${JSON.stringify(engineVehicle)}
+- ENGINE_PATTERNS_JSON: ${JSON.stringify(enginePatterns)}
+
 DIAG_JSON_FROM_STAGE1: ${JSON.stringify(diag1)}
 
 VERIFIED_DATA_JSON: ${JSON.stringify(VERIFIED_DATA_2)}
@@ -523,7 +640,6 @@ VERIFIED_WORKSHOPS_JSON: ${JSON.stringify(VERIFIED_WORKSHOPS_2)}
 
 ABSOLUTE_RULES:
 - If PLACES_INTENT:false => NEVER ask for ZIP/GPS/city, NEVER mention shops/maps.
-- Output ONLY FINAL_ANSWER text (no DIAG_JSON).
 
 USER_INPUT: ${text.trim()}
 `.trim();
@@ -539,10 +655,10 @@ USER_INPUT: ${text.trim()}
                 {
                   role: "user",
                   content:
-                    "Write ONLY the FINAL_ANSWER in the required language. No headings. No bullets. No numbers. Be decisive and mechanic-like.",
+                    "Write ONLY the FINAL_ANSWER in the required language. No headings. No bullets. No numbers. Ask max 2 questions only if essential. Be decisive and mechanic-like. Keep it clear (not too short, not too long).",
                 },
               ],
-              temperature: Number(process.env.FIXLENS_TEMPERATURE || 0.1),
+              temperature: 0.45,
               max_tokens: Number(process.env.FIXLENS_MAX_TOKENS || 700),
             }),
             Number(process.env.CHAT_TIMEOUT_MS || 25000),
@@ -552,14 +668,13 @@ USER_INPUT: ${text.trim()}
       );
 
       let reply2 =
-        stripInternalBlocks(String(response2?.choices?.[0]?.message?.content || "").trim()) ||
+        String(response2?.choices?.[0]?.message?.content || "").trim() ||
         answer1 ||
         (String(locale || "").toLowerCase().startsWith("ar")
           ? "صار خلل مؤقت، أعد المحاولة."
           : "Temporary issue, please retry.");
 
       if (!placesIntent && violatesNoPlaces(reply2)) {
-        // final hard cleanup
         reply2 = answer1;
       }
 
@@ -569,23 +684,46 @@ USER_INPUT: ${text.trim()}
         locale,
         workshops_count: VERIFIED_WORKSHOPS_2.length,
         ...(debugMode
-          ? { debug: { stage: "ok_refined", audioType, speech_score: audioSmart.speech_score, diagnosisLikely, placesIntent, diag1, searchQuery } }
+          ? {
+              debug: {
+                stage: "ok_refined",
+                audioType,
+                speech_score: audioSmart.speech_score,
+                diagnosisLikely,
+                placesIntent,
+                diag1,
+                searchQuery,
+                engineDetected,
+                engineVehicle,
+              },
+            }
           : {}),
       };
     }
 
-    // Default: stage1 answer is enough (sanitized)
+    // Default: stage1 answer is enough
     return {
       ok: true,
       reply:
-        stripInternalBlocks(answer1) ||
+        answer1 ||
         (String(locale || "").toLowerCase().startsWith("ar")
           ? "صار خلل مؤقت، أعد المحاولة."
           : "Temporary issue, please retry."),
       locale,
       workshops_count: VERIFIED_WORKSHOPS.length,
       ...(debugMode
-        ? { debug: { stage: "ok_stage1", audioType, speech_score: audioSmart.speech_score, diagnosisLikely, placesIntent, diag1 } }
+        ? {
+            debug: {
+              stage: "ok_stage1",
+              audioType,
+              speech_score: audioSmart.speech_score,
+              diagnosisLikely,
+              placesIntent,
+              diag1,
+              engineDetected,
+              engineVehicle,
+            },
+          }
         : {}),
     };
   } catch (error) {
