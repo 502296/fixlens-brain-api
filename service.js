@@ -30,19 +30,12 @@ function normalizeUserLocation(raw) {
 function detectTextLanguage(text = "") {
   const t = String(text || "");
 
-  // Arabic (including extended blocks)
-  if (/[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF]/.test(t)) return "ar";
-  // Russian/Cyrillic
-  if (/[\u0400-\u04FF]/.test(t)) return "ru";
-  // Chinese
-  if (/[\u4E00-\u9FFF]/.test(t)) return "zh";
-  // Japanese
-  if (/[\u3040-\u30FF]/.test(t)) return "ja";
-  // Korean
-  if (/[\uAC00-\uD7AF]/.test(t)) return "ko";
+  if (/[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF]/.test(t)) return "ar"; // Arabic
+  if (/[\u0400-\u04FF]/.test(t)) return "ru"; // Cyrillic
+  if (/[\u4E00-\u9FFF]/.test(t)) return "zh"; // Chinese
+  if (/[\u3040-\u30FF]/.test(t)) return "ja"; // Japanese
+  if (/[\uAC00-\uD7AF]/.test(t)) return "ko"; // Korean
 
-  // Simple Latin language hints (very light)
-  // If you want, we can expand later, but keep it safe now.
   return "en";
 }
 
@@ -57,13 +50,10 @@ function inferLocale({ locale, text }) {
   const detected = detectTextLanguage(text || "");
 
   // If user typed in a clear non-English script, trust that always.
-  // This fixes cases where Flutter sends locale="en" by mistake.
   if (detected && detected !== "en") return detected;
 
-  // If locale is provided and not empty, use it.
   if (normalized) return normalized;
 
-  // Fallback
   return detected || "en";
 }
 
@@ -95,58 +85,82 @@ async function withRetry(fn, tries = 2, baseDelay = 250) {
 }
 
 /* =========================================================
-   PLACES INTENT (typed text ONLY)
+   INTENT: DIAGNOSIS vs PLACES
+   Fix: do NOT show GPS/ZIP unless the user clearly asked for shops/nearby
 ========================================================= */
+
+// If the user is describing a car problem (noise/vibration/etc), treat it as diagnosis
+function looksLikeDiagnosisText(input = "") {
+  const t = String(input || "").toLowerCase();
+
+  const words = [
+    // English
+    "noise", "sound", "rattle", "knock", "ticking", "click", "clunk", "grind", "squeal",
+    "vibration", "shake", "misfire", "stall", "idle", "engine", "brake", "steering",
+    "overheat", "smoke", "leak", "check engine", "p0",
+
+    // Arabic
+    "صوت", "طقطقة", "طرطقة", "تك تك", "نق", "خبط", "خشخشة", "صرير", "زقزقة",
+    "رجفة", "اهتزاز", "هزة", "تقطيع", "تنتيع", "تفتفة",
+    "محرك", "مكينة", "فرامل", "دركسون", "ستيرنغ",
+    "حرارة", "سخونة", "دخان", "تهريب", "تسريب", "لمبة", "تشيك"
+  ];
+
+  return words.some((w) => t.includes(w));
+}
+
+// Very strict "nearby request" triggers
+function looksLikeNearbyRequest(input = "") {
+  const t = String(input || "").toLowerCase();
+  const nearby = [
+    "near me", "nearby", "closest", "around me",
+    "اقرب", "أقرب", "بالقرب", "قريب", "حولّي", "حولي", "قريبة"
+  ];
+  return nearby.some((w) => t.includes(w));
+}
+
+// Strong shop/parts words
+function looksLikeShopOrPartsWords(input = "") {
+  const t = String(input || "").toLowerCase();
+
+  const strong = [
+    // shops
+    "mechanic", "garage", "auto repair", "repair shop", "car repair",
+    // parts/tools stores
+    "auto parts", "car parts", "parts store", "tool store", "hardware store",
+    "autozone", "o'reilly", "oreilly", "advance auto", "napa",
+
+    // Arabic strong
+    "ورشة", "ورش", "ميكانيك", "ميكانيكي", "كراج",
+    "قطع غيار", "محل قطع", "محل قطع غيار", "محل ادوات", "محل أدوات", "ادوات", "أدوات"
+  ];
+
+  return strong.some((w) => t.includes(w));
+}
+
+// Map/address words are weak by themselves
+function looksLikeMapAddressWords(input = "") {
+  const t = String(input || "").toLowerCase();
+  const weak = [
+    "address", "location", "map", "google maps",
+    "عنوان", "موقع", "خرائط", "خريطة", "لوكيشن"
+  ];
+  return weak.some((w) => t.includes(w));
+}
+
 function looksLikePlacesRequest(input = "") {
   const t = String(input || "").toLowerCase();
 
-  const shop = [
-    "mechanic",
-    "garage",
-    "auto repair",
-    "repair shop",
-    "near me",
-    "nearby",
-    "closest",
-    "address",
-    "location",
-    "map",
-    "google maps",
-    "ورشة",
-    "ورش",
-    "ميكانيك",
-    "ميكانيكي",
-    "كراج",
-    "اقرب",
-    "أقرب",
-    "عنوان",
-    "موقع",
-    "خرائط",
-    "وين اصلح",
-  ];
+  // 1) Explicit nearby request => places
+  if (looksLikeNearbyRequest(t)) return true;
 
-  const parts = [
-    "auto parts",
-    "car parts",
-    "parts store",
-    "autozone",
-    "o'reilly",
-    "oreilly",
-    "advance auto",
-    "napa",
-    "hardware store",
-    "tool store",
-    "tools store",
-    "قطع غيار",
-    "محل قطع",
-    "محل قطع غيار",
-    "محل ادوات",
-    "محل أدوات",
-    "ادوات",
-    "أدوات",
-  ];
+  // 2) Explicit shop/parts words => places
+  if (looksLikeShopOrPartsWords(t)) return true;
 
-  return shop.some((w) => t.includes(w)) || parts.some((w) => t.includes(w));
+  // 3) Map/address alone is NOT enough. Require also shop/parts words.
+  if (looksLikeMapAddressWords(t) && looksLikeShopOrPartsWords(t)) return true;
+
+  return false;
 }
 
 /* =========================================================
@@ -204,8 +218,6 @@ async function transcribeAudioSmart(audioBase64, locale, audioKind = "car_sound"
   try {
     fs.writeFileSync(tempPath, Buffer.from(audioBase64, "base64"));
 
-    // If it's not "voice", we still run Whisper in verbose mode ONLY to detect "no_speech_prob"
-    // BUT we will NOT use transcript as user intent.
     const res = await withRetry(() =>
       withTimeout(
         client.audio.transcriptions.create({
@@ -283,15 +295,16 @@ function formatPlaceLine(w, i, locale) {
 function buildPlacesReply(workshops, locale) {
   const ar = String(locale || "").toLowerCase().startsWith("ar");
   if (!Array.isArray(workshops) || workshops.length === 0) {
+    // WORLDWIDE + not tied to a city
     return ar
-      ? "ما لكيت نتائج قريبة الآن. فعّل GPS أو اكتب ZIP/المدينة + الولاية (مثال: 40218 أو Louisville, KY)."
-      : "No nearby results right now. Enable GPS or send ZIP / City + State (e.g., 40218 or Louisville, KY).";
+      ? "حتى أطلع لك ورش قريبة، فعّل GPS أو اكتب موقعك (ZIP / المدينة + الولاية/المنطقة)."
+      : "To show nearby shops, enable GPS or send your location (ZIP / City + State/Region).";
   }
 
   const lines = workshops.slice(0, 5).map((w, i) => formatPlaceLine(w, i, locale)).join("\n\n");
   return ar
-    ? `هذه نتائج قريبة حسب موقعك:\n\n${lines}\n\nإذا تكتب نوع الطلب (قطع غيار/إطارات/فرامل/ميكانيك) أرتّب لك نتائج أدق.`
-    : `Here are nearby results based on your location:\n\n${lines}\n\nTell me what you need (parts/tires/brakes/mechanic) and I’ll refine it.`;
+    ? `هذه نتائج قريبة حسب موقعك:\n\n${lines}\n\nإذا تكتب نوع الطلب (ميكانيك/قطع غيار/إطارات/فرامل) أرتّب لك نتائج أدق.`
+    : `Here are nearby results based on your location:\n\n${lines}\n\nTell me what you need (mechanic/parts/tires/brakes) and I’ll refine it.`;
 }
 
 /* =========================================================
@@ -310,9 +323,11 @@ export async function handleFixLensRequest(req) {
   const debugMode = Boolean(body.debug);
 
   // "voice" | "engine" | "brakes" | "car_sound"
-  // IMPORTANT: default to car_sound if audio exists and audio_kind missing
   const audio_kind = String(body.audio_kind || "").trim();
   const audioKindFinal = audio_base_64 ? (audio_kind || "car_sound") : "";
+
+  // radius override (optional)
+  const placesRadiusMeters = Number(body.places_radius_meters || process.env.PLACES_RADIUS_METERS || 25000);
 
   try {
     if (!text.trim() && !audio_base_64 && !image_base_64) {
@@ -340,8 +355,12 @@ export async function handleFixLensRequest(req) {
     // IMPORTANT: we only mix transcript if it's VOICE (speech)
     const fullInput = `${text} ${audioType === "speech" ? voiceText : ""}`.trim();
 
-    // ===== PLACES INTENT (typed text ONLY) =====
-    const placesIntent = looksLikePlacesRequest(text);
+    // ===== INTENT (FIXED) =====
+    const diagnosisLikely = looksLikeDiagnosisText(text);
+    const placesRequested = looksLikePlacesRequest(text);
+
+    // Only allow places when user clearly asked for it
+    const placesIntent = placesRequested && !diagnosisLikely;
 
     // ===== SEARCH =====
     const searchPack = await withRetry(
@@ -350,7 +369,7 @@ export async function handleFixLensRequest(req) {
           performSearch(fullInput || text, user_location, {
             locale,
             allowPlaces: placesIntent,
-            placesRadiusMeters: Number(body.places_radius_meters || 25000),
+            placesRadiusMeters,
           }),
           Number(process.env.SEARCH_TIMEOUT_MS || 15000),
           "search_timeout"
@@ -361,7 +380,7 @@ export async function handleFixLensRequest(req) {
     const VERIFIED_DATA = Array.isArray(searchPack?.verified_data) ? searchPack.verified_data : [];
     const VERIFIED_WORKSHOPS = Array.isArray(searchPack?.verified_workshops) ? searchPack.verified_workshops : [];
 
-    // ===== DIRECT PLACES RESPONSE =====
+    // ===== DIRECT PLACES RESPONSE (ONLY when intent is truly places) =====
     if (placesIntent) {
       const reply = buildPlacesReply(VERIFIED_WORKSHOPS, locale);
       return {
@@ -374,10 +393,12 @@ export async function handleFixLensRequest(req) {
               debug: {
                 stage: "places",
                 placesIntent,
+                diagnosisLikely,
                 audioType,
                 speech_score: audioSmart.speech_score,
                 has_places_key: Boolean(process.env.GOOGLE_PLACES_API_KEY),
                 location_type: typeof user_location,
+                placesRadiusMeters,
               },
             }
           : {}),
@@ -450,7 +471,7 @@ USER_INPUT: ${text.trim()}`,
       reply,
       locale,
       workshops_count: VERIFIED_WORKSHOPS.length,
-      ...(debugMode ? { debug: { stage: "ok", audioType, speech_score: audioSmart.speech_score } } : {}),
+      ...(debugMode ? { debug: { stage: "ok", audioType, speech_score: audioSmart.speech_score, diagnosisLikely } } : {}),
     };
   } catch (error) {
     console.error("FixLens Fatal:", error?.message || error);
