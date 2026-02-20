@@ -25,59 +25,40 @@ function normalizeUserLocation(raw) {
 }
 
 /* =========================================================
-   LANGUAGE (stable + practical)
-   - Do NOT trust Flutter locale when user text is clearly non-English.
+   LANGUAGE (stable + override wrong locale from client)
 ========================================================= */
 function detectTextLanguage(text = "") {
   const t = String(text || "");
-
-  // Arabic
   if (/[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF]/.test(t)) return "ar";
-  // Russian/Cyrillic
   if (/[\u0400-\u04FF]/.test(t)) return "ru";
-  // Chinese
   if (/[\u4E00-\u9FFF]/.test(t)) return "zh";
-  // Japanese
   if (/[\u3040-\u30FF]/.test(t)) return "ja";
-  // Korean
   if (/[\uAC00-\uD7AF]/.test(t)) return "ko";
-
-  // Quick hints for common Latin languages (best-effort)
-  const lower = t.toLowerCase();
-  if (/[áéíóúñ¿¡]/.test(lower) || /\b(que|porque|tengo|ruido|coche)\b/.test(lower)) return "es";
-  if (/[àâçéèêëîïôùûüÿœ]/.test(lower) || /\b(je|j'ai|bruit|voiture|moteur)\b/.test(lower)) return "fr";
-  if (/[äöüß]/.test(lower) || /\b(ich|geräusch|auto|motor)\b/.test(lower)) return "de";
-  if (/[àèìòù]/.test(lower) || /\b(ho|rumore|auto|motore)\b/.test(lower)) return "it";
-  if (/[ãõç]/.test(lower) || /\b(eu|carro|barulho|motor)\b/.test(lower)) return "pt";
-
   return "en";
 }
 
 function normalizeLocale(input) {
   const v = String(input || "").trim();
-  if (!v) return "";
-  const low = v.toLowerCase();
-  if (low === "auto" || low === "global") return "";
+  if (!v || v.toLowerCase() === "auto") return "";
   return v;
 }
 
-/**
- * inferLocaleSmart:
- * - If text clearly indicates a language (Arabic/etc), that wins.
- * - Otherwise use provided locale if present.
- * - Else default to "en".
- */
-function inferLocaleSmart({ locale, text }) {
-  const textLang = detectTextLanguage(text || "");
+// If Flutter sends locale incorrectly (e.g., "en"), we override using script detection
+function inferLocale({ locale, text }) {
   const normalized = normalizeLocale(locale);
+  const detected = detectTextLanguage(text || "");
 
-  // If user wrote non-English, obey it even if Flutter sent "en"
-  if (textLang && textLang !== "en") return textLang;
+  // If no locale from client, use detected
+  if (!normalized) return detected || "en";
 
-  // Otherwise trust explicit locale
-  if (normalized) return normalized;
+  const short = normalized.split("-")[0].toLowerCase();
+  // If user text is clearly Arabic/Japanese/etc but client claims "en", override.
+  if (text && text.trim().length >= 2 && detected && detected !== short) {
+    // Only override when detected is strong non-English
+    if (["ar", "ja", "zh", "ko", "ru"].includes(detected)) return detected;
+  }
 
-  return textLang || "en";
+  return normalized;
 }
 
 /* =========================================================
@@ -108,7 +89,7 @@ async function withRetry(fn, tries = 2, baseDelay = 250) {
 }
 
 /* =========================================================
-   PLACES INTENT (ONLY when user explicitly asks for shops/addresses)
+   PLACES INTENT (typed text ONLY)
 ========================================================= */
 function looksLikePlacesRequest(input = "") {
   const t = String(input || "").toLowerCase();
@@ -118,10 +99,6 @@ function looksLikePlacesRequest(input = "") {
     "garage",
     "auto repair",
     "repair shop",
-    "tire shop",
-    "tyre shop",
-    "alignment",
-    "balance",
     "near me",
     "nearby",
     "closest",
@@ -129,8 +106,9 @@ function looksLikePlacesRequest(input = "") {
     "location",
     "map",
     "google maps",
-    "shop near",
-    "find a shop",
+    "workshop",
+    "tire shop",
+    "tyre shop",
     "ورشة",
     "ورش",
     "ميكانيك",
@@ -143,6 +121,8 @@ function looksLikePlacesRequest(input = "") {
     "خرائط",
     "وين اصلح",
     "وين أصلح",
+    "وين الورشة",
+    "اقرب ورشة",
   ];
 
   const parts = [
@@ -169,89 +149,79 @@ function looksLikePlacesRequest(input = "") {
   return shop.some((w) => t.includes(w)) || parts.some((w) => t.includes(w));
 }
 
-/**
- * Symptom keywords: if user message contains these, it's NOT a "location-only" hint.
- * This prevents: "عندي صوت بالمحرك" from being treated as GPS/location follow-up.
- */
-function hasSymptomWords(text = "") {
-  const t = String(text || "").toLowerCase();
-  const words = [
-    "shake",
-    "shaking",
-    "vibration",
-    "vibrate",
-    "noise",
-    "sound",
-    "knock",
-    "ticking",
-    "squeal",
-    "grind",
-    "jerk",
-    "stall",
-    "misfire",
-    "رجفة",
-    "اهتزاز",
-    "يرجف",
-    "صوت",
-    "طرق",
-    "طقطقة",
-    "صفير",
-    "حك",
-    "يطفى",
-    "تقطيع",
-    "نتعة",
-  ];
-  return words.some((w) => t.includes(w));
-}
-
-/**
- * STRICT "location-only" detector:
- * true only if the message is basically a location (zip/city/state/coords)
- * and does NOT contain symptom words.
- */
 function looksLikeLocationHintOnly(text = "") {
-  const raw = String(text || "").trim();
-  const t = raw.toLowerCase();
-
+  const t = String(text || "").toLowerCase().trim();
   if (!t) return false;
-  if (hasSymptomWords(t)) return false;
 
-  // zip only
   if (/^\d{5}(-\d{4})?$/.test(t)) return true;
+  if (/(-?\d+(\.\d+)?)\s*,\s*(-?\d+(\.\d+)?)/.test(t)) return true;
 
-  // coordinates-like
-  if (/^(-?\d+(\.\d+)?)\s*,\s*(-?\d+(\.\d+)?)$/.test(t)) return true;
-
-  // "I am in ..." / "انا في ..." short forms
-  const hints = ["i am in", "i'm in", "my location", "zip", "city", "state", "انا في", "أني في", "اني في"];
-  const hasHint = hints.some((w) => t.includes(w));
-
-  // If it's too long, it's probably not just a location
-  if (raw.length > 45) return false;
-
-  return hasHint;
+  const hints = [
+    "i am in",
+    "i'm in",
+    "my location",
+    "zip",
+    "city",
+    "state",
+    "انا في",
+    "أني في",
+    "انا حاليا في",
+    "موقعي",
+    "zip",
+    "المنطقة",
+    "الحي",
+  ];
+  return hints.some((w) => t.includes(w));
 }
 
-/** finds the most recent USER message text in history */
-function lastUserText(history = []) {
-  if (!Array.isArray(history) || history.length === 0) return "";
+function lastUserAskedForPlaces(history = []) {
+  if (!Array.isArray(history) || history.length === 0) return false;
   for (let i = history.length - 1; i >= 0; i--) {
     const msg = history[i];
     if (msg?.role !== "user") continue;
-    const c = msg?.content;
 
-    if (typeof c === "string") return c;
-    if (Array.isArray(c)) {
-      return c.map((x) => (typeof x?.text === "string" ? x.text : "")).join(" ");
+    const c = msg?.content;
+    let text = "";
+    if (typeof c === "string") text = c;
+    else if (Array.isArray(c)) {
+      text = c.map((x) => (typeof x?.text === "string" ? x.text : "")).join(" ");
     }
+
+    text = String(text || "").trim();
+    if (!text) continue;
+
+    return looksLikePlacesRequest(text);
   }
-  return "";
+  return false;
 }
 
 /* =========================================================
-   AUDIO: speech vs non-speech (ENGINE/BRAKES)
-   - We assume audio is mechanical sound by default unless audio_kind === "voice"
+   AUDIO: prioritize MECHANICAL SOUND unless user says road vibration
 ========================================================= */
+function userExplicitlySaysRoadVibration(s = "") {
+  const t = String(s || "").toLowerCase();
+  const roadWords = [
+    "road vibration",
+    "vibration from road",
+    "tire vibration",
+    "tyre vibration",
+    "wheel vibration",
+    "steering wheel shake",
+    "alignment",
+    "balance",
+    "اهتزاز طريق",
+    "اهتزاز من الطريق",
+    "رجفة من الاطارات",
+    "رجفة من الإطارات",
+    "رجفة بالدركسون",
+    "ميزان",
+    "ترصيص",
+    "وزن اطارات",
+    "وزن إطارات",
+  ];
+  return roadWords.some((w) => t.includes(w));
+}
+
 function containsSmellWords(s = "") {
   const t = String(s || "").toLowerCase();
   return (
@@ -287,24 +257,16 @@ function estimateSpeechFromWhisperVerbose(verbose) {
   return { hasSpeech: null, score: ratio };
 }
 
-/**
- * transcribeAudioSmart:
- * - If audio_kind !== "voice", we treat it as mechanical sound and DO NOT trust transcript for diagnosis.
- * - We still run whisper to detect speech vs non-speech, but we drop transcript by default.
- */
-async function transcribeAudioSmart(audioBase64, locale, audioKind = "") {
+async function transcribeAudioSmart(audioBase64, locale, { audioKind = "", forceMechanical = true } = {}) {
   if (!audioBase64 || String(audioBase64).length < 50) {
     return { ok: false, text: "", audio_type: "none", speech_score: 0 };
   }
 
-  const kind = String(audioKind || "").toLowerCase().trim();
-
-  // Default: treat as car sound (mechanical) unless explicitly "voice"
-  const treatAsMechanical = kind !== "voice";
-
   const tempPath = path.join("/tmp", `v_${Date.now()}.m4a`);
   try {
     fs.writeFileSync(tempPath, Buffer.from(audioBase64, "base64"));
+
+    const lang = String(locale || "").split("-")[0] || undefined;
 
     const res = await withRetry(() =>
       withTimeout(
@@ -313,8 +275,8 @@ async function transcribeAudioSmart(audioBase64, locale, audioKind = "") {
           model: "whisper-1",
           response_format: "verbose_json",
           prompt:
-            "Audio may be non-speech automotive sounds (engine/brakes). If no clear spoken words, keep text extremely short or empty. Do not invent smells.",
-          language: String(locale || "").split("-")[0] || undefined,
+            "Audio may be NON-SPEECH automotive mechanical sounds (engine/brakes). If no clear spoken words, keep text extremely short or empty. Do not invent smells or context.",
+          language: lang,
         }),
         Number(process.env.WHISPER_TIMEOUT_MS || 15000),
         "whisper_timeout"
@@ -324,21 +286,32 @@ async function transcribeAudioSmart(audioBase64, locale, audioKind = "") {
     const text = String(res?.text || "").trim();
     const speechEst = estimateSpeechFromWhisperVerbose(res);
 
-    // If transcript is too long => garbage
+    // If we force mechanical, we NEVER let transcript override the request.
+    // (We still run whisper to detect if user spoke words, but we won't mix it unless clearly speech.)
+    const forcedMechanical =
+      forceMechanical ||
+      ["engine", "brakes", "car_sound", "sound", "noise", "mechanical"].includes(
+        String(audioKind || "").toLowerCase()
+      );
+
+    // Hard rules:
     if (text.length > 240) {
       return { ok: true, text: "", audio_type: "non_speech", speech_score: speechEst.score };
     }
-
-    // If we treat as mechanical, DO NOT use transcript for diagnosis
-    if (treatAsMechanical) {
-      return { ok: true, text: "", audio_type: "mechanical_sound", speech_score: speechEst.score };
-    }
-
-    // voice mode
     if (speechEst.hasSpeech === false) {
       return { ok: true, text: "", audio_type: "non_speech", speech_score: speechEst.score };
     }
 
+    // If forced mechanical: keep transcript only if it's clearly short speech (e.g., user said "cold start")
+    if (forcedMechanical) {
+      const looksWordy = /[a-zA-Z\u0600-\u06FF]{3,}/.test(text);
+      if (speechEst.hasSpeech === true && text && text.length <= 80 && looksWordy) {
+        return { ok: true, text, audio_type: "speech_maybe", speech_score: speechEst.score };
+      }
+      return { ok: true, text: "", audio_type: "non_speech", speech_score: speechEst.score };
+    }
+
+    // Not forced mechanical (rare): normal speech handling
     if (speechEst.hasSpeech === true && text) {
       return { ok: true, text, audio_type: "speech", speech_score: speechEst.score };
     }
@@ -405,21 +378,19 @@ export async function handleFixLensRequest(req) {
   const text = String(body.text || "");
   const history = Array.isArray(body.history) ? body.history : [];
 
-  // ✅ locale: prefer user text language
-  let locale = inferLocaleSmart({ locale: body.locale, text });
+  let locale = inferLocale({ locale: body.locale, text });
 
-  // ✅ location: string or object (gps)
   const user_location = normalizeUserLocation(body.user_location);
   const image_base_64 = body.image_base_64 || body.image_base64 || "";
   const audio_base_64 = body.audio_base_64 || body.audio_base64 || "";
   const debugMode = Boolean(body.debug);
 
-  // OPTIONAL from Flutter: "voice" | "engine" | "brakes" | "car_sound"
-  // Default to mechanical if audio exists and caller didn't specify.
-  const audio_kind = String(body.audio_kind || "").trim() || (audio_base_64 ? "car_sound" : "");
+  // OPTIONAL from Flutter: "engine" | "brakes" | "voice" | "car_sound"
+  // If user sends audio and Flutter doesn't specify -> default to mechanical "car_sound"
+  let audio_kind = String(body.audio_kind || "").trim();
+  if (audio_base_64 && !audio_kind) audio_kind = "car_sound";
 
   try {
-    // Empty guard
     if (!text.trim() && !audio_base_64 && !image_base_64) {
       return {
         ok: false,
@@ -433,32 +404,32 @@ export async function handleFixLensRequest(req) {
     }
 
     // ===== AUDIO (smart) =====
-    const audioSmart = await transcribeAudioSmart(audio_base_64, locale, audio_kind);
+    // Rule: If audio exists -> prioritize it as MECHANICAL SOUND unless user explicitly says road vibration
+    const forceMechanical = audio_base_64 ? !userExplicitlySaysRoadVibration(text) : false;
+
+    const audioSmart = await transcribeAudioSmart(audio_base_64, locale, {
+      audioKind: audio_kind,
+      forceMechanical,
+    });
+
     let voiceText = audioSmart.ok ? String(audioSmart.text || "").trim() : "";
     const audioType = audioSmart.audio_type || "none";
 
-    // extra guard: prevent smell hallucination
+    // Prevent smell hallucination
     if (!containsSmellWords(text) && containsSmellWords(voiceText)) {
       voiceText = "";
     }
 
-    // IMPORTANT:
-    // - We never let audio transcript change intent (places) or override typed symptom.
-    // - We only merge transcript into fullInput if user explicitly used "voice" mode.
+    // IMPORTANT: if audio is NON-SPEECH we do NOT mix transcript into the main text
     const fullInput = `${text} ${audioType === "speech" || audioType === "speech_maybe" ? voiceText : ""}`.trim();
 
-    // ===== PLACES INTENT (strict) =====
-    // Only if current message explicitly asks for shops/addresses.
+    // ===== PLACES INTENT (typed text only + smart continuation) =====
     const typedPlaces = looksLikePlacesRequest(text);
-
-    // Allow short "location-only" follow-up ONLY if previous user message was a places request.
-    const prevUser = lastUserText(history);
-    const prevWasPlaces = looksLikePlacesRequest(prevUser);
-
+    const priorPlaces = lastUserAskedForPlaces(history);
     const locHintOnly = looksLikeLocationHintOnly(text);
-    const placesIntent = typedPlaces || (prevWasPlaces && locHintOnly);
+    const placesIntent = typedPlaces || (priorPlaces && locHintOnly);
 
-    // ===== SEARCH (KB + Places when allowed) =====
+    // ===== SEARCH =====
     const searchPack = await withRetry(
       () =>
         withTimeout(
@@ -489,10 +460,9 @@ export async function handleFixLensRequest(req) {
               debug: {
                 stage: "places",
                 typedPlaces,
-                prevWasPlaces,
+                priorPlaces,
                 locHintOnly,
                 audioType,
-                audio_kind,
                 speech_score: audioSmart.speech_score,
                 has_places_key: Boolean(process.env.GOOGLE_PLACES_API_KEY),
                 location_type: typeof user_location,
@@ -505,12 +475,13 @@ export async function handleFixLensRequest(req) {
     // ===== DIAGNOSIS MODE =====
     const messageContent = [];
 
-    const audioPolicyLine =
-      "If audio exists, prioritize it as mechanical sound from the car. Do NOT assume road vibration unless the user explicitly says road/tires/speed vibration.";
+    const audioPolicyLine = forceMechanical
+      ? "If audio is present, prioritize it as MECHANICAL SOUND. Do NOT assume road/tire vibration unless the user explicitly says road/wheel/tire vibration."
+      : "User explicitly mentioned road/wheel/tire vibration — you may consider that context.";
 
     const audioNote =
       audio_base_64
-        ? `\nAUDIO_NOTE: ${audioType.toUpperCase()} (${audio_kind || "car_sound"}). ${audioPolicyLine} Do NOT invent smells. Use user's typed symptoms as primary truth.`
+        ? `\nAUDIO_POLICY: ${audioPolicyLine}\nAUDIO_NOTE: ${audioType === "non_speech" || !voiceText ? "NON_SPEECH_MECHANICAL_SOUND" : "POSSIBLE_SPOKEN_WORDS"} (${audio_kind || "unspecified"}). Do NOT invent smells.`
         : "";
 
     messageContent.push({
@@ -522,9 +493,10 @@ LOCATION: ${typeof user_location === "string" ? user_location : JSON.stringify(u
 RULES:
 - Respond ONLY in LOCALE language.
 - Use user's typed symptoms as primary truth.
-- ${audioPolicyLine}
-- No filler. No invention.
-- Ask at most ONE question only if it changes diagnosis.
+- If audio exists: treat it as mechanical sound by default. Never assume road vibration unless user explicitly says so.
+- No filler. No invention. No generic menus.
+- Pick ONE most likely cause. Mention ONE secondary only if a single quick check separates them.
+- Ask at most ONE question only if it changes the diagnosis.
 
 VERIFIED_DATA_JSON: ${JSON.stringify(VERIFIED_DATA)}
 AUDIO_TYPE: ${audioType}
@@ -540,6 +512,13 @@ USER_INPUT: ${text.trim()}`,
       });
     }
 
+    // Reduce language contamination from old assistant history (keeps user context)
+    const sanitizedHistory = Array.isArray(history)
+      ? history
+          .filter((m) => m && (m.role === "user" || m.role === "assistant"))
+          .slice(-6)
+      : [];
+
     const response = await withRetry(
       () =>
         withTimeout(
@@ -547,7 +526,7 @@ USER_INPUT: ${text.trim()}`,
             model: process.env.FIXLENS_MODEL || "gpt-4o",
             messages: [
               { role: "system", content: buildDoctorSystemPrompt() },
-              ...history.slice(-6),
+              ...sanitizedHistory,
               { role: "user", content: messageContent },
             ],
             temperature: Number(process.env.FIXLENS_TEMPERATURE || 0.15),
@@ -570,7 +549,7 @@ USER_INPUT: ${text.trim()}`,
       reply,
       locale,
       workshops_count: VERIFIED_WORKSHOPS.length,
-      ...(debugMode ? { debug: { stage: "ok", audioType, audio_kind, speech_score: audioSmart.speech_score } } : {}),
+      ...(debugMode ? { debug: { stage: "ok", audioType, speech_score: audioSmart.speech_score, forceMechanical } } : {}),
     };
   } catch (error) {
     console.error("FixLens Fatal:", error?.message || error);
