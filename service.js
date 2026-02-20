@@ -1,4 +1,4 @@
-// service.js — FixLens "Doctor Brain" v2.2 (Hard Places Gate + No-Questions Guard + Strong Tone + Version Fingerprint)
+// service.js — FixLens "Doctor Brain" v2.2 (Leak-Proof Parser + Hard Places Gate + DIAG_JSON + Search Loop)
 import OpenAI from "openai";
 import fs from "fs";
 import path from "path";
@@ -6,9 +6,6 @@ import { buildDoctorSystemPrompt } from "./doctorPrompt.js";
 import { performSearch } from "./search.js";
 
 const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-
-// ✅ Version fingerprint (to confirm deploy is actually live)
-const SERVICE_VERSION = "FIXLENS_SERVICE_v2.2_strong_2026-02-19";
 
 /* =========================================================
    LOCATION NORMALIZER
@@ -231,31 +228,58 @@ async function transcribeAudioSmart(audioBase64, locale, audioKind = "car_sound"
 }
 
 /* =========================================================
-   PARSER: DIAG_JSON + FINAL_ANSWER
+   PARSER: DIAG_JSON + FINAL_ANSWER (LEAK-PROOF)
 ========================================================= */
 function extractDiagAndAnswer(raw = "") {
   const text = String(raw || "").trim();
 
-  const diagMatch = text.match(/DIAG_JSON\s*:\s*({[\s\S]*?})\s*FINAL_ANSWER\s*:/i);
-  const answerMatch = text.match(/FINAL_ANSWER\s*:\s*([\s\S]*)$/i);
+  const diagStart = text.indexOf("DIAG_JSON:");
+  const finalStart = text.indexOf("FINAL_ANSWER:");
 
   let diag = null;
   let finalAnswer = "";
 
-  if (diagMatch && diagMatch[1]) {
+  if (diagStart !== -1 && finalStart !== -1 && finalStart > diagStart) {
+    const diagText = text
+      .substring(diagStart + "DIAG_JSON:".length, finalStart)
+      .trim();
+
     try {
-      diag = JSON.parse(diagMatch[1]);
+      diag = JSON.parse(diagText);
     } catch {
       diag = null;
     }
+
+    finalAnswer = text
+      .substring(finalStart + "FINAL_ANSWER:".length)
+      .trim();
+  } else {
+    finalAnswer = text;
   }
 
-  if (answerMatch && answerMatch[1]) {
-    finalAnswer = String(answerMatch[1]).trim();
-  }
-
-  if (!finalAnswer) finalAnswer = text;
   return { diag, finalAnswer };
+}
+
+/* =========================================================
+   OUTPUT SANITIZER: never leak DIAG_JSON
+========================================================= */
+function stripInternalBlocks(s = "") {
+  const text = String(s || "");
+
+  const diagStart = text.indexOf("DIAG_JSON:");
+  const finalStart = text.indexOf("FINAL_ANSWER:");
+
+  // If both exist, return only what is after FINAL_ANSWER:
+  if (finalStart !== -1) {
+    return text.substring(finalStart + "FINAL_ANSWER:".length).trim();
+  }
+
+  // If only DIAG_JSON appears, drop everything from it:
+  if (diagStart !== -1) {
+    return text.substring(0, diagStart).trim();
+  }
+
+  return text.trim();
 }
 
 /* =========================================================
@@ -264,19 +288,10 @@ function extractDiagAndAnswer(raw = "") {
 function violatesNoPlaces(reply = "") {
   const t = String(reply || "").toLowerCase();
   const bad = [
-    "zip","zipcode","postal","postcode","gps","near me","nearby","closest","google maps","maps",
-    "workshop","garage","mechanic","repair shop","auto repair","auto parts",
-    "ورشة","ورش","ميكانيك","ميكانيكي","كراج","رمز بريدي","حدد موقعك","موقعك","خرائط"
+    "zip", "zipcode", "postal", "postcode", "gps", "near me", "nearby", "closest", "google maps",
+    "ورشة", "ورش", "ميكانيك", "ميكانيكي", "كراج", "رمز بريدي", "حدد موقعك", "موقعك", "خرائط"
   ];
   return bad.some((w) => t.includes(w));
-}
-
-/* =========================================================
-   HARD GUARD: prevent questions unless HIGH risk
-========================================================= */
-function containsQuestion(reply = "") {
-  const t = String(reply || "");
-  return t.includes("?") || t.includes("؟");
 }
 
 /* =========================================================
@@ -294,6 +309,7 @@ export async function handleFixLensRequest(req) {
   const audio_base_64 = body.audio_base_64 || body.audio_base64 || "";
   const debugMode = Boolean(body.debug);
 
+  // "voice" | "engine" | "brakes" | "car_sound"
   const audio_kind = String(body.audio_kind || "").trim();
   const audioKindFinal = audio_base_64 ? (audio_kind || "car_sound") : "";
 
@@ -308,7 +324,6 @@ export async function handleFixLensRequest(req) {
           : "Send symptoms or attach photo/audio and I’ll start.",
         locale,
         workshops_count: 0,
-        service_version: SERVICE_VERSION,
         ...(debugMode ? { debug: { stage: "empty_input" } } : {}),
       };
     }
@@ -322,13 +337,14 @@ export async function handleFixLensRequest(req) {
       voiceText = "";
     }
 
+    // Only mix transcript if it is speech
     const fullInput = `${text} ${audioType === "speech" ? voiceText : ""}`.trim();
 
     // ===== INTENT (HARD GATE) =====
     const diagnosisLikely = looksLikeDiagnosisText(fullInput || text);
     const placesRequested = looksLikePlacesRequest(text);
 
-    // HARD RULE: If it looks like diagnosis, DO NOT allow places mode.
+    // HARD RULE: If it looks like diagnosis, DO NOT allow places mode
     const placesIntent = Boolean(placesRequested && !diagnosisLikely);
 
     // ===== SEARCH (KB always ok; places only if allowed) =====
@@ -354,30 +370,15 @@ export async function handleFixLensRequest(req) {
       ? `AUDIO_NOTE: PRIMARY_MECHANICAL_SOUND (${audioKindFinal || "car_sound"}). Treat audio as mechanical sound first. Do NOT invent smells.`
       : "";
 
-    // Strong tone rules (English in code; model responds in any LOCALE)
-    const styleRules = `
-STYLE_PROFILE:
-- Tone: calm but severe, decisive, zero fluff.
-- No long teaching.
-- Do NOT guess random parts like spark plugs unless evidence supports it.
-- Prefer one best diagnosis + one fast check.
-- Avoid questions unless risk_level is HIGH.
-`.trim();
-
     const strictText = `
 STRICT_CONTEXT
-SERVICE_VERSION: ${SERVICE_VERSION}
 LOCALE: ${locale}
 PLACES_INTENT: ${placesIntent ? "true" : "false"}
 LOCATION: ${typeof user_location === "string" ? user_location : JSON.stringify(user_location)}
 
 ABSOLUTE_RULES:
-- Reply ONLY in LOCALE language.
 - If PLACES_INTENT:false => NEVER ask for ZIP/GPS/city, NEVER mention nearby shops/maps.
-- No hallucinations. No invented smells/leaks/smoke/warnings.
-- Ask ZERO questions by default. Only ask ONE question if risk_level is HIGH and the question changes safety decision.
-
-${styleRules}
+- Diagnosis only. No place-search behavior.
 
 VERIFIED_DATA_JSON: ${JSON.stringify(VERIFIED_DATA)}
 VERIFIED_WORKSHOPS_JSON: ${JSON.stringify(VERIFIED_WORKSHOPS)}
@@ -418,7 +419,7 @@ USER_INPUT: ${text.trim()}
                   "Return EXACTLY:\nDIAG_JSON: {valid JSON}\nFINAL_ANSWER: <final answer>\nNo extra text.",
               },
             ],
-            temperature: Number(process.env.FIXLENS_TEMPERATURE || 0.05),
+            temperature: Number(process.env.FIXLENS_TEMPERATURE || 0.1),
             max_tokens: Number(process.env.FIXLENS_MAX_TOKENS || 900),
           }),
           Number(process.env.CHAT_TIMEOUT_MS || 25000),
@@ -428,39 +429,30 @@ USER_INPUT: ${text.trim()}
     );
 
     const raw1 = String(response1?.choices?.[0]?.message?.content || "").trim();
-    let { diag: diag1, finalAnswer: answer1 } = extractDiagAndAnswer(raw1);
 
-    // If parsing failed, return answer directly
+    // Strong parse + sanitize
+    let { diag: diag1, finalAnswer: answer1 } = extractDiagAndAnswer(raw1);
+    answer1 = stripInternalBlocks(answer1 || raw1);
+
+    // If parsing failed, still never leak internals
     if (!diag1 || !diag1?.search_intent) {
+      const safe = stripInternalBlocks(answer1 || raw1);
       return {
         ok: true,
         reply:
-          answer1 ||
+          safe ||
           (String(locale || "").toLowerCase().startsWith("ar")
             ? "صار خلل مؤقت، أعد المحاولة."
             : "Temporary issue, please retry."),
         locale,
         workshops_count: VERIFIED_WORKSHOPS.length,
-        service_version: SERVICE_VERSION,
         ...(debugMode
-          ? {
-              debug: {
-                stage: "ok_no_diagjson",
-                raw1,
-                audioType,
-                speech_score: audioSmart.speech_score,
-                diagnosisLikely,
-                placesIntent,
-              },
-            }
+          ? { debug: { stage: "ok_no_diagjson", raw1, audioType, speech_score: audioSmart.speech_score, diagnosisLikely, placesIntent } }
           : {}),
       };
     }
 
-    // ===== HARD GUARDS =====
-    const risk = String(diag1?.risk_level || "").toLowerCase().trim();
-
-    // Block any ZIP/GPS/shop talk when placesIntent is false
+    // ===== HARD GUARD: If no-places mode, block any ZIP/GPS/shop talk and force rewrite
     if (!placesIntent && violatesNoPlaces(answer1)) {
       const guardResponse = await withRetry(
         () =>
@@ -473,7 +465,7 @@ USER_INPUT: ${text.trim()}
                 {
                   role: "user",
                   content:
-                    "PLACES_INTENT is false. Rewrite FINAL_ANSWER as a decisive mechanic diagnosis. Do NOT ask for ZIP/GPS/city. Do NOT mention shops/maps. No headings/bullets/numbering. Keep it short and strong.",
+                    "PLACES_INTENT is false. Output ONLY FINAL_ANSWER text (no DIAG_JSON). Do NOT ask for ZIP/GPS/city. Do NOT mention shops/maps. No headings/bullets/numbers. Be decisive and mechanic-like.",
                 },
               ],
               temperature: 0,
@@ -485,37 +477,10 @@ USER_INPUT: ${text.trim()}
         2
       );
 
-      const forced = String(guardResponse?.choices?.[0]?.message?.content || "").trim();
+      const forcedRaw = String(guardResponse?.choices?.[0]?.message?.content || "").trim();
+      const forced = stripInternalBlocks(forcedRaw);
+
       if (forced) answer1 = forced;
-    }
-
-    // Remove questions unless HIGH risk
-    if (risk !== "high" && containsQuestion(answer1)) {
-      const noQ = await withRetry(
-        () =>
-          withTimeout(
-            client.chat.completions.create({
-              model: process.env.FIXLENS_MODEL || "gpt-4o",
-              messages: [
-                { role: "system", content: buildDoctorSystemPrompt() },
-                { role: "user", content: messageContent },
-                {
-                  role: "user",
-                  content:
-                    "Rewrite FINAL_ANSWER with ZERO questions (no ? and no Arabic ؟). Do not ask anything. Give one main diagnosis, one immediate test, and clear drive/no-drive advice. No headings/bullets/numbers.",
-                },
-              ],
-              temperature: 0,
-              max_tokens: 600,
-            }),
-            Number(process.env.CHAT_TIMEOUT_MS || 25000),
-            "chat_timeout"
-          ),
-        2
-      );
-
-      const forced2 = String(noQ?.choices?.[0]?.message?.content || "").trim();
-      if (forced2) answer1 = forced2;
     }
 
     // =========================================================
@@ -524,6 +489,7 @@ USER_INPUT: ${text.trim()}
     const needsSearch = Boolean(diag1?.search_intent?.needs_search);
     const searchQuery = String(diag1?.search_intent?.query || "").trim();
 
+    // Never allow a place-search query when placesIntent is false
     const queryLooksPlacey = looksLikePlacesRequest(searchQuery);
 
     if (needsSearch && searchQuery.length >= 3 && !(!placesIntent && queryLooksPlacey)) {
@@ -546,9 +512,9 @@ USER_INPUT: ${text.trim()}
 
       const refineStrict = `
 STRICT_CONTEXT
-SERVICE_VERSION: ${SERVICE_VERSION}
 LOCALE: ${locale}
 PLACES_INTENT: ${placesIntent ? "true" : "false"}
+LOCATION: ${typeof user_location === "string" ? user_location : JSON.stringify(user_location)}
 
 DIAG_JSON_FROM_STAGE1: ${JSON.stringify(diag1)}
 
@@ -557,7 +523,7 @@ VERIFIED_WORKSHOPS_JSON: ${JSON.stringify(VERIFIED_WORKSHOPS_2)}
 
 ABSOLUTE_RULES:
 - If PLACES_INTENT:false => NEVER ask for ZIP/GPS/city, NEVER mention shops/maps.
-- Ask ZERO questions unless risk_level is HIGH.
+- Output ONLY FINAL_ANSWER text (no DIAG_JSON).
 
 USER_INPUT: ${text.trim()}
 `.trim();
@@ -573,11 +539,11 @@ USER_INPUT: ${text.trim()}
                 {
                   role: "user",
                   content:
-                    "Write ONLY the FINAL_ANSWER in the required language. ZERO questions unless risk_level is HIGH. No headings. No bullets. No numbers. Be decisive and strong.",
+                    "Write ONLY the FINAL_ANSWER in the required language. No headings. No bullets. No numbers. Be decisive and mechanic-like.",
                 },
               ],
-              temperature: 0,
-              max_tokens: Number(process.env.FIXLENS_MAX_TOKENS || 650),
+              temperature: Number(process.env.FIXLENS_TEMPERATURE || 0.1),
+              max_tokens: Number(process.env.FIXLENS_MAX_TOKENS || 700),
             }),
             Number(process.env.CHAT_TIMEOUT_MS || 25000),
             "chat_timeout"
@@ -586,60 +552,40 @@ USER_INPUT: ${text.trim()}
       );
 
       let reply2 =
-        String(response2?.choices?.[0]?.message?.content || "").trim() ||
+        stripInternalBlocks(String(response2?.choices?.[0]?.message?.content || "").trim()) ||
         answer1 ||
         (String(locale || "").toLowerCase().startsWith("ar")
           ? "صار خلل مؤقت، أعد المحاولة."
           : "Temporary issue, please retry.");
 
-      if (!placesIntent && violatesNoPlaces(reply2)) reply2 = answer1;
-      if (risk !== "high" && containsQuestion(reply2)) reply2 = answer1;
+      if (!placesIntent && violatesNoPlaces(reply2)) {
+        // final hard cleanup
+        reply2 = answer1;
+      }
 
       return {
         ok: true,
         reply: reply2,
         locale,
         workshops_count: VERIFIED_WORKSHOPS_2.length,
-        service_version: SERVICE_VERSION,
         ...(debugMode
-          ? {
-              debug: {
-                stage: "ok_refined",
-                audioType,
-                speech_score: audioSmart.speech_score,
-                diagnosisLikely,
-                placesIntent,
-                diag1,
-                searchQuery,
-              },
-            }
+          ? { debug: { stage: "ok_refined", audioType, speech_score: audioSmart.speech_score, diagnosisLikely, placesIntent, diag1, searchQuery } }
           : {}),
       };
     }
 
-    // Default: stage1 answer
+    // Default: stage1 answer is enough (sanitized)
     return {
       ok: true,
       reply:
-        answer1 ||
+        stripInternalBlocks(answer1) ||
         (String(locale || "").toLowerCase().startsWith("ar")
           ? "صار خلل مؤقت، أعد المحاولة."
           : "Temporary issue, please retry."),
       locale,
       workshops_count: VERIFIED_WORKSHOPS.length,
-      service_version: SERVICE_VERSION,
       ...(debugMode
-        ? {
-            debug: {
-              stage: "ok_stage1",
-              audioType,
-              speech_score: audioSmart.speech_score,
-              diagnosisLikely,
-              placesIntent,
-              risk_level: risk,
-              diag1,
-            },
-          }
+        ? { debug: { stage: "ok_stage1", audioType, speech_score: audioSmart.speech_score, diagnosisLikely, placesIntent, diag1 } }
         : {}),
     };
   } catch (error) {
@@ -651,7 +597,6 @@ USER_INPUT: ${text.trim()}
         : "Temporary error, please retry.",
       locale,
       workshops_count: 0,
-      service_version: SERVICE_VERSION,
     };
   }
 }
