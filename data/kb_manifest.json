@@ -1,0 +1,78 @@
+{
+  "version": "1.0",
+  "default_top_k": 12,
+  "domains": [
+    {
+      "id": "engine",
+      "priority": 10,
+      "files": ["engine.json", "engine_patterns.json", "patterns_engine_noise.json", "auto_common_issues.json"],
+      "keywords": ["engine", "motor", "knock", "misfire", "stall", "rough", "idle", "rpm", "oil", "timing", "spark", "coil", "plug", "compression", "p0300", "p0171", "p0420", "محرك", "طرق", "تكتكة", "نتعة", "تقطيع", "صرف بنزين", "استهلاك", "لمبة المكينة"]
+    },
+    {
+      "id": "fuel",
+      "priority": 8,
+      "files": ["fuel.json", "auto_common_issues.json"],
+      "keywords": ["fuel", "gas", "mpg", "economy", "injector", "pump", "pressure", "octane", "lean", "rich", "p0171", "p0172", "بنزين", "وقود", "مضخة", "بخاخ", "ضغط", "استهلاك"]
+    },
+    {
+      "id": "cooling",
+      "priority": 8,
+      "files": ["cooling.json", "heavy_duty_cooling.json", "auto_common_issues.json"],
+      "keywords": ["coolant", "overheat", "thermostat", "radiator", "fan", "water pump", "leak", "سخونة", "حرارة", "ماء", "راديتر", "ثرموستات"]
+    },
+    {
+      "id": "transmission",
+      "priority": 8,
+      "files": ["transmission.json", "driveline.json", "auto_common_issues.json"],
+      "keywords": ["transmission", "gear", "shift", "slip", "clunk", "cv", "axle", "قير", "جير", "نتعة", "تعشيق", "دبل", "دفرنس"]
+    },
+    {
+      "id": "brakes",
+      "priority": 8,
+      "files": ["brakes.json", "air_brakes.json", "auto_common_issues.json"],
+      "keywords": ["brake", "pad", "rotor", "abs", "squeal", "grind", "فرامل", "برك", "ABS", "صرير", "حك"]
+    },
+    {
+      "id": "electrical",
+      "priority": 7,
+      "files": ["electrical.json", "network_can.json", "auto_common_issues.json"],
+      "keywords": ["battery", "alternator", "starter", "can", "network", "sensor", "wiring", "بطارية", "دينمو", "سلف", "حساس", "أسلاك"]
+    },
+    {
+      "id": "hvac",
+      "priority": 6,
+      "files": ["hvac.json"],
+      "keywords": ["ac", "a/c", "heat", "blower", "compressor", "freon", "مكيف", "تبريد", "دفاية", "كمبروسر"]
+    },
+    {
+      "id": "hybrid_ev",
+      "priority": 7,
+      "files": ["hybrid_ev.json"],
+      "keywords": ["hybrid", "ev", "battery pack", "inverter", "regen", "هجين", "كهرباء", "بطارية هايبرد"]
+    },
+    {
+      "id": "diesel",
+      "priority": 7,
+      "files": ["diesel_engine.json", "diesel_aftertreatment.json"],
+      "keywords": ["diesel", "def", "dpf", "regen", "soot", "adblue", "ديزل", "DPF", "DEF", "سناج"]
+    },
+    {
+      "id": "srs_airbags",
+      "priority": 5,
+      "files": ["airbags_srs.json"],
+      "keywords": ["airbag", "srs", "seatbelt", "pretensioner", "ايربك", "وسادة", "SRS"]
+    },
+    {
+      "id": "meta",
+      "priority": 9,
+      "files": ["cause_keys.json", "failure_actions.json"],
+      "keywords": []
+    },
+    {
+      "id": "us_engine_intel",
+      "priority": 11,
+      "files": ["us_engine_intel_v1.json"],
+      "keywords": ["ford", "fusion", "ecoboost", "vortec", "triton", "hemi", "toyota", "honda", "gm", "chevy", "p0300", "p0171", "timing chain", "chain", "phaser", "vvt", "PCV", "EVAP", "مازدا", "فورد", "فيوجن", "شفر", "جي ام", "هيمي", "تريتون"]
+    }
+  ]
+}
