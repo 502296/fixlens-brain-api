@@ -1,4 +1,6 @@
-// service.js — FixLens "Doctor Brain" v2.3 (Smart Places + DIAG_JSON + Engine Layer B + No-loop Places UX)
+// service.js — FixLens "Doctor Brain" v2.3.1 (Smart Places Follow-Up + Direct shop list)
+// Fix: When user replies with location only ("المنصور") after we asked for area, we search Places instead of looping.
+
 import OpenAI from "openai";
 import fs from "fs";
 import path from "path";
@@ -253,6 +255,47 @@ function looksLikePlacesRequest(input = "") {
 }
 
 /* =========================================================
+   PLACES FOLLOW-UP (STATLESS MEMORY FROM HISTORY)
+   - If assistant last asked for GPS/area/zip and user replies with short location only => treat as Places search.
+========================================================= */
+function getLastAssistantText(history = []) {
+  for (let i = history.length - 1; i >= 0; i--) {
+    if (history[i]?.role === "assistant") {
+      return String(history[i]?.content || "");
+    }
+  }
+  return "";
+}
+
+function looksLikePlacesFollowUp(history = []) {
+  const a = getLastAssistantText(history).toLowerCase();
+  if (!a) return false;
+
+  // signals we asked for GPS/area/neighborhood
+  const askSignals = [
+    "gps", "enable location", "allow location",
+    "zip", "zipcode", "postal",
+    "area", "neighborhood", "district", "where are you",
+    // Arabic
+    "فعّل gps", "فعل gps", "اسم المنطقة", "اسم الحي", "اسم الشارع",
+    "حدد المنطقة", "حدد الحي", "حدد موقعك", "موقعك", "وين انت", "وين", "بالقرب"
+  ];
+
+  return askSignals.some((w) => a.includes(w));
+}
+
+function looksLikeLocationOnlyText(text = "") {
+  const t = String(text || "").trim();
+  if (!t) return false;
+  if (t.length > 60) return false;           // keep conservative
+  if (looksLikeDiagnosisText(t)) return false;
+  if (looksLikePlacesRequest(t)) return false; // already a full request, not "location only"
+
+  // allow Arabic/English/nums and common separators
+  return /^[\u0600-\u06FFa-zA-Z0-9\s\-\.,]+$/.test(t);
+}
+
+/* =========================================================
    AUDIO: Non-speech first + optional speech
 ========================================================= */
 function containsSmellWords(s = "") {
@@ -414,6 +457,32 @@ function formatWorkshopsForContext(workshops = []) {
   return lines.join("\n");
 }
 
+function formatWorkshopsForUser(workshops = [], locale = "en") {
+  const isAr = String(locale || "").toLowerCase().startsWith("ar");
+  const list = Array.isArray(workshops) ? workshops : [];
+  const top = list.slice(0, 5);
+
+  const lines = top.map((w, i) => {
+    const name = w?.name || w?.title || (isAr ? "ورشة" : "Shop");
+    const addr = w?.address || w?.formatted_address || w?.vicinity || "";
+    const phone = w?.phone || w?.formatted_phone_number || "";
+    const url = w?.maps_url || w?.google_maps_url || w?.googleMapsUri || w?.url || "";
+    const price = w?.price_hint || "";
+
+    const bits = [
+      `${i + 1}) ${name}`,
+      addr ? (isAr ? `العنوان: ${addr}` : `Address: ${addr}`) : "",
+      phone ? (isAr ? `هاتف: ${phone}` : `Phone: ${phone}`) : "",
+      price ? price : "",
+      url ? (isAr ? `خرائط: ${url}` : `Maps: ${url}`) : "",
+    ].filter(Boolean);
+
+    return bits.join("\n");
+  });
+
+  return lines.join("\n\n");
+}
+
 /* =========================================================
    MAIN HANDLER
 ========================================================= */
@@ -462,10 +531,16 @@ export async function handleFixLensRequest(req) {
 
     // ===== INTENT (HARD GATE) =====
     const diagnosisLikely = looksLikeDiagnosisText(fullInput || text);
+
+    // ✅ NEW: Places follow-up detection
+    const placesFollowUp = looksLikePlacesFollowUp(history) && looksLikeLocationOnlyText(text);
     const placesRequested = looksLikePlacesRequest(text);
 
     // HARD RULE: If it looks like diagnosis, DO NOT allow places mode
-    const placesIntent = Boolean(placesRequested && !diagnosisLikely);
+    const placesIntent = Boolean((placesRequested || placesFollowUp) && !diagnosisLikely);
+
+    // ✅ NEW: If follow-up is location only, force a proper places query
+    const placesQuery = placesFollowUp ? `mechanic near ${text}` : (fullInput || text);
 
     // ===== ENGINE CONTEXT (Option B) =====
     const enginePack = buildEngineContext(fullInput || text);
@@ -477,7 +552,7 @@ export async function handleFixLensRequest(req) {
     const searchPack = await withRetry(
       () =>
         withTimeout(
-          performSearch(fullInput || text, user_location, {
+          performSearch(placesQuery, user_location, {
             locale,
             allowPlaces: placesIntent,
             placesRadiusMeters,
@@ -493,14 +568,45 @@ export async function handleFixLensRequest(req) {
       ? searchPack.verified_workshops
       : [];
 
-    // ✅ NO-LOOP UX: إذا المستخدم فعلاً يطلب ورش لكن النتائج صفر
-    if (placesIntent && VERIFIED_WORKSHOPS.length === 0) {
+    // ✅ NEW: If Places intent and we have workshops, return them DIRECTLY (addresses + maps)
+    if (placesIntent && VERIFIED_WORKSHOPS.length > 0) {
       const isAr = String(locale || "").toLowerCase().startsWith("ar");
       return {
         ok: true,
         reply: isAr
-          ? "أقدر أطلع لك ورش قريبة، بس لازم واحد من هذني: (1) فعّل GPS داخل التطبيق واسمح بالموقع، أو (2) اكتب اسم المنطقة/الشارع بوضوح (مثلاً: الكاظمية، المنصور، شارع الرشيد). بعدها أرجع لك أفضل ورش مع روابط خرائط."
-          : "I can show nearby shops, but I need either: (1) GPS enabled in the app (allow location), or (2) your area/street (e.g., Kadhimiya, Mansour, Al-Rasheed St). Then I’ll return top shops with Maps links.",
+          ? `تفضل هذه ورش قريبة حسب طلبك:\n\n${formatWorkshopsForUser(VERIFIED_WORKSHOPS, locale)}`
+          : `Here are nearby shops:\n\n${formatWorkshopsForUser(VERIFIED_WORKSHOPS, locale)}`,
+        locale,
+        workshops_count: VERIFIED_WORKSHOPS.length,
+        ...(debugMode
+          ? {
+              debug: {
+                stage: "places_direct_list",
+                placesIntent,
+                placesRequested,
+                placesFollowUp,
+                placesQuery,
+                user_location,
+              },
+            }
+          : {}),
+      };
+    }
+
+    // ✅ NO-LOOP UX: إذا المستخدم فعلاً يطلب ورش لكن النتائج صفر
+    if (placesIntent && VERIFIED_WORKSHOPS.length === 0) {
+      const isAr = String(locale || "").toLowerCase().startsWith("ar");
+
+      // If this was a follow-up location and still zero, ask for more specific anchor
+      return {
+        ok: true,
+        reply: isAr
+          ? (placesFollowUp
+              ? "ما طلعت نتائج واضحة لهذا الموقع. جرّب تكتبها أدق (مثال: المنصور – شارع 14 رمضان / الكاظمية – قرب باب المراد) أو فعّل GPS داخل التطبيق. بعدها أعطيك ورش مع روابط خرائط."
+              : "أقدر أطلع لك ورش قريبة، بس لازم واحد من هذني: (1) فعّل GPS داخل التطبيق واسمح بالموقع، أو (2) اكتب اسم المنطقة/الشارع بوضوح (مثلاً: الكاظمية، المنصور، شارع الرشيد). بعدها أرجع لك أفضل ورش مع روابط خرائط.")
+          : (placesFollowUp
+              ? "No clear results for that area. Please provide a more specific street/landmark or enable GPS in the app, then I’ll return shops with Maps links."
+              : "I can show nearby shops, but I need either: (1) GPS enabled in the app (allow location), or (2) your area/street. Then I’ll return top shops with Maps links."),
         locale,
         workshops_count: 0,
         ...(debugMode
@@ -509,6 +615,9 @@ export async function handleFixLensRequest(req) {
                 stage: "places_intent_but_zero_results",
                 diagnosisLikely,
                 placesIntent,
+                placesRequested,
+                placesFollowUp,
+                placesQuery,
                 user_location,
               },
             }
