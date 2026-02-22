@@ -1,0 +1,86 @@
+{
+  "version": "1.0",
+  "scope": "US Engine Intelligence Data",
+  "engines": [
+    {
+      "engine_key": "ford_duratec_25_i4",
+      "makes": ["Ford"],
+      "models": ["Fusion"],
+      "years": [2010, 2011, 2012],
+      "displacement_l": 2.5,
+      "layout": "I4",
+      "family": "Duratec",
+      "common_patterns": ["knock_under_load_plus_low_mpg", "rough_idle_plus_misfire_common", "lean_condition_common"]
+    },
+    {
+      "engine_key": "ford_duratec_30_v6",
+      "makes": ["Ford"],
+      "models": ["Fusion"],
+      "years": [2010, 2011, 2012],
+      "displacement_l": 3.0,
+      "layout": "V6",
+      "family": "Duratec",
+      "common_patterns": ["knock_under_load_plus_low_mpg", "misfire_coil_pack_common"]
+    }
+  ],
+  "patterns": [
+    {
+      "pattern_key": "knock_under_load_plus_low_mpg",
+      "title": "Knock/Ping under load + worse fuel economy",
+      "when": {
+        "symptom_keywords_any": ["knock", "ping", "rattle", "ticking", "under load", "uphill", "acceleration", "طرق", "تكتكة", "مع دعسة", "مع صعود", "تسارع"],
+        "extra_clues_any": ["worse mpg", "fuel economy", "uses more gas", "lean", "p0171", "p0300", "استهلاك بنزين", "صرف أكثر", "ريحة بنزين", "لمبة المكينة"]
+      },
+      "top_questions": [
+        "هل الصوت يظهر فقط مع الدعسة/صعود، أم حتى على السلانسيه؟",
+        "هل لمبة Check Engine شغّالة؟ وإذا عندك OBD، شنو الأكواد؟",
+        "شنو حجم المحرك 2.5 ولا 3.0؟",
+        "هل تغيّر نوع الوقود مؤخراً؟ وهل تستخدم fuel injector cleaner كثير؟"
+      ],
+      "likely_causes_ranked": [
+        {
+          "cause_key": "air_fuel_lean_unmetered_air",
+          "why": "Vacuum leak/PCV/air leak يسبب lean -> knock تحت الحمل + زيادة استهلاك",
+          "confidence": 0.38
+        },
+        {
+          "cause_key": "maf_map_sensor_bias",
+          "why": "MAF/MAP reading غلط يسبب mixture غلط -> knock + MPG سيء",
+          "confidence": 0.25
+        },
+        {
+          "cause_key": "ignition_misfire_coil_plug",
+          "why": "Misfire/weak spark يسبب رجّة وطرق وMPG سيء خصوصاً تحت الحمل",
+          "confidence": 0.22
+        },
+        {
+          "cause_key": "fuel_pressure_delivery_issue",
+          "why": "ضغط وقود ضعيف/فلتر/مضخة -> lean تحت الحمل",
+          "confidence": 0.15
+        }
+      ],
+      "quick_checks": [
+        {
+          "action_key": "scan_obd_codes",
+          "steps": ["اقرأ الأكواد (حتى لو لمبة مو شغالة أحياناً يكون pending codes).", "سجّل Freeze Frame إن توفر."]
+        },
+        {
+          "action_key": "inspect_intake_vacuum",
+          "steps": ["افحص ليّات الفاكيوم والـPCV والـintake boot لأي تشقق.", "اسمع صفير/هسّة هوا حول الثروتل."]
+        },
+        {
+          "action_key": "maf_clean_test",
+          "steps": ["نظف MAF بسائل مخصص (MAF cleaner) مو brake cleaner.", "جرّب قيادة قصيرة وشوف هل تحسن العزم/MPG."]
+        }
+      ],
+      "shop_tests": [
+        "Smoke test للفاكيوم/سحب الهواء",
+        "Fuel pressure test تحت الحمل",
+        "Live data: STFT/LTFT + MAF g/s + O2 sensors"
+      ],
+      "risk_notes": [
+        "إذا الطرق قوي جدًا مع دعسة قوية، قلّل القيادة الثقيلة لأن knock ممكن يضر المحرك."
+      ]
+    }
+  ]
+}
