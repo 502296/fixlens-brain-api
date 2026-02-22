@@ -1,11 +1,13 @@
-// search.js — Local KB + Smart Google Places (Mechanic/Parts/Tools + PriceLevel)
-// Fix: Strong anchoring when GPS is missing (prevents random far results)
-// Fix: Locale handling + better Arabic location parsing + safer intent detection
+// search.js — FixLens v2.0 (Manifest-based KB + Strong Places + Stable fields)
+// - Loads ONLY relevant data files (by domain) instead of loading all /data
+// - Better scoring + safer parsing
+// - Places returns stable fields for service.js formatting
 
 import fs from "fs";
 import path from "path";
 
 const DATA_DIR = path.join(process.cwd(), "data");
+const MANIFEST_PATH = path.join(DATA_DIR, "kb_manifest.json");
 
 /* =========================================================
    FETCH SAFE (Node 18+ or fallback)
@@ -19,31 +21,27 @@ async function ensureFetch() {
 }
 
 /* =========================================================
-   LOAD LOCAL KB ONCE
+   MANIFEST LOADER
 ========================================================= */
-let KB = [];
-let KB_LOADED = false;
+let MANIFEST = null;
 
-function loadKBOnce() {
-  if (KB_LOADED) return;
-  KB_LOADED = true;
-
+function safeReadJson(filePath, fallback = null) {
   try {
-    if (!fs.existsSync(DATA_DIR)) return;
-
-    const files = fs.readdirSync(DATA_DIR).filter((f) => f.endsWith(".json"));
-    for (const f of files) {
-      const raw = fs.readFileSync(path.join(DATA_DIR, f), "utf-8");
-      const parsed = JSON.parse(raw);
-
-      if (Array.isArray(parsed)) KB.push(...parsed.map((x) => ({ ...x, __source: f })));
-      else if (parsed?.items && Array.isArray(parsed.items)) KB.push(...parsed.items.map((x) => ({ ...x, __source: f })));
-      else if (parsed && typeof parsed === "object") KB.push({ ...parsed, __source: f });
-    }
-  } catch (e) {
-    console.error("KB load error:", e?.message || e);
-    KB = [];
+    if (!fs.existsSync(filePath)) return fallback;
+    const raw = fs.readFileSync(filePath, "utf-8");
+    return JSON.parse(raw);
+  } catch {
+    return fallback;
   }
+}
+
+function loadManifestOnce() {
+  if (MANIFEST) return MANIFEST;
+  MANIFEST = safeReadJson(MANIFEST_PATH, null);
+  if (!MANIFEST || !Array.isArray(MANIFEST.domains)) {
+    MANIFEST = { version: "0", default_top_k: 10, domains: [] };
+  }
+  return MANIFEST;
 }
 
 /* =========================================================
@@ -69,6 +67,12 @@ function uniqBy(arr, keyFn) {
   return out;
 }
 
+function normalizeLocale(locale = "en") {
+  const v = String(locale || "").trim();
+  if (!v || v.toLowerCase() === "auto") return "en";
+  return v.split("-")[0].toLowerCase() || "en";
+}
+
 function safeCityText(userLocation) {
   if (!userLocation) return "";
   if (typeof userLocation === "string") {
@@ -86,34 +90,123 @@ function safeCityText(userLocation) {
   return "";
 }
 
-function normalizeLocale(locale = "en") {
-  const v = String(locale || "").trim();
-  if (!v || v.toLowerCase() === "auto") return "en";
-  return v.split("-")[0].toLowerCase() || "en";
+function parseLatLng(input) {
+  if (!input) return null;
+  if (typeof input === "object") {
+    const lat = Number(input.lat ?? input.latitude);
+    const lng = Number(input.lng ?? input.longitude);
+    if (Number.isFinite(lat) && Number.isFinite(lng)) return { lat, lng };
+  }
+  const s = String(input || "").trim();
+  const m = s.match(/(-?\d+(\.\d+)?)\s*,\s*(-?\d+(\.\d+)?)/);
+  if (!m) return null;
+  const lat = Number(m[1]);
+  const lng = Number(m[3]);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  return { lat, lng };
+}
+
+function extractZip(text = "") {
+  const m = String(text || "").match(/\b\d{5}(?:-\d{4})?\b/);
+  return m ? m[0] : "";
+}
+
+function extractLocationFromQuery(userQuery = "") {
+  const q = String(userQuery || "").trim();
+  if (!q) return "";
+
+  const zip = extractZip(q);
+  if (zip) return zip;
+
+  const m1 = q.match(/\bin\s+([A-Za-z][A-Za-z\s\.\-']{2,})(?:,\s*([A-Za-z]{2,}))?/i);
+  if (m1) {
+    const city = (m1[1] || "").trim();
+    const region = (m1[2] || "").trim();
+    const out = [city, region].filter(Boolean).join(", ");
+    if (out.length >= 3) return out;
+  }
+
+  const m2 = q.match(/(?:\bفي\b|\bبال\b|\bبـ\b|\bب)(\s*[\u0600-\u06FFa-zA-Z,\s\.\-]{3,40})/);
+  if (m2 && m2[1]) {
+    const cand = m2[1].replace(/[^\u0600-\u06FFa-zA-Z,\s\.\-]/g, " ").trim();
+    if (cand.length >= 3) return cand;
+  }
+
+  return "";
+}
+
+/* =========================================================
+   DOMAIN SELECTION (KB)
+========================================================= */
+function pickDomainsForQuery(query = "") {
+  const m = loadManifestOnce();
+  const q = normalizeText(query);
+  if (!q) return [];
+
+  // score domains by keyword hits + priority
+  const scored = (m.domains || [])
+    .map((d) => {
+      const kw = Array.isArray(d.keywords) ? d.keywords : [];
+      let hits = 0;
+      for (const w of kw) {
+        const ww = normalizeText(w);
+        if (ww && q.includes(ww)) hits += 1;
+      }
+      const pr = Number(d.priority || 0);
+      // weight: hits dominate, then priority
+      const score = hits * 10 + pr;
+      return { d, score, hits };
+    })
+    .filter((x) => x.score > 0)
+    .sort((a, b) => b.score - a.score);
+
+  // Always include "meta" if present (cause/actions)
+  const meta = (m.domains || []).find((d) => String(d.id || "") === "meta");
+
+  const chosen = scored.slice(0, 2).map((x) => x.d);
+  if (meta && !chosen.some((c) => c.id === "meta")) chosen.push(meta);
+
+  return chosen;
+}
+
+/* =========================================================
+   KB FILE LOADER (per-domain, cached)
+========================================================= */
+const KB_CACHE = new Map(); // key: filename -> parsed records array
+
+function loadJsonFileAsRecords(fileName) {
+  if (!fileName) return [];
+  if (KB_CACHE.has(fileName)) return KB_CACHE.get(fileName);
+
+  const p = path.join(DATA_DIR, fileName);
+  const parsed = safeReadJson(p, null);
+
+  let records = [];
+  // Accept: array, {items:[]}, or object
+  if (Array.isArray(parsed)) records = parsed;
+  else if (parsed?.items && Array.isArray(parsed.items)) records = parsed.items;
+  else if (parsed && typeof parsed === "object") records = [parsed];
+
+  // attach source
+  records = records.map((x) => ({ ...x, __source: fileName }));
+
+  KB_CACHE.set(fileName, records);
+  return records;
+}
+
+function getKBForDomains(domains = []) {
+  const files = uniqBy(
+    domains.flatMap((d) => (Array.isArray(d.files) ? d.files : [])),
+    (x) => x
+  );
+  let out = [];
+  for (const f of files) out.push(...loadJsonFileAsRecords(f));
+  return out;
 }
 
 /* =========================================================
    LOCAL KB SEARCH
 ========================================================= */
-function scoreMatch(query, recordText) {
-  const q = normalizeText(query);
-  const text = normalizeText(recordText);
-  if (!q || !text) return 0;
-
-  let score = 0;
-
-  // phrase boost
-  if (text.includes(q)) score += 12;
-
-  const tokens = q.split(" ").filter(Boolean);
-  for (const t of tokens) {
-    if (t.length < 2) continue;
-    if (text.includes(t)) score += 2;
-  }
-
-  return score;
-}
-
 function recordToText(r) {
   return normalizeText(
     [
@@ -127,69 +220,51 @@ function recordToText(r) {
       r.tags,
       r.category,
       r.system,
+      r.engine, // sometimes you have engine field
+      r.issues, // patterns may have issues
     ]
       .filter(Boolean)
       .join(" ")
   );
 }
 
+function scoreMatch(query, recordText) {
+  const q = normalizeText(query);
+  const text = normalizeText(recordText);
+  if (!q || !text) return 0;
+
+  let score = 0;
+  if (text.includes(q)) score += 14;
+
+  const tokens = q.split(" ").filter(Boolean);
+  for (const t of tokens) {
+    if (t.length < 2) continue;
+    if (text.includes(t)) score += 2;
+  }
+
+  // extra boost for codes like P0171, P0300
+  const code = q.match(/\bp0\d{3}\b/i);
+  if (code && text.includes(code[0].toLowerCase())) score += 8;
+
+  return score;
+}
+
 /* =========================================================
-   PLACES INTENT + MODE (MECHANIC vs PARTS/TOOLS)
+   PLACES INTENT + MODE
 ========================================================= */
 function looksLikePlacesIntent(q = "") {
   const t = String(q || "").toLowerCase();
 
-  // IMPORTANT: only true when user is clearly asking for a place/shop
   const shopWords = [
-    "mechanic",
-    "garage",
-    "auto repair",
-    "repair shop",
-    "near me",
-    "nearby",
-    "closest",
-    "address",
-    "location",
-    "map",
-    "google maps",
-    "workshop",
-    "shop near",
-    // Arabic
-    "ورشة",
-    "ورش",
-    "ميكانيك",
-    "ميكانيكي",
-    "كراج",
-    "اقرب",
-    "أقرب",
-    "عنوان",
-    "موقع",
-    "خرائط",
-    "وين اصلح",
-    "وين أُصلّح",
-    "وين اروح",
-    "دلّني",
+    "mechanic","garage","auto repair","repair shop","car repair","near me","nearby","closest",
+    "address","location","map","google maps","workshop",
+    "ورشة","ورش","ميكانيك","ميكانيكي","كراج","اقرب","أقرب","عنوان","موقع","خرائط","وين اصلح","وين أُصلّح","وين اروح","دلّني"
   ];
 
   const partsWords = [
-    "auto parts",
-    "car parts",
-    "parts store",
-    "tool store",
-    "hardware store",
-    "autozone",
-    "o'reilly",
-    "oreilly",
-    "advance auto",
-    "napa",
-    // Arabic
-    "قطع غيار",
-    "محل قطع",
-    "محل قطع غيار",
-    "محل ادوات",
-    "محل أدوات",
-    "ادوات",
-    "أدوات",
+    "auto parts","car parts","parts store","tool store","hardware store",
+    "autozone","o'reilly","oreilly","advance auto","napa",
+    "قطع غيار","محل قطع","محل قطع غيار","محل ادوات","محل أدوات","ادوات","أدوات"
   ];
 
   return shopWords.some((w) => t.includes(w)) || partsWords.some((w) => t.includes(w));
@@ -197,42 +272,15 @@ function looksLikePlacesIntent(q = "") {
 
 function detectModeFromText(q = "") {
   const t = String(q || "").toLowerCase();
-
-  // tires / brakes special
-  if (
-    t.includes("tire") ||
-    t.includes("tyre") ||
-    t.includes("اطار") ||
-    t.includes("إطار") ||
-    t.includes("اطارات") ||
-    t.includes("إطارات")
-  ) {
-    return "tire";
-  }
+  if (t.includes("tire") || t.includes("tyre") || t.includes("اطار") || t.includes("إطار") || t.includes("اطارات") || t.includes("إطارات")) return "tire";
   if (t.includes("brake") || t.includes("فرامل")) return "brake";
-
-  // parts/tools intent
   if (
-    t.includes("auto parts") ||
-    t.includes("car parts") ||
-    t.includes("parts store") ||
-    t.includes("hardware store") ||
-    t.includes("tool store") ||
-    t.includes("tools store") ||
-    t.includes("autozone") ||
-    t.includes("o'reilly") ||
-    t.includes("oreilly") ||
-    t.includes("advance auto") ||
-    t.includes("napa") ||
-    t.includes("قطع غيار") ||
-    t.includes("محل قطع") ||
-    t.includes("محل أدوات") ||
-    t.includes("ادوات") ||
-    t.includes("أدوات")
-  ) {
-    return "parts_tools";
-  }
-
+    t.includes("auto parts") || t.includes("car parts") || t.includes("parts store") ||
+    t.includes("hardware store") || t.includes("tool store") ||
+    t.includes("autozone") || t.includes("o'reilly") || t.includes("oreilly") ||
+    t.includes("advance auto") || t.includes("napa") ||
+    t.includes("قطع غيار") || t.includes("محل قطع") || t.includes("محل أدوات") || t.includes("ادوات") || t.includes("أدوات")
+  ) return "parts_tools";
   return "auto_repair";
 }
 
@@ -244,63 +292,7 @@ function buildPlacesQuery(mode) {
 }
 
 /* =========================================================
-   LOCATION HELPERS
-========================================================= */
-function parseLatLng(input) {
-  if (!input) return null;
-
-  if (typeof input === "object") {
-    const lat = Number(input.lat ?? input.latitude);
-    const lng = Number(input.lng ?? input.longitude);
-    if (Number.isFinite(lat) && Number.isFinite(lng)) return { lat, lng };
-  }
-
-  const s = String(input || "").trim();
-  const m = s.match(/(-?\d+(\.\d+)?)\s*,\s*(-?\d+(\.\d+)?)/);
-  if (!m) return null;
-
-  const lat = Number(m[1]);
-  const lng = Number(m[3]);
-  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
-
-  return { lat, lng };
-}
-
-function extractZip(text = "") {
-  const m = String(text || "").match(/\b\d{5}(?:-\d{4})?\b/);
-  return m ? m[0] : "";
-}
-
-function extractLocationFromQuery(userQuery = "") {
-  const q = String(userQuery || "").trim();
-  if (!q) return "";
-
-  // ZIP anywhere
-  const zip = extractZip(q);
-  if (zip) return zip;
-
-  // English: "in Tokyo" / "in Louisville, KY"
-  const m1 = q.match(/\bin\s+([A-Za-z][A-Za-z\s\.\-']{2,})(?:,\s*([A-Za-z]{2,}))?/i);
-  if (m1) {
-    const city = (m1[1] || "").trim();
-    const region = (m1[2] || "").trim();
-    const out = [city, region].filter(Boolean).join(", ");
-    if (out.length >= 3) return out;
-  }
-
-  // Arabic: "في طوكيو" / "بالرياض" / "بـ لوفل"
-  // Keep it conservative: capture up to 40 chars.
-  const m2 = q.match(/(?:\bفي\b|\bبال\b|\bبـ\b|\bب)(\s*[\u0600-\u06FFa-zA-Z,\s\.\-]{3,40})/);
-  if (m2 && m2[1]) {
-    const cand = m2[1].replace(/[^\u0600-\u06FFa-zA-Z,\s\.\-]/g, " ").trim();
-    if (cand.length >= 3) return cand;
-  }
-
-  return "";
-}
-
-/* =========================================================
-   PRICE LEVEL MAPPING + HINT
+   PRICE LEVEL MAPPING
 ========================================================= */
 function mapPriceLevel(level) {
   const v = String(level || "").toUpperCase().trim();
@@ -317,16 +309,10 @@ function mapPriceLevel(level) {
 function priceHint({ mode, priceLevelLabel, locale }) {
   const isAr = String(locale || "en").toLowerCase().startsWith("ar");
   if (!priceLevelLabel) return "";
-
-  // NOTE: This is NOT real part prices. It's only a store price tier hint.
   if (mode === "parts_tools") {
-    return isAr
-      ? `تصنيف سعر المتجر: ${priceLevelLabel} (تقريبي حسب Google)`
-      : `Store price tier: ${priceLevelLabel} (approx, Google)`;
+    return isAr ? `تصنيف سعر المتجر: ${priceLevelLabel} (تقريبي حسب Google)` : `Store price tier: ${priceLevelLabel} (approx, Google)`;
   }
-  return isAr
-    ? `تصنيف التكلفة: ${priceLevelLabel} (تقريبي حسب Google)`
-    : `Cost tier: ${priceLevelLabel} (approx, Google)`;
+  return isAr ? `تصنيف التكلفة: ${priceLevelLabel} (تقريبي حسب Google)` : `Cost tier: ${priceLevelLabel} (approx, Google)`;
 }
 
 /* =========================================================
@@ -361,26 +347,16 @@ async function searchPlaces({ query, userLocation, locale, radiusMeters }) {
   const mode = detectModeFromText(query);
   const base = buildPlacesQuery(mode);
 
-  // Build location anchor (CRITICAL)
   let locText = safeCityText(userLocation);
+  if (!locText) locText = extractLocationFromQuery(query);
 
-  // If userLocation was "global" or empty, try parse from query
-  if (!locText) {
-    locText = extractLocationFromQuery(query);
-  }
-
-  // ZIP overrides (strong anchor)
   const zip = extractZip(query);
   if (zip) locText = zip;
 
-  // NO GPS and NO location => do NOT call Places (prevents drift)
+  // No GPS and no anchor => no call (prevents random far results)
   if (!gps && !locText) return [];
 
-  // Text query strategy:
-  // - If no GPS: force "in <loc>"
-  // - If GPS: use base and locationBias
   const textQuery = !gps ? `${base} in ${locText}` : base;
-
   const RADIUS_METERS = Number(radiusMeters || RADIUS_METERS_DEFAULT);
 
   const cacheKey = `${languageCode}::${textQuery}::${gps ? `${gps.lat.toFixed(3)},${gps.lng.toFixed(3)}:${RADIUS_METERS}` : `no_gps:${locText}`}`;
@@ -441,19 +417,23 @@ async function searchPlaces({ query, userLocation, locale, radiusMeters }) {
       const plMap = mapPriceLevel(pl);
 
       return {
+        // stable fields:
         name: p?.displayName?.text || "",
         address: p?.formattedAddress || "",
         maps_url: p?.googleMapsUri || "",
+        website: p?.websiteUri || "",
         place_id: p?.id || "",
         rating: p?.rating ?? null,
         ratings_total: p?.userRatingCount ?? null,
         phone: p?.nationalPhoneNumber || "",
-        website: p?.websiteUri || "",
+
+        // extras:
         price_level: pl || "",
-        price_label: plMap.label, // "$$"
+        price_label: plMap.label,
         price_meaning_ar: plMap.meaning_ar,
         price_meaning_en: plMap.meaning_en,
         price_hint: priceHint({ mode, priceLevelLabel: plMap.label, locale }),
+
         mode,
         location_anchor: gps ? "gps" : String(locText),
         source: "google_places_new",
@@ -475,16 +455,17 @@ async function searchPlaces({ query, userLocation, locale, radiusMeters }) {
    MAIN EXPORT
 ========================================================= */
 export async function performSearch(userQuery, userLocation, opts = {}) {
-  loadKBOnce();
-
-  const { locale = "en", allowPlaces = false, maxResults = 3, placesRadiusMeters } = opts;
+  const { locale = "en", allowPlaces = false, maxResults = 4, placesRadiusMeters } = opts;
 
   const q = String(userQuery || "").trim();
 
-  // 1) Local KB (cheap)
+  // --- A) KB by manifest (fast + focused) ---
+  const domains = pickDomainsForQuery(q);
+  const KB = getKBForDomains(domains);
+
   let verified_data = [];
   if (q.length >= 2 && KB.length > 0) {
-    const limit = Math.max(1, Math.min(Number(maxResults || 3), 10));
+    const limit = Math.max(1, Math.min(Number(maxResults || 4), 10));
 
     const scored = KB
       .map((r) => ({ r, score: scoreMatch(q, recordToText(r)) }))
@@ -506,7 +487,7 @@ export async function performSearch(userQuery, userLocation, opts = {}) {
     );
   }
 
-  // 2) Places (expensive) — ONLY when allowed AND user asked for places
+  // --- B) Places only if allowed and intent is clear ---
   let verified_workshops = [];
   if (allowPlaces && looksLikePlacesIntent(q)) {
     verified_workshops = await searchPlaces({
