@@ -1,4 +1,4 @@
-// service.js — FixLens "Doctor Brain" v2.3 (Places Route + Strong Multilingual + Engine Layer B)
+// service.js — FixLens "Doctor Brain" v2.3 (Smart Places + DIAG_JSON + Engine Layer B + No-loop Places UX)
 import OpenAI from "openai";
 import fs from "fs";
 import path from "path";
@@ -92,6 +92,7 @@ function detectEngineFromVehicle(make, model, year) {
   });
 
   if (!found || !Array.isArray(found.engines) || found.engines.length === 0) return null;
+
   return String(found.engines[0] || "").trim() || null;
 }
 
@@ -109,7 +110,10 @@ function findEnginePatterns(engineName = "") {
 function buildEngineContext(text = "") {
   const info = extractVehicleInfo(text);
   const detectedEngine = detectEngineFromVehicle(info.make, info.model, info.year);
-  if (!detectedEngine) return { vehicle: info, engine: null, patterns: [] };
+
+  if (!detectedEngine) {
+    return { vehicle: info, engine: null, patterns: [] };
+  }
 
   const patterns = findEnginePatterns(detectedEngine);
   return { vehicle: info, engine: detectedEngine, patterns };
@@ -185,14 +189,16 @@ async function withRetry(fn, tries = 2, baseDelay = 250) {
 }
 
 /* =========================================================
-   INTENT: DIAGNOSIS vs PLACES (Strong routing)
+   INTENT: DIAGNOSIS vs PLACES
 ========================================================= */
 function looksLikeDiagnosisText(input = "") {
   const t = String(input || "").toLowerCase();
   const words = [
+    // English
     "noise","sound","rattle","knock","ticking","click","clunk","grind","squeal",
     "vibration","shake","misfire","stall","idle","engine","brake","steering",
     "overheat","smoke","leak","check engine","p0",
+    // Arabic
     "صوت","طقطقة","طرطقة","تك تك","نق","خبط","خشخشة","صرير","زقزقة",
     "رجفة","اهتزاز","هزة","تقطيع","تنتيع","تفتفة",
     "محرك","مكينة","فرامل","دركسون","ستيرنغ",
@@ -203,60 +209,45 @@ function looksLikeDiagnosisText(input = "") {
 
 function looksLikeNearbyRequest(input = "") {
   const t = String(input || "").toLowerCase();
-  const nearby = ["near me","nearby","closest","around me","اقرب","أقرب","بالقرب","قريب","حولّي","حولي","قريبة"];
+  const nearby = [
+    "near me","nearby","closest","around me","near",
+    "اقرب","أقرب","بالقرب","قريب","قريبة","حولّي","حولي","يمّي","جنبي"
+  ];
   return nearby.some((w) => t.includes(w));
 }
 
 function looksLikeShopOrPartsWords(input = "") {
   const t = String(input || "").toLowerCase();
+
   const strong = [
+    // English
     "mechanic","garage","auto repair","repair shop","car repair",
     "auto parts","car parts","parts store","tool store","hardware store",
     "autozone","o'reilly","oreilly","advance auto","napa",
-    "workshop","shop",
-    "ورشة","ورش","ميكانيك","ميكانيكي","كراج",
+
+    // Arabic (wide net)
+    "ورشة","ورش","ورشة سيارات","تصليح سيارات","ميكانيكي","ميكانيك","مكانيكي","مكانيك",
+    "ميكانكي","ميكانك","كراج","كراج سيارات",
     "قطع غيار","محل قطع","محل قطع غيار","محل ادوات","محل أدوات","ادوات","أدوات"
   ];
+
   return strong.some((w) => t.includes(w));
 }
 
 function looksLikeMapAddressWords(input = "") {
   const t = String(input || "").toLowerCase();
   const weak = [
-    "address","location","map","google maps",
-    "عنوان","موقع","خرائط","خريطة","لوكيشن",
+    "address","location","map","google maps","directions","where",
+    "عنوان","موقع","خرائط","خريطة","لوكيشن","دلّني","دلني","وين","وينه","اشرلي",
     "zip","zipcode","postal","postcode","رمز بريدي"
   ];
   return weak.some((w) => t.includes(w));
-}
-
-// Your requested helper (kept as a strong alias)
-function looksLikeShopSearch(text = "") {
-  const t = String(text || "").toLowerCase();
-  return (
-    t.includes("mechanic") ||
-    t.includes("repair shop") ||
-    t.includes("auto shop") ||
-    t.includes("garage") ||
-    t.includes("near me") ||
-    t.includes("location") ||
-    t.includes("workshop") ||
-    t.includes("shop") ||
-    t.includes("ورشة") ||
-    t.includes("ميكانيكي") ||
-    t.includes("كراج") ||
-    t.includes("قريب") ||
-    t.includes("عنوان") ||
-    t.includes("قطع غيار") ||
-    t.includes("محل قطع")
-  );
 }
 
 function looksLikePlacesRequest(input = "") {
   const t = String(input || "").toLowerCase();
   if (looksLikeNearbyRequest(t)) return true;
   if (looksLikeShopOrPartsWords(t)) return true;
-  // If someone says "address/location/map" without shop words, it's ambiguous; keep it conservative
   if (looksLikeMapAddressWords(t) && looksLikeShopOrPartsWords(t)) return true;
   return false;
 }
@@ -388,8 +379,14 @@ function extractDiagAndAnswer(raw = "") {
 function violatesNoPlaces(reply = "") {
   const t = String(reply || "").toLowerCase();
   const bad = [
-    "zip", "zipcode", "postal", "postcode", "gps", "near me", "nearby", "closest", "google maps",
-    "ورشة", "ورش", "ميكانيك", "ميكانيكي", "كراج", "رمز بريدي", "حدد موقعك", "موقعك", "خرائط"
+    // EN
+    "zip","zipcode","postal","postcode","gps","near me","nearby","closest","google maps","maps","address","location",
+    "area","neighborhood","district","city","town","where are you",
+
+    // AR
+    "ورشة","ورش","ميكانيك","ميكانيكي","كراج","خرائط","خريطة","لوكيشن","عنوان","موقعك","حدد موقعك",
+    "رمز بريدي","zip","gps","قريب","اقرب","أقرب",
+    "منطقة","المنطقة","حي","الحي","مدينة","المحافظة","وين انت","وينه","دلني","اشرلي","حدد المنطقة","حدد الحي"
   ];
   return bad.some((w) => t.includes(w));
 }
@@ -406,12 +403,11 @@ function formatWorkshopsForContext(workshops = []) {
     const addr = w?.address || w?.formatted_address || w?.vicinity || "";
     const phone = w?.phone || w?.formatted_phone_number || "";
     const rating = w?.rating ? `rating:${w.rating}` : "";
-    const url = w?.maps_url || w?.google_maps_url || w?.url || "";
-     const website = w?.website || w?.websiteUri || "";
+    const url = w?.maps_url || w?.google_maps_url || w?.googleMapsUri || w?.url || "";
+    const website = w?.website || w?.websiteUri || "";
     const price = w?.price_hint || "";
-    const parts = [name, addr, phone, rating, price, url, website]
-  .filter(Boolean)
-  .join(" | ");
+
+    const parts = [name, addr, phone, rating, price, url, website].filter(Boolean).join(" | ");
     return `${idx + 1}) ${parts}`;
   });
 
@@ -436,7 +432,9 @@ export async function handleFixLensRequest(req) {
   const audio_kind = String(body.audio_kind || "").trim();
   const audioKindFinal = audio_base_64 ? (audio_kind || "car_sound") : "";
 
-  const placesRadiusMeters = Number(body.places_radius_meters || process.env.PLACES_RADIUS_METERS || 25000);
+  const placesRadiusMeters = Number(
+    body.places_radius_meters || process.env.PLACES_RADIUS_METERS || 25000
+  );
 
   try {
     if (!text.trim() && !audio_base_64 && !image_base_64) {
@@ -462,17 +460,12 @@ export async function handleFixLensRequest(req) {
 
     const fullInput = `${text} ${audioType === "speech" ? voiceText : ""}`.trim();
 
-    // ===== INTENT =====
+    // ===== INTENT (HARD GATE) =====
     const diagnosisLikely = looksLikeDiagnosisText(fullInput || text);
+    const placesRequested = looksLikePlacesRequest(text);
 
-    // Strong places request detection (your helper included)
-    const placesRequested = looksLikePlacesRequest(text) || looksLikeShopSearch(text);
-
-    // KEY FIX:
-    // If the user explicitly asked for shops/parts/address, we allow places even if earlier conversation was diagnosis.
-    // But we DO NOT mix: if message contains BOTH diagnosis + places, treat it as diagnosis first (your original rule).
-    const messageHasDiagnosisNow = looksLikeDiagnosisText(text);
-    const placesIntent = Boolean(placesRequested && !messageHasDiagnosisNow);
+    // HARD RULE: If it looks like diagnosis, DO NOT allow places mode
+    const placesIntent = Boolean(placesRequested && !diagnosisLikely);
 
     // ===== ENGINE CONTEXT (Option B) =====
     const enginePack = buildEngineContext(fullInput || text);
@@ -496,78 +489,34 @@ export async function handleFixLensRequest(req) {
     );
 
     const VERIFIED_DATA = Array.isArray(searchPack?.verified_data) ? searchPack.verified_data : [];
-    const VERIFIED_WORKSHOPS = Array.isArray(searchPack?.verified_workshops) ? searchPack.verified_workshops : [];
+    const VERIFIED_WORKSHOPS = Array.isArray(searchPack?.verified_workshops)
+      ? searchPack.verified_workshops
+      : [];
 
-    // ===== PLACES FAST-PATH (NEW) =====
-    // If placesIntent is true, we force a "workshop finder" answer. No refusing.
-    if (placesIntent) {
-      const shopsText = formatWorkshopsForContext(VERIFIED_WORKSHOPS);
-
-      const placesStrict = `
-STRICT_CONTEXT
-LOCALE: ${locale}
-PLACES_INTENT: true
-LOCATION: ${typeof user_location === "string" ? user_location : JSON.stringify(user_location)}
-
-VERIFIED_WORKSHOPS_TEXT:
-${shopsText || "(none)"}
-
-RULES:
-- You are allowed to suggest nearby workshops/parts stores ONLY because PLACES_INTENT:true.
-- If VERIFIED_WORKSHOPS_TEXT is (none), do NOT refuse. Ask ONE short question to narrow location (city/area) in the SAME language, and offer to search again.
-- Output must be in the user language (LOCALE).
-- Keep it helpful and human. No headings. No bullets. No numbering. (You may list shops as simple lines if present.)
-`.trim();
-
-      const responsePlaces = await withRetry(
-        () =>
-          withTimeout(
-            client.chat.completions.create({
-              model: process.env.FIXLENS_MODEL || "gpt-4o",
-              messages: [
-                { role: "system", content: buildDoctorSystemPrompt() },
-                ...history.slice(-4),
-                { role: "user", content: [{ type: "text", text: placesStrict }] },
-                {
-                  role: "user",
-                  content:
-                    "Write the best answer. If shops exist, show up to 5 options with name + address + phone if available. If none exist, ask for the city/area and offer to retry search. No extra text.",
-                },
-              ],
-              temperature: 0.35,
-              max_tokens: 650,
-            }),
-            Number(process.env.CHAT_TIMEOUT_MS || 25000),
-            "chat_timeout"
-          ),
-        2
-      );
-
-      const placesReply =
-        String(responsePlaces?.choices?.[0]?.message?.content || "").trim() ||
-        (String(locale || "").toLowerCase().startsWith("ar")
-          ? "أقدر أبحث لك عن ورش، بس قلّي أي مدينة/منطقة بالضبط؟"
-          : "I can search for shops—what city/area should I use?");
-
+    // ✅ NO-LOOP UX: إذا المستخدم فعلاً يطلب ورش لكن النتائج صفر
+    if (placesIntent && VERIFIED_WORKSHOPS.length === 0) {
+      const isAr = String(locale || "").toLowerCase().startsWith("ar");
       return {
         ok: true,
-        reply: placesReply,
+        reply: isAr
+          ? "أقدر أطلع لك ورش قريبة، بس لازم واحد من هذني: (1) فعّل GPS داخل التطبيق واسمح بالموقع، أو (2) اكتب اسم المنطقة/الشارع بوضوح (مثلاً: الكاظمية، المنصور، شارع الرشيد). بعدها أرجع لك أفضل ورش مع روابط خرائط."
+          : "I can show nearby shops, but I need either: (1) GPS enabled in the app (allow location), or (2) your area/street (e.g., Kadhimiya, Mansour, Al-Rasheed St). Then I’ll return top shops with Maps links.",
         locale,
-        workshops_count: VERIFIED_WORKSHOPS.length,
+        workshops_count: 0,
         ...(debugMode
           ? {
               debug: {
-                stage: "places_fast_path",
+                stage: "places_intent_but_zero_results",
                 diagnosisLikely,
                 placesIntent,
-                workshops: VERIFIED_WORKSHOPS.slice(0, 5),
+                user_location,
               },
             }
           : {}),
       };
     }
 
-    // ===== BUILD STRICT CONTEXT (DIAG PATH) =====
+    // ===== BUILD STRICT CONTEXT =====
     const audioNote = audio_base_64
       ? `AUDIO_NOTE: PRIMARY_MECHANICAL_SOUND (${audioKindFinal || "car_sound"}). Treat audio as mechanical sound first. Do NOT invent smells.`
       : "";
@@ -585,17 +534,19 @@ RULE:
     const strictText = `
 STRICT_CONTEXT
 LOCALE: ${locale}
-PLACES_INTENT: false
+PLACES_INTENT: ${placesIntent ? "true" : "false"}
 LOCATION: ${typeof user_location === "string" ? user_location : JSON.stringify(user_location)}
 
 ABSOLUTE_RULES:
-- PLACES_INTENT is false => NEVER ask for ZIP/GPS/city, NEVER mention nearby shops/maps.
+- If PLACES_INTENT:false => NEVER ask for ZIP/GPS/city, NEVER mention nearby shops/maps.
 - Diagnosis only. No place-search behavior.
 
 ${engineContextText}
 
 VERIFIED_DATA_JSON: ${JSON.stringify(VERIFIED_DATA)}
-VERIFIED_WORKSHOPS_JSON: []  // blocked in diagnosis mode
+VERIFIED_WORKSHOPS_JSON: ${JSON.stringify(VERIFIED_WORKSHOPS)}
+WORKSHOPS_CONTEXT_TEXT:
+${formatWorkshopsForContext(VERIFIED_WORKSHOPS)}
 
 AUDIO_KIND: ${audioKindFinal || ""}
 AUDIO_TYPE: ${audioType}
@@ -654,7 +605,7 @@ USER_INPUT: ${text.trim()}
             ? "صار خلل مؤقت، أعد المحاولة."
             : "Temporary issue, please retry."),
         locale,
-        workshops_count: 0,
+        workshops_count: VERIFIED_WORKSHOPS.length,
         ...(debugMode
           ? {
               debug: {
@@ -663,7 +614,7 @@ USER_INPUT: ${text.trim()}
                 audioType,
                 speech_score: audioSmart.speech_score,
                 diagnosisLikely,
-                placesIntent: false,
+                placesIntent,
                 engineDetected,
                 engineVehicle,
               },
@@ -672,8 +623,8 @@ USER_INPUT: ${text.trim()}
       };
     }
 
-    // HARD GUARD: no-places mode => block any ZIP/GPS/shop talk and force rewrite
-    if (violatesNoPlaces(answer1)) {
+    // ===== HARD GUARD: If no-places mode, block any ZIP/GPS/shop talk and force rewrite
+    if (!placesIntent && violatesNoPlaces(answer1)) {
       const guardResponse = await withRetry(
         () =>
           withTimeout(
@@ -707,15 +658,15 @@ USER_INPUT: ${text.trim()}
     const needsSearch = Boolean(diag1?.search_intent?.needs_search);
     const searchQuery = String(diag1?.search_intent?.query || "").trim();
 
-    const queryLooksPlacey = looksLikePlacesRequest(searchQuery) || looksLikeShopSearch(searchQuery);
+    const queryLooksPlacey = looksLikePlacesRequest(searchQuery);
 
-    if (needsSearch && searchQuery.length >= 3 && !queryLooksPlacey) {
+    if (needsSearch && searchQuery.length >= 3 && !(!placesIntent && queryLooksPlacey)) {
       const searchPack2 = await withRetry(
         () =>
           withTimeout(
             performSearch(searchQuery, user_location, {
               locale,
-              allowPlaces: false,
+              allowPlaces: placesIntent,
               placesRadiusMeters,
             }),
             Number(process.env.SEARCH_TIMEOUT_MS || 15000),
@@ -725,11 +676,14 @@ USER_INPUT: ${text.trim()}
       );
 
       const VERIFIED_DATA_2 = Array.isArray(searchPack2?.verified_data) ? searchPack2.verified_data : [];
+      const VERIFIED_WORKSHOPS_2 = Array.isArray(searchPack2?.verified_workshops)
+        ? searchPack2.verified_workshops
+        : [];
 
       const refineStrict = `
 STRICT_CONTEXT
 LOCALE: ${locale}
-PLACES_INTENT: false
+PLACES_INTENT: ${placesIntent ? "true" : "false"}
 LOCATION: ${typeof user_location === "string" ? user_location : JSON.stringify(user_location)}
 
 ENGINE_CONTEXT (carry):
@@ -740,9 +694,12 @@ ENGINE_CONTEXT (carry):
 DIAG_JSON_FROM_STAGE1: ${JSON.stringify(diag1)}
 
 VERIFIED_DATA_JSON: ${JSON.stringify(VERIFIED_DATA_2)}
+VERIFIED_WORKSHOPS_JSON: ${JSON.stringify(VERIFIED_WORKSHOPS_2)}
+WORKSHOPS_CONTEXT_TEXT:
+${formatWorkshopsForContext(VERIFIED_WORKSHOPS_2)}
 
 ABSOLUTE_RULES:
-- PLACES_INTENT:false => NEVER ask for ZIP/GPS/city, NEVER mention shops/maps.
+- If PLACES_INTENT:false => NEVER ask for ZIP/GPS/city, NEVER mention shops/maps.
 
 USER_INPUT: ${text.trim()}
 `.trim();
@@ -777,13 +734,15 @@ USER_INPUT: ${text.trim()}
           ? "صار خلل مؤقت، أعد المحاولة."
           : "Temporary issue, please retry.");
 
-      if (violatesNoPlaces(reply2)) reply2 = answer1;
+      if (!placesIntent && violatesNoPlaces(reply2)) {
+        reply2 = answer1;
+      }
 
       return {
         ok: true,
         reply: reply2,
         locale,
-        workshops_count: 0,
+        workshops_count: VERIFIED_WORKSHOPS_2.length,
         ...(debugMode
           ? {
               debug: {
@@ -791,7 +750,7 @@ USER_INPUT: ${text.trim()}
                 audioType,
                 speech_score: audioSmart.speech_score,
                 diagnosisLikely,
-                placesIntent: false,
+                placesIntent,
                 diag1,
                 searchQuery,
                 engineDetected,
@@ -802,7 +761,6 @@ USER_INPUT: ${text.trim()}
       };
     }
 
-    // Default: stage1 answer is enough
     return {
       ok: true,
       reply:
@@ -811,7 +769,7 @@ USER_INPUT: ${text.trim()}
           ? "صار خلل مؤقت، أعد المحاولة."
           : "Temporary issue, please retry."),
       locale,
-      workshops_count: 0,
+      workshops_count: VERIFIED_WORKSHOPS.length,
       ...(debugMode
         ? {
             debug: {
@@ -819,7 +777,7 @@ USER_INPUT: ${text.trim()}
               audioType,
               speech_score: audioSmart.speech_score,
               diagnosisLikely,
-              placesIntent: false,
+              placesIntent,
               diag1,
               engineDetected,
               engineVehicle,
