@@ -406,8 +406,12 @@ function formatWorkshopsForContext(workshops = []) {
     const addr = w?.address || w?.formatted_address || w?.vicinity || "";
     const phone = w?.phone || w?.formatted_phone_number || "";
     const rating = w?.rating ? `rating:${w.rating}` : "";
-    const url = w?.url || w?.maps_url || w?.google_maps_url || "";
-    const parts = [name, addr, phone, rating, url].filter(Boolean).join(" | ");
+    const url = w?.maps_url || w?.google_maps_url || w?.url || "";
+     const website = w?.website || w?.websiteUri || "";
+    const price = w?.price_hint || "";
+    const parts = [name, addr, phone, rating, price, url, website]
+  .filter(Boolean)
+  .join(" | ");
     return `${idx + 1}) ${parts}`;
   });
 
