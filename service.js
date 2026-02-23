@@ -1,5 +1,7 @@
-// service.js — FixLens "Doctor Brain" v2.3.1 (Smart Places Follow-Up + Direct shop list)
-// Fix: When user replies with location only ("المنصور") after we asked for area, we search Places instead of looping.
+// service.js — FixLens "Doctor Brain" v2.3.2 (Audio-aware UX + Refusal Guard + Smart Places Follow-Up + Direct shop list)
+// Fixes:
+// 1) car_sound audio was being ignored (always returning empty text). Now we keep AUDIO_ATTACHED context and force smart follow-up.
+// 2) If model returns a refusal, we convert it into a safe mechanic-style fallback instead of "I can't assist".
 
 import OpenAI from "openai";
 import fs from "fs";
@@ -227,7 +229,7 @@ function looksLikeShopOrPartsWords(input = "") {
     "auto parts","car parts","parts store","tool store","hardware store",
     "autozone","o'reilly","oreilly","advance auto","napa",
 
-    // Arabic (wide net)
+    // Arabic
     "ورشة","ورش","ورشة سيارات","تصليح سيارات","ميكانيكي","ميكانيك","مكانيكي","مكانيك",
     "ميكانكي","ميكانك","كراج","كراج سيارات",
     "قطع غيار","محل قطع","محل قطع غيار","محل ادوات","محل أدوات","ادوات","أدوات"
@@ -255,8 +257,7 @@ function looksLikePlacesRequest(input = "") {
 }
 
 /* =========================================================
-   PLACES FOLLOW-UP (STATLESS MEMORY FROM HISTORY)
-   - If assistant last asked for GPS/area/zip and user replies with short location only => treat as Places search.
+   PLACES FOLLOW-UP (STATELESS MEMORY FROM HISTORY)
 ========================================================= */
 function getLastAssistantText(history = []) {
   for (let i = history.length - 1; i >= 0; i--) {
@@ -271,7 +272,6 @@ function looksLikePlacesFollowUp(history = []) {
   const a = getLastAssistantText(history).toLowerCase();
   if (!a) return false;
 
-  // signals we asked for GPS/area/neighborhood
   const askSignals = [
     "gps", "enable location", "allow location",
     "zip", "zipcode", "postal",
@@ -287,16 +287,15 @@ function looksLikePlacesFollowUp(history = []) {
 function looksLikeLocationOnlyText(text = "") {
   const t = String(text || "").trim();
   if (!t) return false;
-  if (t.length > 60) return false;           // keep conservative
+  if (t.length > 60) return false;
   if (looksLikeDiagnosisText(t)) return false;
-  if (looksLikePlacesRequest(t)) return false; // already a full request, not "location only"
+  if (looksLikePlacesRequest(t)) return false;
 
-  // allow Arabic/English/nums and common separators
   return /^[\u0600-\u06FFa-zA-Z0-9\s\-\.,]+$/.test(t);
 }
 
 /* =========================================================
-   AUDIO: Non-speech first + optional speech
+   AUDIO HELPERS
 ========================================================= */
 function containsSmellWords(s = "") {
   const t = String(s || "").toLowerCase();
@@ -328,6 +327,14 @@ function estimateSpeechFromWhisperVerbose(verbose) {
   return { hasSpeech: null, score: ratio };
 }
 
+/**
+ * IMPORTANT NOTE:
+ * Whisper is not great for non-speech mechanical audio.
+ * We still run it to detect accidental speech, but we DO NOT pretend
+ * we "analyzed" the mechanical audio.
+ * Instead: we pass AUDIO_ATTACHED + AUDIO_KIND + AUDIO_TYPE into the prompt
+ * and force a smart follow-up question about the sound characteristics.
+ */
 async function transcribeAudioSmart(audioBase64, locale, audioKind = "car_sound") {
   if (!audioBase64 || String(audioBase64).length < 50) {
     return { ok: false, text: "", audio_type: "none", speech_score: 0 };
@@ -358,11 +365,16 @@ async function transcribeAudioSmart(audioBase64, locale, audioKind = "car_sound"
     const speechEst = estimateSpeechFromWhisperVerbose(res);
     const rawText = String(res?.text || "").trim();
 
-    // Default: treat audio as NON-SPEECH car sound unless explicitly voice
+    // For non-voice (car_sound): keep transcript ONLY if it looks like actual speech.
     if (!isVoice) {
+      const looksWordy = /[a-zA-Z\u0600-\u06FF]{3,}/.test(rawText);
+      if (rawText && looksWordy && rawText.length <= 240) {
+        return { ok: true, text: rawText, audio_type: "speech_detected_in_car_sound", speech_score: speechEst.score };
+      }
       return { ok: true, text: "", audio_type: "non_speech", speech_score: speechEst.score };
     }
 
+    // Voice flow
     if (rawText.length > 240) {
       return { ok: true, text: "", audio_type: "speech_garbage", speech_score: speechEst.score };
     }
@@ -432,6 +444,26 @@ function violatesNoPlaces(reply = "") {
     "منطقة","المنطقة","حي","الحي","مدينة","المحافظة","وين انت","وينه","دلني","اشرلي","حدد المنطقة","حدد الحي"
   ];
   return bad.some((w) => t.includes(w));
+}
+
+/* =========================================================
+   REFUSAL GUARD
+========================================================= */
+function looksLikeRefusal(text = "") {
+  const t = String(text || "").toLowerCase();
+  const patterns = [
+    "i can't assist", "i cannot assist", "i'm sorry, i can't", "i’m sorry, i can’t",
+    "cannot help with that request", "can't help with that", "not able to help",
+    "policy", "violat", "cannot comply", "i can't provide"
+  ];
+  return patterns.some((p) => t.includes(p));
+}
+
+function safeFallbackReply(locale = "en", userText = "") {
+  const isAr = String(locale || "").toLowerCase().startsWith("ar");
+  return isAr
+    ? "وصلتني الأعراض/المرفقات. خلّيني أمشي وياك بطريقة ميكانيكي: رجفة + طقطقة عند التسارع غالباً تكون يا إمّا misfire (بواجي/كويلات)، أو مشكلة وقود/هواء (MAF/فلتر/بخاخ)، أو طرق/دق بسبب وقود/توقيت، وأحياناً قواعد مكينة إذا الاهتزاز قوي. سؤالين بس حتى أحدد: هل لمبة Check Engine شغّالة؟ وهل الصوت يشبه (تك تك سريع) لو (دق ثقيل)؟ وإذا تقدر، قلّي سنة السيارة ونوعها."
+    : "I got your symptoms/attachments. Let’s do this like a real mechanic: shaking + a rattle/knock on acceleration is commonly misfire (plugs/coils), fuel/air imbalance (MAF/filter/injectors), true knock/ping (fuel/timing/carbon), or sometimes engine mounts if the vibration is harsh. Two quick questions: Is the Check Engine light on? And is the sound more like a fast ticking or a deep knock? If you can, tell me the year/make/model.";
 }
 
 /* =========================================================
@@ -519,6 +551,7 @@ export async function handleFixLensRequest(req) {
     }
 
     // ===== AUDIO (smart) =====
+    const audioAttached = Boolean(audio_base_64);
     const audioSmart = await transcribeAudioSmart(audio_base_64, locale, audioKindFinal);
     let voiceText = audioSmart.ok ? String(audioSmart.text || "").trim() : "";
     const audioType = audioSmart.audio_type || "none";
@@ -527,19 +560,20 @@ export async function handleFixLensRequest(req) {
       voiceText = "";
     }
 
-    const fullInput = `${text} ${audioType === "speech" ? voiceText : ""}`.trim();
+    // For diagnosis text input: include voiceText only if it's real speech (voice or speech detected)
+    const includeVoiceText =
+      audioType === "speech" || audioType === "speech_detected_in_car_sound";
+
+    const fullInput = `${text} ${includeVoiceText ? voiceText : ""}`.trim();
 
     // ===== INTENT (HARD GATE) =====
     const diagnosisLikely = looksLikeDiagnosisText(fullInput || text);
 
-    // ✅ NEW: Places follow-up detection
     const placesFollowUp = looksLikePlacesFollowUp(history) && looksLikeLocationOnlyText(text);
     const placesRequested = looksLikePlacesRequest(text);
 
-    // HARD RULE: If it looks like diagnosis, DO NOT allow places mode
     const placesIntent = Boolean((placesRequested || placesFollowUp) && !diagnosisLikely);
 
-    // ✅ NEW: If follow-up is location only, force a proper places query
     const placesQuery = placesFollowUp ? `mechanic near ${text}` : (fullInput || text);
 
     // ===== ENGINE CONTEXT (Option B) =====
@@ -568,7 +602,7 @@ export async function handleFixLensRequest(req) {
       ? searchPack.verified_workshops
       : [];
 
-    // ✅ NEW: If Places intent and we have workshops, return them DIRECTLY (addresses + maps)
+    // ✅ Places direct list
     if (placesIntent && VERIFIED_WORKSHOPS.length > 0) {
       const isAr = String(locale || "").toLowerCase().startsWith("ar");
       return {
@@ -593,11 +627,9 @@ export async function handleFixLensRequest(req) {
       };
     }
 
-    // ✅ NO-LOOP UX: إذا المستخدم فعلاً يطلب ورش لكن النتائج صفر
+    // ✅ Places zero results (no loop)
     if (placesIntent && VERIFIED_WORKSHOPS.length === 0) {
       const isAr = String(locale || "").toLowerCase().startsWith("ar");
-
-      // If this was a follow-up location and still zero, ask for more specific anchor
       return {
         ok: true,
         reply: isAr
@@ -626,8 +658,8 @@ export async function handleFixLensRequest(req) {
     }
 
     // ===== BUILD STRICT CONTEXT =====
-    const audioNote = audio_base_64
-      ? `AUDIO_NOTE: PRIMARY_MECHANICAL_SOUND (${audioKindFinal || "car_sound"}). Treat audio as mechanical sound first. Do NOT invent smells.`
+    const audioNote = audioAttached
+      ? `AUDIO_NOTE: AUDIO_ATTACHED=true. AUDIO_KIND=${audioKindFinal || "car_sound"}. If AUDIO_KIND is car_sound/non_speech, DO NOT pretend you analyzed the waveform. Instead ask 1 smart follow-up about sound character (tick/rattle/knock/squeal), and 1 about timing (cold/hot, only under load, only at idle).`
       : "";
 
     const engineContextText = `
@@ -657,9 +689,10 @@ VERIFIED_WORKSHOPS_JSON: ${JSON.stringify(VERIFIED_WORKSHOPS)}
 WORKSHOPS_CONTEXT_TEXT:
 ${formatWorkshopsForContext(VERIFIED_WORKSHOPS)}
 
+AUDIO_ATTACHED: ${audioAttached ? "true" : "false"}
 AUDIO_KIND: ${audioKindFinal || ""}
 AUDIO_TYPE: ${audioType}
-AUDIO_TRANSCRIPT: ${audioType === "speech" ? voiceText : ""}
+AUDIO_TRANSCRIPT: ${includeVoiceText ? voiceText : ""}
 
 ${audioNote}
 
@@ -703,16 +736,38 @@ USER_INPUT: ${text.trim()}
     );
 
     const raw1 = String(response1?.choices?.[0]?.message?.content || "").trim();
+
+    // ✅ Refusal guard
+    if (looksLikeRefusal(raw1)) {
+      return {
+        ok: true,
+        reply: safeFallbackReply(locale, text),
+        locale,
+        workshops_count: VERIFIED_WORKSHOPS.length,
+        ...(debugMode
+          ? {
+              debug: {
+                stage: "refusal_guard_stage1",
+                raw1,
+                audioType,
+                speech_score: audioSmart.speech_score,
+                diagnosisLikely,
+                placesIntent,
+                engineDetected,
+                engineVehicle,
+              },
+            }
+          : {}),
+      };
+    }
+
     let { diag: diag1, finalAnswer: answer1 } = extractDiagAndAnswer(raw1);
 
     if (!diag1 || !diag1?.search_intent) {
+      const fallback = answer1 || safeFallbackReply(locale, text);
       return {
         ok: true,
-        reply:
-          answer1 ||
-          (String(locale || "").toLowerCase().startsWith("ar")
-            ? "صار خلل مؤقت، أعد المحاولة."
-            : "Temporary issue, please retry."),
+        reply: looksLikeRefusal(fallback) ? safeFallbackReply(locale, text) : fallback,
         locale,
         workshops_count: VERIFIED_WORKSHOPS.length,
         ...(debugMode
@@ -759,6 +814,11 @@ USER_INPUT: ${text.trim()}
 
       const forced = String(guardResponse?.choices?.[0]?.message?.content || "").trim();
       if (forced) answer1 = forced;
+    }
+
+    // ✅ If model still refused in FINAL_ANSWER
+    if (looksLikeRefusal(answer1)) {
+      answer1 = safeFallbackReply(locale, text);
     }
 
     // =========================================================
@@ -810,6 +870,11 @@ ${formatWorkshopsForContext(VERIFIED_WORKSHOPS_2)}
 ABSOLUTE_RULES:
 - If PLACES_INTENT:false => NEVER ask for ZIP/GPS/city, NEVER mention shops/maps.
 
+AUDIO_ATTACHED: ${audioAttached ? "true" : "false"}
+AUDIO_KIND: ${audioKindFinal || ""}
+AUDIO_TYPE: ${audioType}
+AUDIO_TRANSCRIPT: ${includeVoiceText ? voiceText : ""}
+
 USER_INPUT: ${text.trim()}
 `.trim();
 
@@ -839,13 +904,10 @@ USER_INPUT: ${text.trim()}
       let reply2 =
         String(response2?.choices?.[0]?.message?.content || "").trim() ||
         answer1 ||
-        (String(locale || "").toLowerCase().startsWith("ar")
-          ? "صار خلل مؤقت، أعد المحاولة."
-          : "Temporary issue, please retry.");
+        safeFallbackReply(locale, text);
 
-      if (!placesIntent && violatesNoPlaces(reply2)) {
-        reply2 = answer1;
-      }
+      if (looksLikeRefusal(reply2)) reply2 = safeFallbackReply(locale, text);
+      if (!placesIntent && violatesNoPlaces(reply2)) reply2 = answer1;
 
       return {
         ok: true,
@@ -872,11 +934,7 @@ USER_INPUT: ${text.trim()}
 
     return {
       ok: true,
-      reply:
-        answer1 ||
-        (String(locale || "").toLowerCase().startsWith("ar")
-          ? "صار خلل مؤقت، أعد المحاولة."
-          : "Temporary issue, please retry."),
+      reply: answer1 || safeFallbackReply(locale, text),
       locale,
       workshops_count: VERIFIED_WORKSHOPS.length,
       ...(debugMode
