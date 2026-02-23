@@ -1,7 +1,8 @@
-// service.js — FixLens "Doctor Brain" v2.3.2 (Audio-aware UX + Refusal Guard + Smart Places Follow-Up + Direct shop list)
+// service.js — FixLens "Doctor Brain" v2.4 (Engine Intelligence Layer Enabled + Smarter Pattern Matching + Better Doctor Output)
 // Fixes:
-// 1) car_sound audio was being ignored (always returning empty text). Now we keep AUDIO_ATTACHED context and force smart follow-up.
-// 2) If model returns a refusal, we convert it into a safe mechanic-style fallback instead of "I can't assist".
+// 1) Engine Intelligence is now actively used (rank + match patterns against user symptoms).
+// 2) Removed "max 2 questions" forced constraint. DoctorPrompt controls question policy.
+// 3) Engine context is summarized + matched issues are provided to the model (not raw dump only).
 
 import OpenAI from "openai";
 import fs from "fs";
@@ -108,7 +109,7 @@ function findEnginePatterns(engineName = "") {
     (x) => String(x?.engine || "").trim().toLowerCase() === e.toLowerCase()
   );
   const issues = Array.isArray(hit?.issues) ? hit.issues : [];
-  return issues.slice(0, 6);
+  return issues.slice(0, 12);
 }
 
 function buildEngineContext(text = "") {
@@ -116,11 +117,98 @@ function buildEngineContext(text = "") {
   const detectedEngine = detectEngineFromVehicle(info.make, info.model, info.year);
 
   if (!detectedEngine) {
-    return { vehicle: info, engine: null, patterns: [] };
+    return { vehicle: info, engine: null, patterns: [], confidence: "low" };
   }
 
   const patterns = findEnginePatterns(detectedEngine);
-  return { vehicle: info, engine: detectedEngine, patterns };
+
+  // If we got year+make+model and matched a range -> confidence high; else medium.
+  const hasAll = Boolean(info.make && info.model && Number.isFinite(info.year));
+  const confidence = hasAll ? "high" : "medium";
+
+  return { vehicle: info, engine: detectedEngine, patterns, confidence };
+}
+
+/* =========================================================
+   ENGINE PATTERN MATCHING (rank issues against user symptoms)
+========================================================= */
+function toKeywords(value) {
+  if (!value) return [];
+  if (Array.isArray(value)) {
+    return value.flatMap((x) => toKeywords(x));
+  }
+  if (typeof value === "string") {
+    return value
+      .split(/[,/|;]/g)
+      .map((s) => normalizeToken(s))
+      .filter(Boolean);
+  }
+  return [];
+}
+
+function collectIssueKeywords(issue = {}) {
+  // We try multiple possible keys to support different JSON formats:
+  // symptoms, triggers, keywords, tags, cues, when, notes
+  const keys = [
+    issue?.symptoms,
+    issue?.triggers,
+    issue?.keywords,
+    issue?.tags,
+    issue?.cues,
+    issue?.when,
+    issue?.notes,
+    issue?.description,
+    issue?.name,
+    issue?.title,
+  ];
+
+  const out = [];
+  for (const k of keys) out.push(...toKeywords(k));
+  // Remove duplicates
+  return Array.from(new Set(out)).filter((s) => s.length >= 3).slice(0, 50);
+}
+
+function scoreIssueMatch(userText = "", issue = {}) {
+  const t = normalizeToken(userText);
+  if (!t) return 0;
+
+  const kws = collectIssueKeywords(issue);
+  if (kws.length === 0) return 0;
+
+  let score = 0;
+
+  for (const kw of kws) {
+    // Lightweight matching
+    if (t.includes(kw)) score += 2;
+    else {
+      // token overlap (partial)
+      const parts = kw.split(" ").filter(Boolean);
+      if (parts.length >= 2) {
+        const hits = parts.filter((p) => p.length >= 3 && t.includes(p)).length;
+        if (hits >= 2) score += 1;
+      }
+    }
+  }
+
+  // small bonus if user mentions codes and issue seems code related
+  const hasCode = /\bp0\d{3}\b/i.test(userText);
+  if (hasCode) {
+    const issueText = JSON.stringify(issue).toLowerCase();
+    if (issueText.includes("p0") || issueText.includes("dtc") || issueText.includes("code")) score += 1;
+  }
+
+  return score;
+}
+
+function rankEngineIssues(userText = "", issues = []) {
+  const list = Array.isArray(issues) ? issues : [];
+  const scored = list
+    .map((it) => ({ issue: it, score: scoreIssueMatch(userText, it) }))
+    .filter((x) => x.score > 0)
+    .sort((a, b) => b.score - a.score);
+
+  // Return top 6 matched issues
+  return scored.slice(0, 6).map((x) => x.issue);
 }
 
 /* =========================================================
@@ -369,7 +457,12 @@ async function transcribeAudioSmart(audioBase64, locale, audioKind = "car_sound"
     if (!isVoice) {
       const looksWordy = /[a-zA-Z\u0600-\u06FF]{3,}/.test(rawText);
       if (rawText && looksWordy && rawText.length <= 240) {
-        return { ok: true, text: rawText, audio_type: "speech_detected_in_car_sound", speech_score: speechEst.score };
+        return {
+          ok: true,
+          text: rawText,
+          audio_type: "speech_detected_in_car_sound",
+          speech_score: speechEst.score,
+        };
       }
       return { ok: true, text: "", audio_type: "non_speech", speech_score: speechEst.score };
     }
@@ -462,7 +555,7 @@ function looksLikeRefusal(text = "") {
 function safeFallbackReply(locale = "en", userText = "") {
   const isAr = String(locale || "").toLowerCase().startsWith("ar");
   return isAr
-    ? "وصلتني الأعراض/المرفقات. خلّيني أمشي وياك بطريقة ميكانيكي: رجفة + طقطقة عند التسارع غالباً تكون يا إمّا misfire (بواجي/كويلات)، أو مشكلة وقود/هواء (MAF/فلتر/بخاخ)، أو طرق/دق بسبب وقود/توقيت، وأحياناً قواعد مكينة إذا الاهتزاز قوي. سؤالين بس حتى أحدد: هل لمبة Check Engine شغّالة؟ وهل الصوت يشبه (تك تك سريع) لو (دق ثقيل)؟ وإذا تقدر، قلّي سنة السيارة ونوعها."
+    ? "وصلتني الأعراض/المرفقات. خلّيني أمشي وياك بطريقة ميكانيكي: رجفة + طقطقة عند التسارع غالباً تكون يا إمّا misfire (بواجي/كويلات)، أو مشكلة وقود/هواء (MAF/فلتر/بخاخ)، أو طرق/دق بسبب وقود/توقيت، وأحياناً قواعد مكينة إذا الاهتزاز قوي. سؤالين سريعين حتى أحدد: هل لمبة Check Engine شغّالة؟ وهل الصوت يشبه (تك تك سريع) لو (دق ثقيل)؟ وإذا تقدر، قلّي سنة السيارة ونوعها."
     : "I got your symptoms/attachments. Let’s do this like a real mechanic: shaking + a rattle/knock on acceleration is commonly misfire (plugs/coils), fuel/air imbalance (MAF/filter/injectors), true knock/ping (fuel/timing/carbon), or sometimes engine mounts if the vibration is harsh. Two quick questions: Is the Check Engine light on? And is the sound more like a fast ticking or a deep knock? If you can, tell me the year/make/model.";
 }
 
@@ -581,6 +674,10 @@ export async function handleFixLensRequest(req) {
     const engineDetected = enginePack?.engine || null;
     const engineVehicle = enginePack?.vehicle || {};
     const enginePatterns = Array.isArray(enginePack?.patterns) ? enginePack.patterns : [];
+    const engineConfidence = enginePack?.confidence || "low";
+
+    // Rank & match issues against user symptoms
+    const matchedEngineIssues = engineDetected ? rankEngineIssues(fullInput || text, enginePatterns) : [];
 
     // ===== SEARCH (KB always ok; places only if allowed) =====
     const searchPack = await withRetry(
@@ -659,17 +756,21 @@ export async function handleFixLensRequest(req) {
 
     // ===== BUILD STRICT CONTEXT =====
     const audioNote = audioAttached
-      ? `AUDIO_NOTE: AUDIO_ATTACHED=true. AUDIO_KIND=${audioKindFinal || "car_sound"}. If AUDIO_KIND is car_sound/non_speech, DO NOT pretend you analyzed the waveform. Instead ask 1 smart follow-up about sound character (tick/rattle/knock/squeal), and 1 about timing (cold/hot, only under load, only at idle).`
+      ? `AUDIO_NOTE: AUDIO_ATTACHED=true. AUDIO_KIND=${audioKindFinal || "car_sound"}. If AUDIO_KIND is car_sound/non_speech, DO NOT pretend you analyzed the waveform. Instead ask smart follow-up questions about sound character (tick/rattle/knock/squeal/grind) and timing (cold/hot, under load vs idle).`
       : "";
 
     const engineContextText = `
 ENGINE_CONTEXT (US engine intelligence):
 - VEHICLE_MENTION: ${JSON.stringify(engineVehicle)}
 - DETECTED_ENGINE: ${engineDetected ? engineDetected : "null"}
+- ENGINE_MATCH_CONFIDENCE: ${engineDetected ? engineConfidence : "none"}
 - ENGINE_PATTERNS_JSON: ${JSON.stringify(enginePatterns)}
-RULE:
-- If DETECTED_ENGINE is not null AND patterns match the symptom, you MAY mention the engine explicitly to the user (Option B).
-- If engine is uncertain, do NOT guess. Ask at most one of your allowed questions to confirm (year/model/engine size).
+- MATCHED_ENGINE_ISSUES_JSON (ranked by symptom match): ${JSON.stringify(matchedEngineIssues)}
+
+RULES:
+- If DETECTED_ENGINE is not null and matched issues align with the symptom pattern, you MAY mention the engine explicitly to the user.
+- If engine is uncertain or mismatch, do NOT guess. Ask 1 targeted question to confirm year/make/model/engine size only if it materially changes the diagnosis.
+- Use matched issues to enrich diagnosis (mechanism + common failure pattern + best confirmation check).
 `.trim();
 
     const strictText = `
@@ -723,7 +824,7 @@ USER_INPUT: ${text.trim()}
               {
                 role: "user",
                 content:
-                  "Return EXACTLY:\nDIAG_JSON: {valid JSON}\nFINAL_ANSWER: <final answer>\nNo extra text.\nFINAL_ANSWER must be mechanic-like, not cold-short, and not verbose. Ask max 2 questions only if they matter.",
+                  "Return EXACTLY:\nDIAG_JSON: {valid JSON}\nFINAL_ANSWER: <final answer>\nNo extra text.\nFINAL_ANSWER must sound like a real mechanic/diagnostic engineer. Use engine intelligence if relevant. Follow the system prompt rules for questions (ask only what matters).",
               },
             ],
             temperature: Number(process.env.FIXLENS_TEMPERATURE || 0.55),
@@ -754,7 +855,9 @@ USER_INPUT: ${text.trim()}
                 diagnosisLikely,
                 placesIntent,
                 engineDetected,
+                engineConfidence,
                 engineVehicle,
+                matchedEngineIssues_count: matchedEngineIssues.length,
               },
             }
           : {}),
@@ -780,7 +883,9 @@ USER_INPUT: ${text.trim()}
                 diagnosisLikely,
                 placesIntent,
                 engineDetected,
+                engineConfidence,
                 engineVehicle,
+                matchedEngineIssues_count: matchedEngineIssues.length,
               },
             }
           : {}),
@@ -800,7 +905,7 @@ USER_INPUT: ${text.trim()}
                 {
                   role: "user",
                   content:
-                    "PLACES_INTENT is false. Rewrite FINAL_ANSWER as a real mechanic diagnosis. Do NOT ask for ZIP/GPS/city. Do NOT mention shops/maps. No headings/bullets/numbering. Ask max 2 questions only if essential. Keep it clear and helpful (not too short).",
+                    "PLACES_INTENT is false. Rewrite the answer as diagnosis only. Do NOT ask for ZIP/GPS/city. Do NOT mention shops/maps. Follow the system prompt for style and questions. Keep it clear and helpful (not too short).",
                 },
               ],
               temperature: 0.35,
@@ -857,7 +962,9 @@ LOCATION: ${typeof user_location === "string" ? user_location : JSON.stringify(u
 
 ENGINE_CONTEXT (carry):
 - DETECTED_ENGINE: ${engineDetected ? engineDetected : "null"}
+- ENGINE_MATCH_CONFIDENCE: ${engineDetected ? engineConfidence : "none"}
 - VEHICLE_MENTION: ${JSON.stringify(engineVehicle)}
+- MATCHED_ENGINE_ISSUES_JSON: ${JSON.stringify(matchedEngineIssues)}
 - ENGINE_PATTERNS_JSON: ${JSON.stringify(enginePatterns)}
 
 DIAG_JSON_FROM_STAGE1: ${JSON.stringify(diag1)}
@@ -889,7 +996,7 @@ USER_INPUT: ${text.trim()}
                 {
                   role: "user",
                   content:
-                    "Write ONLY the FINAL_ANSWER in the required language. No headings. No bullets. No numbers. Ask max 2 questions only if essential. Be decisive and mechanic-like. Keep it clear (not too short, not too long).",
+                    "Write ONLY the final answer in the required language. Follow the system prompt (professional mechanic tone, no fluff). Use engine intelligence when it matches. Ask only the questions that materially change the diagnosis.",
                 },
               ],
               temperature: 0.45,
@@ -925,7 +1032,9 @@ USER_INPUT: ${text.trim()}
                 diag1,
                 searchQuery,
                 engineDetected,
+                engineConfidence,
                 engineVehicle,
+                matchedEngineIssues_count: matchedEngineIssues.length,
               },
             }
           : {}),
@@ -947,7 +1056,9 @@ USER_INPUT: ${text.trim()}
               placesIntent,
               diag1,
               engineDetected,
+              engineConfidence,
               engineVehicle,
+              matchedEngineIssues_count: matchedEngineIssues.length,
             },
           }
         : {}),
