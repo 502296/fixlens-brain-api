@@ -1,8 +1,15 @@
-// service.js — FixLens "Doctor Brain" v2.4 (Engine Intelligence Layer Enabled + Smarter Pattern Matching + Better Doctor Output)
-// Fixes:
-// 1) Engine Intelligence is now actively used (rank + match patterns against user symptoms).
-// 2) Removed "max 2 questions" forced constraint. DoctorPrompt controls question policy.
-// 3) Engine context is summarized + matched issues are provided to the model (not raw dump only).
+// service.js — FixLens "Doctor Brain" v2.4 (Engine Intel v1 + Engine Patterns + Better DIAG_JSON + Stronger Doctor Output)
+// Notes:
+// - Uses BOTH files:
+//   1) /data/engine_patterns.json  (simple engine -> issues keywords)
+//   2) /data/us_engine_intel_v1.json (engine_key + patterns + ranked causes/questions/checks)
+// - Keeps your PLACES hard-gate behavior.
+// - Improves engine matching so the reply becomes “doctor-level”, not poor.
+
+// ✅ Required files in /data:
+// - vehicle_engine_map.json
+// - engine_patterns.json
+// - us_engine_intel_v1.json
 
 import OpenAI from "openai";
 import fs from "fs";
@@ -13,32 +20,40 @@ import { performSearch } from "./search.js";
 const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 /* =========================================================
-   LOAD ENGINE INTELLIGENCE (US market) — from /data
+   LOAD DATA (boot-time)
 ========================================================= */
 const DATA_DIR = path.join(process.cwd(), "data");
+
 const VEHICLE_MAP_PATH = path.join(DATA_DIR, "vehicle_engine_map.json");
-const ENGINE_PATTERNS_PATH = path.join(DATA_DIR, "engine_patterns.json");
+const ENGINE_PATTERNS_PATH = path.join(DATA_DIR, "engine_patterns.json"); // simple
+const US_ENGINE_INTEL_PATH = path.join(DATA_DIR, "us_engine_intel_v1.json"); // advanced
 
 let VEHICLE_ENGINE_MAP = [];
 let ENGINE_PATTERNS = [];
+let US_ENGINE_INTEL = { version: "0", scope: "", engines: [], patterns: [] };
 
-function safeLoadJson(filePath, fallback = []) {
+function safeLoadJson(filePath, fallback) {
   try {
     if (!fs.existsSync(filePath)) return fallback;
     const raw = fs.readFileSync(filePath, "utf-8");
     const parsed = JSON.parse(raw);
-    return parsed;
+    return parsed ?? fallback;
   } catch {
     return fallback;
   }
 }
 
-// Load once on boot
 VEHICLE_ENGINE_MAP = safeLoadJson(VEHICLE_MAP_PATH, []);
 ENGINE_PATTERNS = safeLoadJson(ENGINE_PATTERNS_PATH, []);
+US_ENGINE_INTEL = safeLoadJson(US_ENGINE_INTEL_PATH, {
+  version: "0",
+  scope: "",
+  engines: [],
+  patterns: [],
+});
 
 /* =========================================================
-   ENGINE LAYER (Option B): Vehicle -> Engine inference
+   NORMALIZERS
 ========================================================= */
 function normalizeToken(s = "") {
   return String(s || "")
@@ -49,6 +64,20 @@ function normalizeToken(s = "") {
     .trim();
 }
 
+function hasAnyKeyword(text = "", keywords = []) {
+  const t = normalizeToken(text);
+  const list = Array.isArray(keywords) ? keywords : [];
+  for (const k of list) {
+    const kk = normalizeToken(k);
+    if (!kk) continue;
+    if (t.includes(kk)) return true;
+  }
+  return false;
+}
+
+/* =========================================================
+   VEHICLE -> ENGINE DETECTION (Option B)
+========================================================= */
 function extractVehicleInfo(text = "") {
   const t = normalizeToken(text);
 
@@ -101,114 +130,146 @@ function detectEngineFromVehicle(make, model, year) {
   return String(found.engines[0] || "").trim() || null;
 }
 
-function findEnginePatterns(engineName = "") {
+/* =========================================================
+   ENGINE PATTERNS (simple file): engine_patterns.json
+========================================================= */
+function findSimpleEngineIssues(engineName = "") {
   const e = String(engineName || "").trim();
   if (!e) return [];
 
   const hit = ENGINE_PATTERNS.find(
     (x) => String(x?.engine || "").trim().toLowerCase() === e.toLowerCase()
   );
+
   const issues = Array.isArray(hit?.issues) ? hit.issues : [];
-  return issues.slice(0, 12);
+  return issues.slice(0, 6);
 }
 
-function buildEngineContext(text = "") {
-  const info = extractVehicleInfo(text);
-  const detectedEngine = detectEngineFromVehicle(info.make, info.model, info.year);
+function matchSimpleEngineIssuesToText(issues = [], text = "") {
+  const t = normalizeToken(text);
+  const list = Array.isArray(issues) ? issues : [];
 
-  if (!detectedEngine) {
-    return { vehicle: info, engine: null, patterns: [], confidence: "low" };
-  }
+  // score by keywords hit count
+  const scored = list
+    .map((it) => {
+      const kws = Array.isArray(it?.keywords) ? it.keywords : [];
+      let score = 0;
+      for (const k of kws) {
+        const kk = normalizeToken(k);
+        if (kk && t.includes(kk)) score += 1;
+      }
+      return { ...it, __score: score };
+    })
+    .sort((a, b) => (b.__score || 0) - (a.__score || 0));
 
-  const patterns = findEnginePatterns(detectedEngine);
-
-  // If we got year+make+model and matched a range -> confidence high; else medium.
-  const hasAll = Boolean(info.make && info.model && Number.isFinite(info.year));
-  const confidence = hasAll ? "high" : "medium";
-
-  return { vehicle: info, engine: detectedEngine, patterns, confidence };
+  // keep only meaningful matches (score>=1)
+  return scored.filter((x) => Number(x.__score || 0) >= 1).slice(0, 3);
 }
 
 /* =========================================================
-   ENGINE PATTERN MATCHING (rank issues against user symptoms)
+   US ENGINE INTEL v1 (advanced file): us_engine_intel_v1.json
 ========================================================= */
-function toKeywords(value) {
-  if (!value) return [];
-  if (Array.isArray(value)) {
-    return value.flatMap((x) => toKeywords(x));
-  }
-  if (typeof value === "string") {
-    return value
-      .split(/[,/|;]/g)
-      .map((s) => normalizeToken(s))
-      .filter(Boolean);
-  }
-  return [];
+function findIntelEnginesForVehicle(make, model, year) {
+  const mk = normalizeToken(make);
+  const md = normalizeToken(model);
+  const y = Number(year);
+
+  const engines = Array.isArray(US_ENGINE_INTEL?.engines) ? US_ENGINE_INTEL.engines : [];
+  if (!mk || !md || !Number.isFinite(y)) return [];
+
+  const hits = engines.filter((e) => {
+    const makes = Array.isArray(e?.makes) ? e.makes : [];
+    const models = Array.isArray(e?.models) ? e.models : [];
+    const years = Array.isArray(e?.years) ? e.years : [];
+
+    const makeOk = makes.some((m) => normalizeToken(m) === mk);
+    const modelOk = models.some((m) => normalizeToken(m) === md);
+    const yearOk = years.some((yy) => Number(yy) === y);
+
+    return makeOk && modelOk && yearOk;
+  });
+
+  return hits.slice(0, 3);
 }
 
-function collectIssueKeywords(issue = {}) {
-  // We try multiple possible keys to support different JSON formats:
-  // symptoms, triggers, keywords, tags, cues, when, notes
-  const keys = [
-    issue?.symptoms,
-    issue?.triggers,
-    issue?.keywords,
-    issue?.tags,
-    issue?.cues,
-    issue?.when,
-    issue?.notes,
-    issue?.description,
-    issue?.name,
-    issue?.title,
-  ];
+function getIntelPatternByKey(pattern_key = "") {
+  const key = String(pattern_key || "").trim();
+  if (!key) return null;
 
-  const out = [];
-  for (const k of keys) out.push(...toKeywords(k));
-  // Remove duplicates
-  return Array.from(new Set(out)).filter((s) => s.length >= 3).slice(0, 50);
+  const patterns = Array.isArray(US_ENGINE_INTEL?.patterns) ? US_ENGINE_INTEL.patterns : [];
+  return patterns.find((p) => String(p?.pattern_key || "").trim() === key) || null;
 }
 
-function scoreIssueMatch(userText = "", issue = {}) {
-  const t = normalizeToken(userText);
-  if (!t) return 0;
+function scoreIntelPattern(pattern, text = "") {
+  if (!pattern) return 0;
+  const t = normalizeToken(text);
 
-  const kws = collectIssueKeywords(issue);
-  if (kws.length === 0) return 0;
+  const when = pattern?.when || {};
+  const sym = Array.isArray(when?.symptom_keywords_any) ? when.symptom_keywords_any : [];
+  const extra = Array.isArray(when?.extra_clues_any) ? when.extra_clues_any : [];
 
   let score = 0;
-
-  for (const kw of kws) {
-    // Lightweight matching
-    if (t.includes(kw)) score += 2;
-    else {
-      // token overlap (partial)
-      const parts = kw.split(" ").filter(Boolean);
-      if (parts.length >= 2) {
-        const hits = parts.filter((p) => p.length >= 3 && t.includes(p)).length;
-        if (hits >= 2) score += 1;
-      }
-    }
+  for (const k of sym) {
+    const kk = normalizeToken(k);
+    if (kk && t.includes(kk)) score += 2; // symptom hits weigh more
   }
-
-  // small bonus if user mentions codes and issue seems code related
-  const hasCode = /\bp0\d{3}\b/i.test(userText);
-  if (hasCode) {
-    const issueText = JSON.stringify(issue).toLowerCase();
-    if (issueText.includes("p0") || issueText.includes("dtc") || issueText.includes("code")) score += 1;
+  for (const k of extra) {
+    const kk = normalizeToken(k);
+    if (kk && t.includes(kk)) score += 1;
   }
-
   return score;
 }
 
-function rankEngineIssues(userText = "", issues = []) {
-  const list = Array.isArray(issues) ? issues : [];
-  const scored = list
-    .map((it) => ({ issue: it, score: scoreIssueMatch(userText, it) }))
-    .filter((x) => x.score > 0)
-    .sort((a, b) => b.score - a.score);
+function matchBestIntelPatternForEngine(engineObj, text = "") {
+  if (!engineObj) return { pattern: null, score: 0 };
 
-  // Return top 6 matched issues
-  return scored.slice(0, 6).map((x) => x.issue);
+  const common = Array.isArray(engineObj?.common_patterns) ? engineObj.common_patterns : [];
+  if (common.length === 0) return { pattern: null, score: 0 };
+
+  let best = { pattern: null, score: 0 };
+
+  for (const key of common) {
+    const p = getIntelPatternByKey(key);
+    const s = scoreIntelPattern(p, text);
+    if (s > best.score) best = { pattern: p, score: s };
+  }
+
+  // Require at least a minimal score to claim a match
+  if (best.score < 2) return { pattern: null, score: best.score };
+  return best;
+}
+
+/* =========================================================
+   BUILD ENGINE PACK (combined)
+========================================================= */
+function buildEnginePack(userText = "") {
+  const vehicle = extractVehicleInfo(userText);
+  const detectedEngineName = detectEngineFromVehicle(vehicle.make, vehicle.model, vehicle.year);
+
+  const simpleIssues = detectedEngineName ? findSimpleEngineIssues(detectedEngineName) : [];
+  const simpleMatched = matchSimpleEngineIssuesToText(simpleIssues, userText);
+
+  // US Intel: may find 1-2 engines for same vehicle/year (e.g., 2.5 vs 3.0)
+  const intelEngines = findIntelEnginesForVehicle(vehicle.make, vehicle.model, vehicle.year);
+
+  // pick best intel engine by best pattern score
+  let bestIntel = { engine: null, pattern: null, score: 0 };
+  for (const eng of intelEngines) {
+    const m = matchBestIntelPatternForEngine(eng, userText);
+    if (m.score > bestIntel.score && m.pattern) {
+      bestIntel = { engine: eng, pattern: m.pattern, score: m.score };
+    }
+  }
+
+  return {
+    vehicle,
+    detected_engine_name: detectedEngineName || null,
+    simple_engine_issue_matches: simpleMatched,
+    intel_engine_candidate_count: intelEngines.length,
+    intel_best_engine: bestIntel.engine,
+    intel_best_pattern: bestIntel.pattern,
+    intel_score: bestIntel.score,
+  };
 }
 
 /* =========================================================
@@ -310,19 +371,16 @@ function looksLikeNearbyRequest(input = "") {
 
 function looksLikeShopOrPartsWords(input = "") {
   const t = String(input || "").toLowerCase();
-
   const strong = [
     // English
     "mechanic","garage","auto repair","repair shop","car repair",
     "auto parts","car parts","parts store","tool store","hardware store",
     "autozone","o'reilly","oreilly","advance auto","napa",
-
     // Arabic
     "ورشة","ورش","ورشة سيارات","تصليح سيارات","ميكانيكي","ميكانيك","مكانيكي","مكانيك",
     "ميكانكي","ميكانك","كراج","كراج سيارات",
     "قطع غيار","محل قطع","محل قطع غيار","محل ادوات","محل أدوات","ادوات","أدوات"
   ];
-
   return strong.some((w) => t.includes(w));
 }
 
@@ -383,7 +441,7 @@ function looksLikeLocationOnlyText(text = "") {
 }
 
 /* =========================================================
-   AUDIO HELPERS
+   AUDIO HELPERS (keep your logic)
 ========================================================= */
 function containsSmellWords(s = "") {
   const t = String(s || "").toLowerCase();
@@ -415,14 +473,6 @@ function estimateSpeechFromWhisperVerbose(verbose) {
   return { hasSpeech: null, score: ratio };
 }
 
-/**
- * IMPORTANT NOTE:
- * Whisper is not great for non-speech mechanical audio.
- * We still run it to detect accidental speech, but we DO NOT pretend
- * we "analyzed" the mechanical audio.
- * Instead: we pass AUDIO_ATTACHED + AUDIO_KIND + AUDIO_TYPE into the prompt
- * and force a smart follow-up question about the sound characteristics.
- */
 async function transcribeAudioSmart(audioBase64, locale, audioKind = "car_sound") {
   if (!audioBase64 || String(audioBase64).length < 50) {
     return { ok: false, text: "", audio_type: "none", speech_score: 0 };
@@ -442,7 +492,7 @@ async function transcribeAudioSmart(audioBase64, locale, audioKind = "car_sound"
           model: "whisper-1",
           response_format: "verbose_json",
           prompt:
-            "Audio may be non-speech automotive sounds (engine/brakes). If no clear spoken words, keep text extremely short or empty. Do not invent smells.",
+            "Audio may be non-speech automotive sounds (engine/brakes). If no clear spoken words, keep text extremely short or empty.",
           language: String(locale || "").split("-")[0] || undefined,
         }),
         Number(process.env.WHISPER_TIMEOUT_MS || 15000),
@@ -453,21 +503,14 @@ async function transcribeAudioSmart(audioBase64, locale, audioKind = "car_sound"
     const speechEst = estimateSpeechFromWhisperVerbose(res);
     const rawText = String(res?.text || "").trim();
 
-    // For non-voice (car_sound): keep transcript ONLY if it looks like actual speech.
     if (!isVoice) {
       const looksWordy = /[a-zA-Z\u0600-\u06FF]{3,}/.test(rawText);
       if (rawText && looksWordy && rawText.length <= 240) {
-        return {
-          ok: true,
-          text: rawText,
-          audio_type: "speech_detected_in_car_sound",
-          speech_score: speechEst.score,
-        };
+        return { ok: true, text: rawText, audio_type: "speech_detected_in_car_sound", speech_score: speechEst.score };
       }
       return { ok: true, text: "", audio_type: "non_speech", speech_score: speechEst.score };
     }
 
-    // Voice flow
     if (rawText.length > 240) {
       return { ok: true, text: "", audio_type: "speech_garbage", speech_score: speechEst.score };
     }
@@ -477,7 +520,6 @@ async function transcribeAudioSmart(audioBase64, locale, audioKind = "car_sound"
     }
 
     const looksWordy = /[a-zA-Z\u0600-\u06FF]{3,}/.test(rawText);
-
     if (rawText && looksWordy) {
       return { ok: true, text: rawText, audio_type: "speech", speech_score: speechEst.score };
     }
@@ -494,7 +536,7 @@ async function transcribeAudioSmart(audioBase64, locale, audioKind = "car_sound"
 }
 
 /* =========================================================
-   PARSER: DIAG_JSON + FINAL_ANSWER
+   DIAG_JSON PARSER
 ========================================================= */
 function extractDiagAndAnswer(raw = "") {
   const text = String(raw || "").trim();
@@ -527,14 +569,10 @@ function extractDiagAndAnswer(raw = "") {
 function violatesNoPlaces(reply = "") {
   const t = String(reply || "").toLowerCase();
   const bad = [
-    // EN
     "zip","zipcode","postal","postcode","gps","near me","nearby","closest","google maps","maps","address","location",
     "area","neighborhood","district","city","town","where are you",
-
-    // AR
     "ورشة","ورش","ميكانيك","ميكانيكي","كراج","خرائط","خريطة","لوكيشن","عنوان","موقعك","حدد موقعك",
-    "رمز بريدي","zip","gps","قريب","اقرب","أقرب",
-    "منطقة","المنطقة","حي","الحي","مدينة","المحافظة","وين انت","وينه","دلني","اشرلي","حدد المنطقة","حدد الحي"
+    "رمز بريدي","قريب","اقرب","أقرب","منطقة","حي","مدينة","وين انت","دلني","اشرلي"
   ];
   return bad.some((w) => t.includes(w));
 }
@@ -555,12 +593,12 @@ function looksLikeRefusal(text = "") {
 function safeFallbackReply(locale = "en", userText = "") {
   const isAr = String(locale || "").toLowerCase().startsWith("ar");
   return isAr
-    ? "وصلتني الأعراض/المرفقات. خلّيني أمشي وياك بطريقة ميكانيكي: رجفة + طقطقة عند التسارع غالباً تكون يا إمّا misfire (بواجي/كويلات)، أو مشكلة وقود/هواء (MAF/فلتر/بخاخ)، أو طرق/دق بسبب وقود/توقيت، وأحياناً قواعد مكينة إذا الاهتزاز قوي. سؤالين سريعين حتى أحدد: هل لمبة Check Engine شغّالة؟ وهل الصوت يشبه (تك تك سريع) لو (دق ثقيل)؟ وإذا تقدر، قلّي سنة السيارة ونوعها."
-    : "I got your symptoms/attachments. Let’s do this like a real mechanic: shaking + a rattle/knock on acceleration is commonly misfire (plugs/coils), fuel/air imbalance (MAF/filter/injectors), true knock/ping (fuel/timing/carbon), or sometimes engine mounts if the vibration is harsh. Two quick questions: Is the Check Engine light on? And is the sound more like a fast ticking or a deep knock? If you can, tell me the year/make/model.";
+    ? "وصلتني الأعراض/المرفقات. خلّيني أمشي وياك بطريقة ميكانيكي: رجفة + طقطقة عند التسارع غالباً تكون يا إمّا misfire (بواجي/كويلات)، أو مشكلة وقود/هواء (MAF/فلتر/بخاخ)، أو طرق/دق بسبب وقود/توقيت. سؤالين حتى أحدد: هل لمبة Check Engine شغّالة؟ وهل الصوت (تك تك سريع) لو (دق ثقيل)؟"
+    : "I got your symptoms/attachments. Let’s do this like a real mechanic: shaking + a rattle/knock on acceleration is commonly misfire (plugs/coils), fuel/air imbalance (MAF/filter/injectors), or true knock/ping (fuel/timing/carbon). Two quick questions: Is the Check Engine light on? And is the sound more like a fast tick or a deep knock?";
 }
 
 /* =========================================================
-   PLACES: formatting verified results for the model
+   PLACES: formatting verified results (unchanged)
 ========================================================= */
 function formatWorkshopsForContext(workshops = []) {
   const list = Array.isArray(workshops) ? workshops : [];
@@ -609,6 +647,43 @@ function formatWorkshopsForUser(workshops = [], locale = "en") {
 }
 
 /* =========================================================
+   BUILD ENGINE CONTEXT TEXT FOR MODEL (strong + actionable)
+========================================================= */
+function buildEngineContextText(enginePack, userText = "") {
+  const vehicle = enginePack?.vehicle || {};
+  const detectedEngineName = enginePack?.detected_engine_name || null;
+
+  const simpleMatches = Array.isArray(enginePack?.simple_engine_issue_matches)
+    ? enginePack.simple_engine_issue_matches
+    : [];
+
+  const intelEngine = enginePack?.intel_best_engine || null;
+  const intelPattern = enginePack?.intel_best_pattern || null;
+
+  const engineMentionOk = Boolean(detectedEngineName || intelEngine?.engine_key);
+
+  return `
+ENGINE_CONTEXT (FixLens Engine Intelligence):
+- VEHICLE_MENTION: ${JSON.stringify(vehicle)}
+- DETECTED_ENGINE_NAME_FROM_MAP: ${detectedEngineName ? detectedEngineName : "null"}
+
+SIMPLE_ENGINE_ISSUES_MATCHED (from engine_patterns.json, already matched to user text):
+${JSON.stringify(simpleMatches)}
+
+US_ENGINE_INTEL_MATCH:
+- BEST_ENGINE_OBJECT: ${JSON.stringify(intelEngine)}
+- BEST_PATTERN_OBJECT: ${JSON.stringify(intelPattern)}
+
+RULES:
+- Use this engine context ONLY to sharpen diagnosis and the best next tests.
+- If BEST_PATTERN_OBJECT is present, base your 2 questions (max) on its top_questions, but ask ONLY the two that matter most now.
+- If multiple engines possible (e.g., 2.5 vs 3.0), ask ONE engine-disambiguation question ONLY if it materially changes the likely causes/tests.
+- If engineMentionOk and the match is strong, you MAY mention engine/family naturally (not like a robot).
+- Never invent anything not present here.
+`.trim();
+}
+
+/* =========================================================
    MAIN HANDLER
 ========================================================= */
 export async function handleFixLensRequest(req) {
@@ -653,7 +728,6 @@ export async function handleFixLensRequest(req) {
       voiceText = "";
     }
 
-    // For diagnosis text input: include voiceText only if it's real speech (voice or speech detected)
     const includeVoiceText =
       audioType === "speech" || audioType === "speech_detected_in_car_sound";
 
@@ -669,15 +743,8 @@ export async function handleFixLensRequest(req) {
 
     const placesQuery = placesFollowUp ? `mechanic near ${text}` : (fullInput || text);
 
-    // ===== ENGINE CONTEXT (Option B) =====
-    const enginePack = buildEngineContext(fullInput || text);
-    const engineDetected = enginePack?.engine || null;
-    const engineVehicle = enginePack?.vehicle || {};
-    const enginePatterns = Array.isArray(enginePack?.patterns) ? enginePack.patterns : [];
-    const engineConfidence = enginePack?.confidence || "low";
-
-    // Rank & match issues against user symptoms
-    const matchedEngineIssues = engineDetected ? rankEngineIssues(fullInput || text, enginePatterns) : [];
+    // ===== ENGINE PACK (combined) =====
+    const enginePack = buildEnginePack(fullInput || text);
 
     // ===== SEARCH (KB always ok; places only if allowed) =====
     const searchPack = await withRetry(
@@ -731,11 +798,11 @@ export async function handleFixLensRequest(req) {
         ok: true,
         reply: isAr
           ? (placesFollowUp
-              ? "ما طلعت نتائج واضحة لهذا الموقع. جرّب تكتبها أدق (مثال: المنصور – شارع 14 رمضان / الكاظمية – قرب باب المراد) أو فعّل GPS داخل التطبيق. بعدها أعطيك ورش مع روابط خرائط."
-              : "أقدر أطلع لك ورش قريبة، بس لازم واحد من هذني: (1) فعّل GPS داخل التطبيق واسمح بالموقع، أو (2) اكتب اسم المنطقة/الشارع بوضوح (مثلاً: الكاظمية، المنصور، شارع الرشيد). بعدها أرجع لك أفضل ورش مع روابط خرائط.")
+              ? "ما طلعت نتائج واضحة لهذا الموقع. جرّب تكتبها أدق أو فعّل GPS داخل التطبيق. بعدها أعطيك ورش مع روابط خرائط."
+              : "أقدر أطلع لك ورش قريبة، بس لازم فعّل GPS داخل التطبيق أو اكتب اسم المنطقة/الشارع بوضوح. بعدها أعطيك أفضل ورش مع روابط خرائط.")
           : (placesFollowUp
-              ? "No clear results for that area. Please provide a more specific street/landmark or enable GPS in the app, then I’ll return shops with Maps links."
-              : "I can show nearby shops, but I need either: (1) GPS enabled in the app (allow location), or (2) your area/street. Then I’ll return top shops with Maps links."),
+              ? "No clear results for that area. Provide a more specific street/landmark or enable GPS in the app, then I’ll return shops with Maps links."
+              : "I can show nearby shops, but I need either GPS enabled in the app or your area/street. Then I’ll return top shops with Maps links."),
         locale,
         workshops_count: 0,
         ...(debugMode
@@ -756,22 +823,10 @@ export async function handleFixLensRequest(req) {
 
     // ===== BUILD STRICT CONTEXT =====
     const audioNote = audioAttached
-      ? `AUDIO_NOTE: AUDIO_ATTACHED=true. AUDIO_KIND=${audioKindFinal || "car_sound"}. If AUDIO_KIND is car_sound/non_speech, DO NOT pretend you analyzed the waveform. Instead ask smart follow-up questions about sound character (tick/rattle/knock/squeal/grind) and timing (cold/hot, under load vs idle).`
+      ? `AUDIO_NOTE: AUDIO_ATTACHED=true. AUDIO_KIND=${audioKindFinal || "car_sound"}. If AUDIO_KIND is car_sound/non_speech, DO NOT pretend you analyzed the waveform. Instead ask 1 smart follow-up about sound character (tick/rattle/knock/squeal), and 1 about timing (cold/hot, only under load, only at idle).`
       : "";
 
-    const engineContextText = `
-ENGINE_CONTEXT (US engine intelligence):
-- VEHICLE_MENTION: ${JSON.stringify(engineVehicle)}
-- DETECTED_ENGINE: ${engineDetected ? engineDetected : "null"}
-- ENGINE_MATCH_CONFIDENCE: ${engineDetected ? engineConfidence : "none"}
-- ENGINE_PATTERNS_JSON: ${JSON.stringify(enginePatterns)}
-- MATCHED_ENGINE_ISSUES_JSON (ranked by symptom match): ${JSON.stringify(matchedEngineIssues)}
-
-RULES:
-- If DETECTED_ENGINE is not null and matched issues align with the symptom pattern, you MAY mention the engine explicitly to the user.
-- If engine is uncertain or mismatch, do NOT guess. Ask 1 targeted question to confirm year/make/model/engine size only if it materially changes the diagnosis.
-- Use matched issues to enrich diagnosis (mechanism + common failure pattern + best confirmation check).
-`.trim();
+    const engineContextText = buildEngineContextText(enginePack, fullInput || text);
 
     const strictText = `
 STRICT_CONTEXT
@@ -824,11 +879,11 @@ USER_INPUT: ${text.trim()}
               {
                 role: "user",
                 content:
-                  "Return EXACTLY:\nDIAG_JSON: {valid JSON}\nFINAL_ANSWER: <final answer>\nNo extra text.\nFINAL_ANSWER must sound like a real mechanic/diagnostic engineer. Use engine intelligence if relevant. Follow the system prompt rules for questions (ask only what matters).",
+                  "Return EXACTLY:\nDIAG_JSON: {valid JSON}\nFINAL_ANSWER: <final answer>\nNo extra text.\nDIAG_JSON must include: severity, domain, likely_causes (array), must_ask (up to 2), tests (array), risk (string), needs_search(boolean), query(string).\nFINAL_ANSWER must be mechanic-like, confident, causal, and helpful. Ask max 2 questions only if they matter.",
               },
             ],
             temperature: Number(process.env.FIXLENS_TEMPERATURE || 0.55),
-            max_tokens: Number(process.env.FIXLENS_MAX_TOKENS || 900),
+            max_tokens: Number(process.env.FIXLENS_MAX_TOKENS || 950),
           }),
           Number(process.env.CHAT_TIMEOUT_MS || 25000),
           "chat_timeout"
@@ -854,10 +909,7 @@ USER_INPUT: ${text.trim()}
                 speech_score: audioSmart.speech_score,
                 diagnosisLikely,
                 placesIntent,
-                engineDetected,
-                engineConfidence,
-                engineVehicle,
-                matchedEngineIssues_count: matchedEngineIssues.length,
+                enginePack,
               },
             }
           : {}),
@@ -866,7 +918,7 @@ USER_INPUT: ${text.trim()}
 
     let { diag: diag1, finalAnswer: answer1 } = extractDiagAndAnswer(raw1);
 
-    if (!diag1 || !diag1?.search_intent) {
+    if (!diag1) {
       const fallback = answer1 || safeFallbackReply(locale, text);
       return {
         ok: true,
@@ -882,10 +934,7 @@ USER_INPUT: ${text.trim()}
                 speech_score: audioSmart.speech_score,
                 diagnosisLikely,
                 placesIntent,
-                engineDetected,
-                engineConfidence,
-                engineVehicle,
-                matchedEngineIssues_count: matchedEngineIssues.length,
+                enginePack,
               },
             }
           : {}),
@@ -905,7 +954,7 @@ USER_INPUT: ${text.trim()}
                 {
                   role: "user",
                   content:
-                    "PLACES_INTENT is false. Rewrite the answer as diagnosis only. Do NOT ask for ZIP/GPS/city. Do NOT mention shops/maps. Follow the system prompt for style and questions. Keep it clear and helpful (not too short).",
+                    "PLACES_INTENT is false. Rewrite FINAL_ANSWER as a real mechanic diagnosis. Do NOT ask for ZIP/GPS/city. Do NOT mention shops/maps. No headings/bullets/numbering. Ask max 2 questions only if essential. Keep it clear and helpful (not too short).",
                 },
               ],
               temperature: 0.35,
@@ -921,16 +970,13 @@ USER_INPUT: ${text.trim()}
       if (forced) answer1 = forced;
     }
 
-    // ✅ If model still refused in FINAL_ANSWER
-    if (looksLikeRefusal(answer1)) {
-      answer1 = safeFallbackReply(locale, text);
-    }
+    if (looksLikeRefusal(answer1)) answer1 = safeFallbackReply(locale, text);
 
     // =========================================================
     // STAGE 2 (Optional): technical search refinement only
     // =========================================================
-    const needsSearch = Boolean(diag1?.search_intent?.needs_search);
-    const searchQuery = String(diag1?.search_intent?.query || "").trim();
+    const needsSearch = Boolean(diag1?.needs_search);
+    const searchQuery = String(diag1?.query || "").trim();
 
     const queryLooksPlacey = looksLikePlacesRequest(searchQuery);
 
@@ -960,12 +1006,7 @@ LOCALE: ${locale}
 PLACES_INTENT: ${placesIntent ? "true" : "false"}
 LOCATION: ${typeof user_location === "string" ? user_location : JSON.stringify(user_location)}
 
-ENGINE_CONTEXT (carry):
-- DETECTED_ENGINE: ${engineDetected ? engineDetected : "null"}
-- ENGINE_MATCH_CONFIDENCE: ${engineDetected ? engineConfidence : "none"}
-- VEHICLE_MENTION: ${JSON.stringify(engineVehicle)}
-- MATCHED_ENGINE_ISSUES_JSON: ${JSON.stringify(matchedEngineIssues)}
-- ENGINE_PATTERNS_JSON: ${JSON.stringify(enginePatterns)}
+${engineContextText}
 
 DIAG_JSON_FROM_STAGE1: ${JSON.stringify(diag1)}
 
@@ -996,11 +1037,11 @@ USER_INPUT: ${text.trim()}
                 {
                   role: "user",
                   content:
-                    "Write ONLY the final answer in the required language. Follow the system prompt (professional mechanic tone, no fluff). Use engine intelligence when it matches. Ask only the questions that materially change the diagnosis.",
+                    "Write ONLY the FINAL_ANSWER in the required language. No headings. No bullets. No numbers. Ask max 2 questions only if essential. Be decisive and mechanic-like. Keep it clear (not too short, not too long).",
                 },
               ],
               temperature: 0.45,
-              max_tokens: Number(process.env.FIXLENS_MAX_TOKENS || 700),
+              max_tokens: Number(process.env.FIXLENS_MAX_TOKENS || 750),
             }),
             Number(process.env.CHAT_TIMEOUT_MS || 25000),
             "chat_timeout"
@@ -1031,10 +1072,7 @@ USER_INPUT: ${text.trim()}
                 placesIntent,
                 diag1,
                 searchQuery,
-                engineDetected,
-                engineConfidence,
-                engineVehicle,
-                matchedEngineIssues_count: matchedEngineIssues.length,
+                enginePack,
               },
             }
           : {}),
@@ -1055,10 +1093,7 @@ USER_INPUT: ${text.trim()}
               diagnosisLikely,
               placesIntent,
               diag1,
-              engineDetected,
-              engineConfidence,
-              engineVehicle,
-              matchedEngineIssues_count: matchedEngineIssues.length,
+              enginePack,
             },
           }
         : {}),
