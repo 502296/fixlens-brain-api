@@ -342,66 +342,184 @@ async function withRetry(fn, tries = 2, baseDelay = 250) {
 }
 
 /* =========================================================
-   INTENT: DIAGNOSIS vs PLACES
+   PLACES QUERY NORMALIZER (Global / multilingual / GPS-aware)
+   Goal:
+   - Always respond in user's language (model handles that)
+   - BUT for Places search, build a clean English category query
+     and keep the user's location phrase in ANY language/script.
+   - If GPS is available (object lat/lng), we don't need a city string.
 ========================================================= */
-function looksLikeDiagnosisText(input = "") {
-  const t = String(input || "").toLowerCase();
-  const words = [
-    // English
-    "noise","sound","rattle","knock","ticking","click","clunk","grind","squeal",
-    "vibration","shake","misfire","stall","idle","engine","brake","steering",
-    "overheat","smoke","leak","check engine","p0",
-    // Arabic
-    "صوت","طقطقة","طرطقة","تك تك","نق","خبط","خشخشة","صرير","زقزقة",
-    "رجفة","اهتزاز","هزة","تقطيع","تنتيع","تفتفة",
-    "محرك","مكينة","فرامل","دركسون","ستيرنغ",
-    "حرارة","سخونة","دخان","تهريب","تسريب","لمبة","تشيك"
+
+/**
+ * Accepts user_location in forms:
+ * - { lat, lng }
+ * - { latitude, longitude }
+ * - { lat, lon }
+ * - anything else -> false
+ */
+export function hasLatLng(loc) {
+  if (!loc || typeof loc !== "object") return false;
+  const lat = Number(loc.lat ?? loc.latitude);
+  const lng = Number(loc.lng ?? loc.longitude ?? loc.lon);
+  return Number.isFinite(lat) && Number.isFinite(lng);
+}
+
+/**
+ * Detect what the user wants (mechanic / parts / tires / brakes)
+ * Return a strong English category term for Google Places.
+ */
+export function inferPlacesCategory(text = "") {
+  const t = String(text || "").toLowerCase();
+
+  // Parts stores
+  const partsSignals = [
+    "parts",
+    "auto parts",
+    "car parts",
+    "parts store",
+    "autozone",
+    "o'reilly",
+    "oreilly",
+    "advance auto",
+    "napa",
+    "قطع",
+    "قطع غيار",
+    "محل قطع",
+    "محل قطع غيار",
   ];
-  return words.some((w) => t.includes(w));
-}
 
-function looksLikeNearbyRequest(input = "") {
-  const t = String(input || "").toLowerCase();
-  const nearby = [
-    "near me","nearby","closest","around me","near",
-    "اقرب","أقرب","بالقرب","قريب","قريبة","حولّي","حولي","يمّي","جنبي"
+  // Tires
+  const tireSignals = [
+    "tire",
+    "tyre",
+    "tires",
+    "tyres",
+    "tire shop",
+    "wheel",
+    "alignment",
+    "إطارات",
+    "اطارات",
+    "بنشر",
+    "بنچر",
+    "ميزان",
+    "ميزانية",
+    "ترصيص",
   ];
-  return nearby.some((w) => t.includes(w));
-}
 
-function looksLikeShopOrPartsWords(input = "") {
-  const t = String(input || "").toLowerCase();
-  const strong = [
-    // English
-    "mechanic","garage","auto repair","repair shop","car repair",
-    "auto parts","car parts","parts store","tool store","hardware store",
-    "autozone","o'reilly","oreilly","advance auto","napa",
-    // Arabic
-    "ورشة","ورش","ورشة سيارات","تصليح سيارات","ميكانيكي","ميكانيك","مكانيكي","مكانيك",
-    "ميكانكي","ميكانك","كراج","كراج سيارات",
-    "قطع غيار","محل قطع","محل قطع غيار","محل ادوات","محل أدوات","ادوات","أدوات"
+  // Brakes specialist
+  const brakeSignals = [
+    "brake",
+    "brakes",
+    "brake shop",
+    "فرامل",
+    "بريك",
+    "هوبات",
+    "سفايف",
+    "سفايف فرامل",
   ];
-  return strong.some((w) => t.includes(w));
-}
 
-function looksLikeMapAddressWords(input = "") {
-  const t = String(input || "").toLowerCase();
-  const weak = [
-    "address","location","map","google maps","directions","where",
-    "عنوان","موقع","خرائط","خريطة","لوكيشن","دلّني","دلني","وين","وينه","اشرلي",
-    "zip","zipcode","postal","postcode","رمز بريدي"
+  // General mechanic/repair
+  const mechanicSignals = [
+    "mechanic",
+    "auto repair",
+    "repair shop",
+    "garage",
+    "workshop",
+    "ورشة",
+    "ورش",
+    "ميكانيك",
+    "ميكانيكي",
+    "كراج",
+    "تصليح سيارات",
   ];
-  return weak.some((w) => t.includes(w));
+
+  if (partsSignals.some((w) => t.includes(w))) return "auto parts store";
+  if (tireSignals.some((w) => t.includes(w))) return "tire shop";
+  if (brakeSignals.some((w) => t.includes(w))) return "brake shop";
+  if (mechanicSignals.some((w) => t.includes(w))) return "auto repair shop";
+
+  // Default
+  return "auto repair shop";
 }
 
-function looksLikePlacesRequest(input = "") {
-  const t = String(input || "").toLowerCase();
-  if (looksLikeNearbyRequest(t)) return true;
-  if (looksLikeShopOrPartsWords(t)) return true;
-  if (looksLikeMapAddressWords(t) && looksLikeShopOrPartsWords(t)) return true;
-  return false;
+/**
+ * Extract a "location hint" from the user's text, without needing translation.
+ * Works globally because it keeps the phrase as typed (any script).
+ *
+ * Examples:
+ * - "in Louisville Kentucky" -> "Louisville Kentucky"
+ * - "في لويفيل كنتاكي" -> "لويفيل كنتاكي"
+ * - "near Shinjuku" -> "Shinjuku"
+ * - "بالقرب من المنصور" -> "المنصور"
+ */
+export function extractLocationHint(text = "") {
+  const raw = String(text || "").trim();
+  if (!raw) return "";
+
+  // Common patterns (EN)
+  const en = raw.match(/\b(?:in|near|around|at)\s+(.+)$/i);
+  if (en && en[1]) return en[1].trim();
+
+  // Common patterns (AR) — keep it simple, no city database
+  const ar = raw.match(/(?:في|بـ|بالقرب\s+من|قريب\s+من|حول|يم|جنب)\s+(.+)$/i);
+  if (ar && ar[1]) return ar[1].trim();
+
+  // If user wrote something like "Louisville, KY 40223" or "40223"
+  const zip = raw.match(/\b\d{4,10}\b/);
+  if (zip && zip[0]) return zip[0];
+
+  // Otherwise: we don't know what is location vs request, return empty
+  return "";
 }
 
+/**
+ * Build a Places query that works globally:
+ * - Use English category terms for Google Places reliability
+ * - Keep user's location phrase as-is (any language)
+ * - If GPS lat/lng exists, query can be just the category; location is handled by coordinates.
+ */
+export function buildPlacesQuerySmart({
+  userText = "",
+  locale = "en", // kept for future use; not required now
+  user_location = "",
+  placesFollowUp = false,
+}) {
+  const raw = String(userText || "").trim();
+  const category = inferPlacesCategory(raw);
+
+  // If we have GPS coordinates -> no need to inject city text
+  if (hasLatLng(user_location)) {
+    return category; // search "auto repair shop" around GPS
+  }
+
+  // If user_location is a usable string (city/state/country) -> prefer it
+  const locStr =
+    typeof user_location === "string" && user_location.trim()
+      ? user_location.trim()
+      : "";
+
+  // Follow-up that is location-only text (e.g., user typed just a city name)
+  if (placesFollowUp) {
+    // If user wrote only "Baghdad" or "المنصور" treat it as the location phrase directly
+    const followLoc = raw.length <= 80 ? raw : extractLocationHint(raw);
+    const finalLoc = (followLoc || locStr || raw).trim();
+    return finalLoc ? `${category} near ${finalLoc}` : category;
+  }
+
+  // If the user typed a location hint inside the text, use it
+  const hint = extractLocationHint(raw);
+
+  // Best location phrase selection order:
+  // 1) hint extracted from text
+  // 2) user_location string
+  const bestLoc = (hint || locStr || "").trim();
+
+  // If we have a location phrase -> category near location
+  if (bestLoc) return `${category} near ${bestLoc}`;
+
+  // If user asked "near me" but we have no GPS or location string, keep query minimal.
+  return category;
+}
 /* =========================================================
    PLACES FOLLOW-UP (STATELESS MEMORY FROM HISTORY)
 ========================================================= */
