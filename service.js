@@ -1,15 +1,10 @@
-// service.js — FixLens "Doctor Brain" v2.4 (Engine Intel v1 + Engine Patterns + Better DIAG_JSON + Stronger Doctor Output)
-// Notes:
-// - Uses BOTH files:
-//   1) /data/engine_patterns.json  (simple engine -> issues keywords)
-//   2) /data/us_engine_intel_v1.json (engine_key + patterns + ranked causes/questions/checks)
-// - Keeps your PLACES hard-gate behavior.
-// - Improves engine matching so the reply becomes “doctor-level”, not poor.
-
-// ✅ Required files in /data:
-// - vehicle_engine_map.json
-// - engine_patterns.json
-// - us_engine_intel_v1.json
+// service.js — FixLens "Doctor Brain" v2.4.1
+// (Engine Intel v1 + Engine Patterns + Better DIAG_JSON + Stronger Doctor Output)
+// Patch v2.4.1:
+// - ✅ Global / multilingual Places query normalizer (GPS-aware)
+// - ✅ Fix Arabic places search by building a clean English category query
+// - ✅ Prevent crashes when user_location is undefined/null
+// - ✅ Keep your hard-gate behavior (diagnosis vs places)
 
 import OpenAI from "openai";
 import fs from "fs";
@@ -149,7 +144,6 @@ function matchSimpleEngineIssuesToText(issues = [], text = "") {
   const t = normalizeToken(text);
   const list = Array.isArray(issues) ? issues : [];
 
-  // score by keywords hit count
   const scored = list
     .map((it) => {
       const kws = Array.isArray(it?.keywords) ? it.keywords : [];
@@ -162,7 +156,6 @@ function matchSimpleEngineIssuesToText(issues = [], text = "") {
     })
     .sort((a, b) => (b.__score || 0) - (a.__score || 0));
 
-  // keep only meaningful matches (score>=1)
   return scored.filter((x) => Number(x.__score || 0) >= 1).slice(0, 3);
 }
 
@@ -211,7 +204,7 @@ function scoreIntelPattern(pattern, text = "") {
   let score = 0;
   for (const k of sym) {
     const kk = normalizeToken(k);
-    if (kk && t.includes(kk)) score += 2; // symptom hits weigh more
+    if (kk && t.includes(kk)) score += 2;
   }
   for (const k of extra) {
     const kk = normalizeToken(k);
@@ -234,7 +227,6 @@ function matchBestIntelPatternForEngine(engineObj, text = "") {
     if (s > best.score) best = { pattern: p, score: s };
   }
 
-  // Require at least a minimal score to claim a match
   if (best.score < 2) return { pattern: null, score: best.score };
   return best;
 }
@@ -249,10 +241,8 @@ function buildEnginePack(userText = "") {
   const simpleIssues = detectedEngineName ? findSimpleEngineIssues(detectedEngineName) : [];
   const simpleMatched = matchSimpleEngineIssuesToText(simpleIssues, userText);
 
-  // US Intel: may find 1-2 engines for same vehicle/year (e.g., 2.5 vs 3.0)
   const intelEngines = findIntelEnginesForVehicle(vehicle.make, vehicle.model, vehicle.year);
 
-  // pick best intel engine by best pattern score
   let bestIntel = { engine: null, pattern: null, score: 0 };
   for (const eng of intelEngines) {
     const m = matchBestIntelPatternForEngine(eng, userText);
@@ -342,184 +332,67 @@ async function withRetry(fn, tries = 2, baseDelay = 250) {
 }
 
 /* =========================================================
-   PLACES QUERY NORMALIZER (Global / multilingual / GPS-aware)
-   Goal:
-   - Always respond in user's language (model handles that)
-   - BUT for Places search, build a clean English category query
-     and keep the user's location phrase in ANY language/script.
-   - If GPS is available (object lat/lng), we don't need a city string.
+   INTENT: DIAGNOSIS vs PLACES
 ========================================================= */
-
-/**
- * Accepts user_location in forms:
- * - { lat, lng }
- * - { latitude, longitude }
- * - { lat, lon }
- * - anything else -> false
- */
-export function hasLatLng(loc) {
-  if (!loc || typeof loc !== "object") return false;
-  const lat = Number(loc.lat ?? loc.latitude);
-  const lng = Number(loc.lng ?? loc.longitude ?? loc.lon);
-  return Number.isFinite(lat) && Number.isFinite(lng);
+function looksLikeDiagnosisText(input = "") {
+  const t = String(input || "").toLowerCase();
+  const words = [
+    // English
+    "noise","sound","rattle","knock","ticking","click","clunk","grind","squeal",
+    "vibration","shake","misfire","stall","idle","engine","brake","steering",
+    "overheat","smoke","leak","check engine","p0",
+    // Arabic
+    "صوت","طقطقة","طرطقة","تك تك","نق","خبط","خشخشة","صرير","زقزقة",
+    "رجفة","اهتزاز","هزة","تقطيع","تنتيع","تفتفة",
+    "محرك","مكينة","فرامل","دركسون","ستيرنغ",
+    "حرارة","سخونة","دخان","تهريب","تسريب","لمبة","تشيك","عطل"
+  ];
+  return words.some((w) => t.includes(w));
 }
 
-/**
- * Detect what the user wants (mechanic / parts / tires / brakes)
- * Return a strong English category term for Google Places.
- */
-export function inferPlacesCategory(text = "") {
-  const t = String(text || "").toLowerCase();
-
-  // Parts stores
-  const partsSignals = [
-    "parts",
-    "auto parts",
-    "car parts",
-    "parts store",
-    "autozone",
-    "o'reilly",
-    "oreilly",
-    "advance auto",
-    "napa",
-    "قطع",
-    "قطع غيار",
-    "محل قطع",
-    "محل قطع غيار",
+function looksLikeNearbyRequest(input = "") {
+  const t = String(input || "").toLowerCase();
+  const nearby = [
+    "near me","nearby","closest","around me","near",
+    "اقرب","أقرب","بالقرب","قريب","قريبة","حولّي","حولي","يمّي","جنبي"
   ];
-
-  // Tires
-  const tireSignals = [
-    "tire",
-    "tyre",
-    "tires",
-    "tyres",
-    "tire shop",
-    "wheel",
-    "alignment",
-    "إطارات",
-    "اطارات",
-    "بنشر",
-    "بنچر",
-    "ميزان",
-    "ميزانية",
-    "ترصيص",
-  ];
-
-  // Brakes specialist
-  const brakeSignals = [
-    "brake",
-    "brakes",
-    "brake shop",
-    "فرامل",
-    "بريك",
-    "هوبات",
-    "سفايف",
-    "سفايف فرامل",
-  ];
-
-  // General mechanic/repair
-  const mechanicSignals = [
-    "mechanic",
-    "auto repair",
-    "repair shop",
-    "garage",
-    "workshop",
-    "ورشة",
-    "ورش",
-    "ميكانيك",
-    "ميكانيكي",
-    "كراج",
-    "تصليح سيارات",
-  ];
-
-  if (partsSignals.some((w) => t.includes(w))) return "auto parts store";
-  if (tireSignals.some((w) => t.includes(w))) return "tire shop";
-  if (brakeSignals.some((w) => t.includes(w))) return "brake shop";
-  if (mechanicSignals.some((w) => t.includes(w))) return "auto repair shop";
-
-  // Default
-  return "auto repair shop";
+  return nearby.some((w) => t.includes(w));
 }
 
-/**
- * Extract a "location hint" from the user's text, without needing translation.
- * Works globally because it keeps the phrase as typed (any script).
- *
- * Examples:
- * - "in Louisville Kentucky" -> "Louisville Kentucky"
- * - "في لويفيل كنتاكي" -> "لويفيل كنتاكي"
- * - "near Shinjuku" -> "Shinjuku"
- * - "بالقرب من المنصور" -> "المنصور"
- */
-export function extractLocationHint(text = "") {
-  const raw = String(text || "").trim();
-  if (!raw) return "";
-
-  // Common patterns (EN)
-  const en = raw.match(/\b(?:in|near|around|at)\s+(.+)$/i);
-  if (en && en[1]) return en[1].trim();
-
-  // Common patterns (AR) — keep it simple, no city database
-  const ar = raw.match(/(?:في|بـ|بالقرب\s+من|قريب\s+من|حول|يم|جنب)\s+(.+)$/i);
-  if (ar && ar[1]) return ar[1].trim();
-
-  // If user wrote something like "Louisville, KY 40223" or "40223"
-  const zip = raw.match(/\b\d{4,10}\b/);
-  if (zip && zip[0]) return zip[0];
-
-  // Otherwise: we don't know what is location vs request, return empty
-  return "";
+function looksLikeShopOrPartsWords(input = "") {
+  const t = String(input || "").toLowerCase();
+  const strong = [
+    // English
+    "mechanic","garage","auto repair","repair shop","car repair",
+    "auto parts","car parts","parts store","tool store","hardware store",
+    "autozone","o'reilly","oreilly","advance auto","napa",
+    // Arabic
+    "ورشة","ورش","ورشة سيارات","تصليح سيارات","ميكانيكي","ميكانيك","مكانيكي","مكانيك",
+    "ميكانكي","ميكانك","كراج","كراج سيارات",
+    "قطع غيار","محل قطع","محل قطع غيار","محل ادوات","محل أدوات","ادوات","أدوات",
+    "بنشر","بنچر","إطارات","اطارات","كهربائي سيارات","ورشة كهرباء","سمكري","حدادة سيارات"
+  ];
+  return strong.some((w) => t.includes(w));
 }
 
-/**
- * Build a Places query that works globally:
- * - Use English category terms for Google Places reliability
- * - Keep user's location phrase as-is (any language)
- * - If GPS lat/lng exists, query can be just the category; location is handled by coordinates.
- */
-export function buildPlacesQuerySmart({
-  userText = "",
-  locale = "en", // kept for future use; not required now
-  user_location = "",
-  placesFollowUp = false,
-}) {
-  const raw = String(userText || "").trim();
-  const category = inferPlacesCategory(raw);
-
-  // If we have GPS coordinates -> no need to inject city text
-  if (hasLatLng(user_location)) {
-    return category; // search "auto repair shop" around GPS
-  }
-
-  // If user_location is a usable string (city/state/country) -> prefer it
-  const locStr =
-    typeof user_location === "string" && user_location.trim()
-      ? user_location.trim()
-      : "";
-
-  // Follow-up that is location-only text (e.g., user typed just a city name)
-  if (placesFollowUp) {
-    // If user wrote only "Baghdad" or "المنصور" treat it as the location phrase directly
-    const followLoc = raw.length <= 80 ? raw : extractLocationHint(raw);
-    const finalLoc = (followLoc || locStr || raw).trim();
-    return finalLoc ? `${category} near ${finalLoc}` : category;
-  }
-
-  // If the user typed a location hint inside the text, use it
-  const hint = extractLocationHint(raw);
-
-  // Best location phrase selection order:
-  // 1) hint extracted from text
-  // 2) user_location string
-  const bestLoc = (hint || locStr || "").trim();
-
-  // If we have a location phrase -> category near location
-  if (bestLoc) return `${category} near ${bestLoc}`;
-
-  // If user asked "near me" but we have no GPS or location string, keep query minimal.
-  return category;
+function looksLikeMapAddressWords(input = "") {
+  const t = String(input || "").toLowerCase();
+  const weak = [
+    "address","location","map","google maps","directions","where",
+    "عنوان","موقع","خرائط","خريطة","لوكيشن","دلّني","دلني","وين","وينه","اشرلي",
+    "zip","zipcode","postal","postcode","رمز بريدي"
+  ];
+  return weak.some((w) => t.includes(w));
 }
+
+function looksLikePlacesRequest(input = "") {
+  const t = String(input || "").toLowerCase();
+  if (looksLikeNearbyRequest(t)) return true;
+  if (looksLikeShopOrPartsWords(t)) return true;
+  if (looksLikeMapAddressWords(t) && looksLikeShopOrPartsWords(t)) return true;
+  return false;
+}
+
 /* =========================================================
    PLACES FOLLOW-UP (STATELESS MEMORY FROM HISTORY)
 ========================================================= */
@@ -551,11 +424,124 @@ function looksLikePlacesFollowUp(history = []) {
 function looksLikeLocationOnlyText(text = "") {
   const t = String(text || "").trim();
   if (!t) return false;
-  if (t.length > 60) return false;
+  if (t.length > 80) return false;
   if (looksLikeDiagnosisText(t)) return false;
   if (looksLikePlacesRequest(t)) return false;
 
-  return /^[\u0600-\u06FFa-zA-Z0-9\s\-\.,]+$/.test(t);
+  return /^[\u0600-\u06FFa-zA-Z0-9\s\-\.,#]+$/.test(t);
+}
+
+/* =========================================================
+   PLACES QUERY NORMALIZER (Global / multilingual / GPS-aware)
+   Goal:
+   - Always respond in user's language (model handles that)
+   - BUT for Places search, build a clean English category query
+     and keep the user's location phrase in ANY language/script.
+   - If GPS is available (object lat/lng), we don't need a city string.
+========================================================= */
+
+function hasLatLng(loc) {
+  if (!loc || typeof loc !== "object") return false;
+  const lat = Number(loc.lat ?? loc.latitude);
+  const lng = Number(loc.lng ?? loc.longitude ?? loc.lon);
+  return Number.isFinite(lat) && Number.isFinite(lng);
+}
+
+function inferPlacesCategory(text = "") {
+  const t = String(text || "").toLowerCase();
+
+  const partsSignals = [
+    "parts", "auto parts", "car parts", "parts store", "autozone", "o'reilly", "oreilly",
+    "advance auto", "napa", "قطع", "قطع غيار", "محل قطع", "محل قطع غيار"
+  ];
+
+  const tireSignals = [
+    "tire", "tyre", "tires", "tyres", "tire shop", "wheel", "alignment",
+    "إطارات", "اطارات", "بنشر", "بنچر", "ميزان", "ميزانية", "ترصيص"
+  ];
+
+  const brakeSignals = [
+    "brake", "brakes", "brake shop",
+    "فرامل", "بريك", "هوبات", "سفايف", "سفايف فرامل"
+  ];
+
+  const electricianSignals = [
+    "auto electrician", "car electrician", "electrical", "starter", "alternator", "battery",
+    "كهربائي سيارات", "كهرباء سيارات", "دينمو", "سلف", "بطارية"
+  ];
+
+  const bodyShopSignals = [
+    "body shop", "collision", "paint", "dent", "panel",
+    "سمكري", "صبغ", "دهان", "تصليح صدمات", "حدادة سيارات"
+  ];
+
+  const mechanicSignals = [
+    "mechanic", "auto repair", "repair shop", "garage", "workshop",
+    "ورشة", "ورش", "ميكانيك", "ميكانيكي", "كراج", "تصليح سيارات"
+  ];
+
+  if (partsSignals.some((w) => t.includes(w))) return "auto parts store";
+  if (tireSignals.some((w) => t.includes(w))) return "tire shop";
+  if (brakeSignals.some((w) => t.includes(w))) return "brake shop";
+  if (electricianSignals.some((w) => t.includes(w))) return "auto electrical repair";
+  if (bodyShopSignals.some((w) => t.includes(w))) return "auto body shop";
+  if (mechanicSignals.some((w) => t.includes(w))) return "auto repair shop";
+
+  return "auto repair shop";
+}
+
+/**
+ * Extract a "location hint" from user's text, without translating it.
+ */
+function extractLocationHint(text = "") {
+  const raw = String(text || "").trim();
+  if (!raw) return "";
+
+  const en = raw.match(/\b(?:in|near|around|at)\s+(.+)$/i);
+  if (en && en[1]) return en[1].trim();
+
+  const ar = raw.match(/(?:في|بـ|بالقرب\s+من|قريب\s+من|حول|جنب|يم)\s+(.+)$/i);
+  if (ar && ar[1]) return ar[1].trim();
+
+  const zip = raw.match(/\b\d{4,10}\b/);
+  if (zip && zip[0]) return zip[0];
+
+  return "";
+}
+
+/**
+ * Build a Places query that works globally.
+ */
+function buildPlacesQuerySmart({
+  userText = "",
+  user_location = "",
+  placesFollowUp = false,
+}) {
+  const raw = String(userText || "").trim();
+  const category = inferPlacesCategory(raw);
+
+  // GPS coordinates exist -> Places API should use coords, so query can be just category
+  if (hasLatLng(user_location)) {
+    return category;
+  }
+
+  const locStr =
+    typeof user_location === "string" && user_location.trim()
+      ? user_location.trim()
+      : "";
+
+  if (placesFollowUp) {
+    const followLoc = raw.length <= 80 ? raw : extractLocationHint(raw);
+    const finalLoc = (followLoc || locStr || raw).trim();
+    return finalLoc ? `${category} near ${finalLoc}` : category;
+  }
+
+  const hint = extractLocationHint(raw);
+  const bestLoc = (hint || locStr || "").trim();
+
+  if (bestLoc) return `${category} near ${bestLoc}`;
+
+  return category;
 }
 
 /* =========================================================
@@ -624,7 +610,12 @@ async function transcribeAudioSmart(audioBase64, locale, audioKind = "car_sound"
     if (!isVoice) {
       const looksWordy = /[a-zA-Z\u0600-\u06FF]{3,}/.test(rawText);
       if (rawText && looksWordy && rawText.length <= 240) {
-        return { ok: true, text: rawText, audio_type: "speech_detected_in_car_sound", speech_score: speechEst.score };
+        return {
+          ok: true,
+          text: rawText,
+          audio_type: "speech_detected_in_car_sound",
+          speech_score: speechEst.score
+        };
       }
       return { ok: true, text: "", audio_type: "non_speech", speech_score: speechEst.score };
     }
@@ -811,7 +802,9 @@ export async function handleFixLensRequest(req) {
 
   let locale = inferLocale({ locale: body.locale, text });
 
-  const user_location = normalizeUserLocation(body.user_location);
+  // ✅ make location safe ALWAYS
+  const user_location = normalizeUserLocation(body.user_location) || "";
+
   const image_base_64 = body.image_base_64 || body.image_base64 || "";
   const audio_base_64 = body.audio_base_64 || body.audio_base64 || "";
   const debugMode = Boolean(body.debug);
@@ -857,9 +850,15 @@ export async function handleFixLensRequest(req) {
     const placesFollowUp = looksLikePlacesFollowUp(history) && looksLikeLocationOnlyText(text);
     const placesRequested = looksLikePlacesRequest(text);
 
+    // ✅ hard gate: places only if requested AND not diagnosis
     const placesIntent = Boolean((placesRequested || placesFollowUp) && !diagnosisLikely);
 
-    const placesQuery = placesFollowUp ? `mechanic near ${text}` : (fullInput || text);
+    // ✅ NEW: global multilingual smart places query builder
+    const placesQuery = buildPlacesQuerySmart({
+      userText: fullInput || text,
+      user_location,
+      placesFollowUp,
+    });
 
     // ===== ENGINE PACK (combined) =====
     const enginePack = buildEnginePack(fullInput || text);
@@ -1011,7 +1010,6 @@ USER_INPUT: ${text.trim()}
 
     const raw1 = String(response1?.choices?.[0]?.message?.content || "").trim();
 
-    // ✅ Refusal guard
     if (looksLikeRefusal(raw1)) {
       return {
         ok: true,
@@ -1059,7 +1057,6 @@ USER_INPUT: ${text.trim()}
       };
     }
 
-    // ===== HARD GUARD: If no-places mode, block any ZIP/GPS/shop talk and force rewrite
     if (!placesIntent && violatesNoPlaces(answer1)) {
       const guardResponse = await withRetry(
         () =>
@@ -1212,6 +1209,7 @@ USER_INPUT: ${text.trim()}
               placesIntent,
               diag1,
               enginePack,
+              placesQuery,
             },
           }
         : {}),
