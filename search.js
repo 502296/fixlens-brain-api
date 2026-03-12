@@ -1,4 +1,4 @@
-// search.js — FixLens v3.0.1
+// search.js — FixLens v4.0.0
 // Clean + data-first + stable fields
 // Goals:
 // - Search internal KB first using manifest-selected files
@@ -29,16 +29,15 @@ async function ensureFetch() {
 ========================================================= */
 const PLACES_CACHE = new Map();
 const KB_CACHE = new Map();
+
 const CACHE_TTL_MS = Number(process.env.PLACES_CACHE_TTL_MS || 10 * 60 * 1000);
 const PLACES_TIMEOUT_MS = Number(process.env.PLACES_TIMEOUT_MS || 7000);
 const PLACES_MAX_RESULTS = Number(process.env.PLACES_MAX_RESULTS || 5);
 const DEFAULT_RADIUS_METERS = Number(process.env.PLACES_RADIUS_METERS || 25000);
 
 /* =========================================================
-   MANIFEST
+   JSON / FILE HELPERS
 ========================================================= */
-let MANIFEST = null;
-
 function safeReadJson(filePath, fallback = null) {
   try {
     if (!fs.existsSync(filePath)) return fallback;
@@ -49,10 +48,30 @@ function safeReadJson(filePath, fallback = null) {
   }
 }
 
+function uniqBy(arr, keyFn) {
+  const seen = new Set();
+  const out = [];
+
+  for (const item of arr || []) {
+    const key = keyFn(item);
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    out.push(item);
+  }
+
+  return out;
+}
+
+/* =========================================================
+   MANIFEST
+========================================================= */
+let MANIFEST = null;
+
 function loadManifestOnce() {
   if (MANIFEST) return MANIFEST;
 
   MANIFEST = safeReadJson(MANIFEST_PATH, null);
+
   if (!MANIFEST || !Array.isArray(MANIFEST.domains)) {
     MANIFEST = {
       version: "0",
@@ -67,69 +86,40 @@ function loadManifestOnce() {
 /* =========================================================
    TEXT HELPERS
 ========================================================= */
-function normalizeText(s = "") {
-  return String(s || "")
+function normalizeText(value = "") {
+  return String(value || "")
     .toLowerCase()
-    .replace(/[^a-z0-9\u0600-\u06FF\u0400-\u04FF\u4E00-\u9FFF\u3040-\u30FF\uAC00-\uD7AF\s\-\.\,]/gi, " ")
+    .replace(
+      /[^a-z0-9\u0600-\u06FF\u0400-\u04FF\u4E00-\u9FFF\u3040-\u30FF\uAC00-\uD7AF\s\-\.\,]/gi,
+      " "
+    )
     .replace(/\s+/g, " ")
     .trim();
 }
 
 function normalizeLocale(locale = "en") {
-  const v = String(locale || "").trim();
-  if (!v || v.toLowerCase() === "auto") return "en";
-  return v.split("-")[0].toLowerCase() || "en";
-}
-
-function uniqBy(arr, keyFn) {
-  const seen = new Set();
-  const out = [];
-  for (const x of arr || []) {
-    const k = keyFn(x);
-    if (!k || seen.has(k)) continue;
-    seen.add(k);
-    out.push(x);
-  }
-  return out;
+  const value = String(locale || "").trim();
+  if (!value || value.toLowerCase() === "auto") return "en";
+  return value.split("-")[0].toLowerCase() || "en";
 }
 
 function hasAny(text = "", words = []) {
-  const t = normalizeText(text);
-  return words.some((w) => t.includes(normalizeText(w)));
+  const normalized = normalizeText(text);
+  return words.some((word) => normalized.includes(normalizeText(word)));
 }
 
 function extractZip(text = "") {
-  const m = String(text || "").match(/\b\d{5}(?:-\d{4})?\b/);
-  return m ? m[0] : "";
+  const match = String(text || "").match(/\b\d{5}(?:-\d{4})?\b/);
+  return match ? match[0] : "";
 }
 
 /* =========================================================
    LOCATION HELPERS
 ========================================================= */
-function safeCityText(userLocation) {
-  if (!userLocation) return "";
-
-  if (typeof userLocation === "string") {
-    const v = userLocation.trim();
-    if (!v) return "";
-    if (v.toLowerCase() === "global") return "";
-    return v;
-  }
-
-  if (typeof userLocation === "object") {
-    const city = userLocation.city || userLocation.locality || userLocation.town || "";
-    const region = userLocation.region || userLocation.state || userLocation.adminArea || "";
-    const country = userLocation.country || "";
-    return [city, region, country].filter(Boolean).join(", ").trim();
-  }
-
-  return "";
-}
-
 function parseLatLng(input) {
   if (!input) return null;
 
-  if (typeof input === "object") {
+  if (typeof input === "object" && !Array.isArray(input)) {
     const lat = Number(input.lat ?? input.latitude);
     const lng = Number(input.lng ?? input.longitude ?? input.lon);
     if (Number.isFinite(lat) && Number.isFinite(lng)) {
@@ -137,36 +127,73 @@ function parseLatLng(input) {
     }
   }
 
-  const s = String(input || "").trim();
-  const m = s.match(/(-?\d+(\.\d+)?)\s*,\s*(-?\d+(\.\d+)?)/);
-  if (!m) return null;
+  const text = String(input || "").trim();
+  const match = text.match(/(-?\d+(\.\d+)?)\s*,\s*(-?\d+(\.\d+)?)/);
+  if (!match) return null;
 
-  const lat = Number(m[1]);
-  const lng = Number(m[3]);
+  const lat = Number(match[1]);
+  const lng = Number(match[3]);
+
   if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
-
   return { lat, lng };
 }
 
-function extractLocationFromQuery(userQuery = "") {
-  const q = String(userQuery || "").trim();
-  if (!q) return "";
+function safeCityText(userLocation) {
+  if (!userLocation) return "";
 
-  const zip = extractZip(q);
+  if (typeof userLocation === "string") {
+    const value = userLocation.trim();
+    if (!value || value.toLowerCase() === "global") return "";
+    return value;
+  }
+
+  if (typeof userLocation === "object" && !Array.isArray(userLocation)) {
+    const city =
+      userLocation.city ||
+      userLocation.locality ||
+      userLocation.town ||
+      userLocation.name ||
+      "";
+
+    const region =
+      userLocation.region ||
+      userLocation.state ||
+      userLocation.adminArea ||
+      "";
+
+    const country = userLocation.country || "";
+
+    return [city, region, country].filter(Boolean).join(", ").trim();
+  }
+
+  return "";
+}
+
+function extractLocationFromQuery(userQuery = "") {
+  const query = String(userQuery || "").trim();
+  if (!query) return "";
+
+  const zip = extractZip(query);
   if (zip) return zip;
 
-  const en = q.match(/\bin\s+([A-Za-z][A-Za-z\s.\-']{2,})(?:,\s*([A-Za-z]{2,}))?/i);
+  const en = query.match(
+    /\b(?:in|near|around|at)\s+([A-Za-z][A-Za-z\s.\-']{2,})(?:,\s*([A-Za-z]{2,}))?/i
+  );
   if (en) {
     const city = (en[1] || "").trim();
     const region = (en[2] || "").trim();
-    const out = [city, region].filter(Boolean).join(", ");
-    if (out.length >= 3) return out;
+    const combined = [city, region].filter(Boolean).join(", ");
+    if (combined.length >= 3) return combined;
   }
 
-  const ar = q.match(/(?:\bفي\b|\bبال\b|\bبـ\b|\bب)(\s*[\u0600-\u06FFa-zA-Z,\s.\-]{3,50})/);
+  const ar = query.match(
+    /(?:\bفي\b|\bبال\b|\bبـ\b|\bب)(\s*[\u0600-\u06FFa-zA-Z,\s.\-]{3,50})/
+  );
   if (ar?.[1]) {
-    const cand = ar[1].replace(/[^\u0600-\u06FFa-zA-Z,\s.\-]/g, " ").trim();
-    if (cand.length >= 3) return cand;
+    const candidate = ar[1]
+      .replace(/[^\u0600-\u06FFa-zA-Z,\s.\-]/g, " ")
+      .trim();
+    if (candidate.length >= 3) return candidate;
   }
 
   return "";
@@ -177,31 +204,36 @@ function extractLocationFromQuery(userQuery = "") {
 ========================================================= */
 function pickDomainsForQuery(query = "") {
   const manifest = loadManifestOnce();
-  const q = normalizeText(query);
-  if (!q) return [];
+  const normalizedQuery = normalizeText(query);
+  if (!normalizedQuery) return [];
 
   const scored = (manifest.domains || [])
-    .map((d) => {
-      const kw = Array.isArray(d.keywords) ? d.keywords : [];
+    .map((domain) => {
+      const keywords = Array.isArray(domain.keywords) ? domain.keywords : [];
       let hits = 0;
 
-      for (const w of kw) {
-        const ww = normalizeText(w);
-        if (ww && q.includes(ww)) hits += 1;
+      for (const keyword of keywords) {
+        const normalizedKeyword = normalizeText(keyword);
+        if (normalizedKeyword && normalizedQuery.includes(normalizedKeyword)) {
+          hits += 1;
+        }
       }
 
-      const priority = Number(d.priority || 0);
+      const priority = Number(domain.priority || 0);
       const score = hits * 10 + priority;
 
-      return { domain: d, score };
+      return { domain, score };
     })
-    .filter((x) => x.score > 0)
+    .filter((item) => item.score > 0)
     .sort((a, b) => b.score - a.score);
 
-  const chosen = scored.slice(0, 2).map((x) => x.domain);
+  const chosen = scored.slice(0, 2).map((item) => item.domain);
 
-  const meta = (manifest.domains || []).find((d) => String(d.id || "") === "meta");
-  if (meta && !chosen.some((c) => c.id === "meta")) {
+  const meta = (manifest.domains || []).find(
+    (domain) => String(domain.id || "") === "meta"
+  );
+
+  if (meta && !chosen.some((domain) => domain.id === "meta")) {
     chosen.push(meta);
   }
 
@@ -227,44 +259,51 @@ function loadJsonFileAsRecords(fileName) {
     records = [parsed];
   }
 
-  const normalized = records.map((x) => ({ ...x, __source: fileName }));
+  const normalized = records.map((record) => ({
+    ...record,
+    __source: fileName,
+  }));
+
   KB_CACHE.set(fileName, normalized);
   return normalized;
 }
 
 function getKBForDomains(domains = []) {
   const files = uniqBy(
-    domains.flatMap((d) => (Array.isArray(d.files) ? d.files : [])),
-    (x) => x
+    domains.flatMap((domain) =>
+      Array.isArray(domain.files) ? domain.files : []
+    ),
+    (file) => file
   );
 
-  let out = [];
-  for (const f of files) {
-    out.push(...loadJsonFileAsRecords(f));
+  let output = [];
+  for (const file of files) {
+    output.push(...loadJsonFileAsRecords(file));
   }
-  return out;
+
+  return output;
 }
 
 /* =========================================================
    LOCAL KB SEARCH
 ========================================================= */
-function recordToText(r) {
+function recordToText(record) {
   return normalizeText(
     [
-      r.title,
-      r.problem,
-      r.symptom,
-      r.description,
-      r.likely_causes,
-      r.recommended_checks,
-      r.steps,
-      r.tags,
-      r.category,
-      r.system,
-      r.engine,
-      r.issues,
-      r.codes,
-      r.code,
+      record.title,
+      record.problem,
+      record.symptom,
+      record.description,
+      record.likely_causes,
+      record.recommended_checks,
+      record.steps,
+      record.tags,
+      record.category,
+      record.system,
+      record.engine,
+      record.issues,
+      record.codes,
+      record.code,
     ]
       .filter(Boolean)
       .join(" ")
@@ -274,6 +313,7 @@ function recordToText(r) {
 function scoreMatch(query, recordText) {
   const q = normalizeText(query);
   const text = normalizeText(recordText);
+
   if (!q || !text) return 0;
 
   let score = 0;
@@ -281,9 +321,9 @@ function scoreMatch(query, recordText) {
   if (text.includes(q)) score += 14;
 
   const tokens = q.split(" ").filter(Boolean);
-  for (const t of tokens) {
-    if (t.length < 2) continue;
-    if (text.includes(t)) score += 2;
+  for (const token of tokens) {
+    if (token.length < 2) continue;
+    if (text.includes(token)) score += 2;
   }
 
   const code = q.match(/\bp0\d{3}\b/i);
@@ -301,62 +341,120 @@ function searchLocalKB(query, maxResults = 4) {
   const limit = Math.max(1, Math.min(Number(maxResults || 4), 10));
 
   const scored = kb
-    .map((r) => ({ r, score: scoreMatch(query, recordToText(r)) }))
-    .filter((x) => x.score > 0)
+    .map((record) => ({
+      record,
+      score: scoreMatch(query, recordToText(record)),
+    }))
+    .filter((item) => item.score > 0)
     .sort((a, b) => b.score - a.score)
     .slice(0, limit);
 
   return uniqBy(
-    scored.map(({ r, score }) => ({
-      title: r.title || r.problem || "Verified item",
+    scored.map(({ record, score }) => ({
+      title: record.title || record.problem || "Verified item",
       score,
-      source: r.__source || "data",
-      causes: r.likely_causes || r.causes || "",
-      checks: r.recommended_checks || r.checks || "",
-      steps: r.steps || "",
-      tags: r.tags || r.category || r.system || "",
-      raw: r,
+      source: record.__source || "data",
+      causes: record.likely_causes || record.causes || "",
+      checks: record.recommended_checks || record.checks || "",
+      steps: record.steps || "",
+      tags: record.tags || record.category || record.system || "",
+      raw: record,
     })),
-    (x) => `${String(x.title).toLowerCase()}::${x.source}`
+    (item) => `${String(item.title).toLowerCase()}::${item.source}`
   );
 }
 
 /* =========================================================
    PLACES INTENT
 ========================================================= */
-function looksLikePlacesIntent(q = "") {
-  const t = String(q || "").toLowerCase();
+function looksLikePlacesIntent(query = "") {
+  const text = String(query || "").toLowerCase();
 
   const shopWords = [
-    "mechanic", "garage", "auto repair", "repair shop", "car repair", "near me", "nearby",
-    "closest", "address", "location", "map", "google maps", "workshop",
-    "ورشة", "ورش", "ميكانيك", "ميكانيكي", "كراج", "اقرب", "أقرب", "عنوان", "موقع",
-    "خرائط", "وين اصلح", "وين أُصلّح", "وين اروح", "دلني"
+    "mechanic",
+    "garage",
+    "auto repair",
+    "repair shop",
+    "car repair",
+    "near me",
+    "nearby",
+    "closest",
+    "address",
+    "location",
+    "map",
+    "google maps",
+    "workshop",
+    "ورشة",
+    "ورش",
+    "ميكانيك",
+    "ميكانيكي",
+    "كراج",
+    "اقرب",
+    "أقرب",
+    "عنوان",
+    "موقع",
+    "خرائط",
+    "وين اصلح",
+    "وين اروح",
+    "دلني",
   ];
 
   const partsWords = [
-    "auto parts", "car parts", "parts store", "tool store", "hardware store",
-    "autozone", "o'reilly", "oreilly", "advance auto", "napa",
-    "قطع غيار", "محل قطع", "محل قطع غيار", "محل ادوات", "محل أدوات", "ادوات", "أدوات",
-    "price", "prices", "cost", "سعر", "اسعار", "تكلفة"
+    "auto parts",
+    "car parts",
+    "parts store",
+    "tool store",
+    "hardware store",
+    "autozone",
+    "o'reilly",
+    "oreilly",
+    "advance auto",
+    "napa",
+    "قطع غيار",
+    "محل قطع",
+    "محل قطع غيار",
+    "محل ادوات",
+    "محل أدوات",
+    "ادوات",
+    "أدوات",
+    "price",
+    "prices",
+    "cost",
+    "سعر",
+    "اسعار",
+    "تكلفة",
   ];
 
-  return shopWords.some((w) => t.includes(w)) || partsWords.some((w) => t.includes(w));
+  return (
+    shopWords.some((word) => text.includes(word)) ||
+    partsWords.some((word) => text.includes(word))
+  );
 }
 
-function detectModeFromText(q = "") {
-  const t = String(q || "").toLowerCase();
+function detectModeFromText(query = "") {
+  const text = String(query || "").toLowerCase();
 
-  if (hasAny(t, ["tire", "tyre", "اطار", "إطار", "اطارات", "إطارات", "بنشر", "ترصيص"])) {
+  if (
+    hasAny(text, [
+      "tire",
+      "tyre",
+      "اطار",
+      "إطار",
+      "اطارات",
+      "إطارات",
+      "بنشر",
+      "ترصيص",
+    ])
+  ) {
     return "tire";
   }
 
-  if (hasAny(t, ["brake", "فرامل", "هوبات", "سفايف"])) {
+  if (hasAny(text, ["brake", "فرامل", "هوبات", "سفايف"])) {
     return "brake";
   }
 
   if (
-    hasAny(t, [
+    hasAny(text, [
       "auto parts",
       "car parts",
       "parts store",
@@ -383,7 +481,7 @@ function detectModeFromText(q = "") {
     return "parts_tools";
   }
 
-  if (hasAny(t, ["body shop", "سمكري", "حدادة سيارات", "صبغ", "دهان"])) {
+  if (hasAny(text, ["body shop", "سمكري", "حدادة سيارات", "صبغ", "دهان"])) {
     return "body_shop";
   }
 
@@ -399,24 +497,28 @@ function buildPlacesBaseQuery(mode) {
 }
 
 /* =========================================================
-   PRICE MAPPING
+   PRICE HELPERS
 ========================================================= */
 function mapPriceLevel(level) {
-  const v = String(level || "").toUpperCase().trim();
-  if (!v || v.includes("UNSPECIFIED")) {
+  const value = String(level || "").toUpperCase().trim();
+
+  if (!value || value.includes("UNSPECIFIED")) {
     return { label: "", meaning_ar: "", meaning_en: "" };
   }
 
-  if (v.includes("INEXPENSIVE")) {
+  if (value.includes("INEXPENSIVE")) {
     return { label: "$", meaning_ar: "اقتصادي", meaning_en: "Budget" };
   }
-  if (v.includes("MODERATE")) {
+
+  if (value.includes("MODERATE")) {
     return { label: "$$", meaning_ar: "متوسط", meaning_en: "Moderate" };
   }
-  if (v.includes("EXPENSIVE")) {
+
+  if (value.includes("EXPENSIVE")) {
     return { label: "$$$", meaning_ar: "مرتفع", meaning_en: "Expensive" };
   }
-  if (v.includes("VERY_EXPENSIVE")) {
+
+  if (value.includes("VERY_EXPENSIVE")) {
     return { label: "$$$$", meaning_ar: "فاخر", meaning_en: "Very Expensive" };
   }
 
@@ -425,6 +527,7 @@ function mapPriceLevel(level) {
 
 function priceHint({ mode, priceLevelLabel, locale }) {
   const isAr = String(locale || "en").toLowerCase().startsWith("ar");
+
   if (!priceLevelLabel) return "";
 
   if (mode === "parts_tools") {
@@ -444,10 +547,12 @@ function priceHint({ mode, priceLevelLabel, locale }) {
 function cacheGet(key) {
   const hit = PLACES_CACHE.get(key);
   if (!hit) return null;
+
   if (Date.now() > hit.expiry) {
     PLACES_CACHE.delete(key);
     return null;
   }
+
   return hit.value;
 }
 
@@ -470,19 +575,21 @@ async function searchPlaces({ query, userLocation, locale, radiusMeters }) {
   const mode = detectModeFromText(query);
   const baseQuery = buildPlacesBaseQuery(mode);
 
-  let locText = safeCityText(userLocation);
-  if (!locText) locText = extractLocationFromQuery(query);
+  let locationText = safeCityText(userLocation);
+  if (!locationText) locationText = extractLocationFromQuery(query);
 
   const zip = extractZip(query);
-  if (zip) locText = zip;
+  if (zip) locationText = zip;
 
-  if (!gps && !locText) return [];
+  if (!gps && !locationText) return [];
 
-  const textQuery = gps ? baseQuery : `${baseQuery} in ${locText}`;
+  const textQuery = gps ? baseQuery : `${baseQuery} in ${locationText}`;
   const radius = Number(radiusMeters || DEFAULT_RADIUS_METERS);
 
   const cacheKey = `${languageCode}::${textQuery}::${
-    gps ? `${gps.lat.toFixed(3)},${gps.lng.toFixed(3)}:${radius}` : `anchor:${locText}`
+    gps
+      ? `${gps.lat.toFixed(3)},${gps.lng.toFixed(3)}:${radius}`
+      : `anchor:${locationText}`
   }`;
 
   const cached = cacheGet(cacheKey);
@@ -507,71 +614,78 @@ async function searchPlaces({ query, userLocation, locale, radiusMeters }) {
   const timeout = setTimeout(() => controller.abort(), PLACES_TIMEOUT_MS);
 
   try {
-    const f = await ensureFetch();
+    const fetchFn = await ensureFetch();
 
-    const res = await f("https://places.googleapis.com/v1/places:searchText", {
-      method: "POST",
-      signal: controller.signal,
-      headers: {
-        "Content-Type": "application/json",
-        "X-Goog-Api-Key": apiKey,
-        "X-Goog-FieldMask": [
-          "places.displayName",
-          "places.formattedAddress",
-          "places.googleMapsUri",
-          "places.id",
-          "places.rating",
-          "places.userRatingCount",
-          "places.nationalPhoneNumber",
-          "places.websiteUri",
-          "places.priceLevel",
-        ].join(","),
-      },
-      body: JSON.stringify(body),
-    });
+    const response = await fetchFn(
+      "https://places.googleapis.com/v1/places:searchText",
+      {
+        method: "POST",
+        signal: controller.signal,
+        headers: {
+          "Content-Type": "application/json",
+          "X-Goog-Api-Key": apiKey,
+          "X-Goog-FieldMask": [
+            "places.displayName",
+            "places.formattedAddress",
+            "places.googleMapsUri",
+            "places.id",
+            "places.rating",
+            "places.userRatingCount",
+            "places.nationalPhoneNumber",
+            "places.websiteUri",
+            "places.priceLevel",
+          ].join(","),
+        },
+        body: JSON.stringify(body),
+      }
+    );
 
-    const data = await res.json().catch(() => ({}));
+    const data = await response.json().catch(() => ({}));
 
-    if (!res.ok) {
-      console.error("Places non-OK:", res.status, data?.error?.message || data);
+    if (!response.ok) {
+      console.error("Places non-OK:", response.status, data?.error?.message || data);
       return [];
     }
 
     const places = Array.isArray(data?.places) ? data.places : [];
 
-    const mapped = places.slice(0, PLACES_MAX_RESULTS).map((p) => {
-      const pl = p?.priceLevel ?? "";
-      const plMap = mapPriceLevel(pl);
+    const mapped = places.slice(0, PLACES_MAX_RESULTS).map((place) => {
+      const priceLevel = place?.priceLevel ?? "";
+      const price = mapPriceLevel(priceLevel);
 
       return {
-        name: p?.displayName?.text || "",
-        address: p?.formattedAddress || "",
-        maps_url: p?.googleMapsUri || "",
-        website: p?.websiteUri || "",
-        place_id: p?.id || "",
-        rating: p?.rating ?? null,
-        ratings_total: p?.userRatingCount ?? null,
-        phone: p?.nationalPhoneNumber || "",
-        price_level: pl || "",
-        price_label: plMap.label,
-        price_meaning_ar: plMap.meaning_ar,
-        price_meaning_en: plMap.meaning_en,
-        price_hint: priceHint({ mode, priceLevelLabel: plMap.label, locale }),
+        name: place?.displayName?.text || "",
+        address: place?.formattedAddress || "",
+        maps_url: place?.googleMapsUri || "",
+        website: place?.websiteUri || "",
+        place_id: place?.id || "",
+        rating: place?.rating ?? null,
+        ratings_total: place?.userRatingCount ?? null,
+        phone: place?.nationalPhoneNumber || "",
+        price_level: priceLevel || "",
+        price_label: price.label,
+        price_meaning_ar: price.meaning_ar,
+        price_meaning_en: price.meaning_en,
+        price_hint: priceHint({
+          mode,
+          priceLevelLabel: price.label,
+          locale,
+        }),
         mode,
-        location_anchor: gps ? "gps" : String(locText),
+        location_anchor: gps ? "gps" : String(locationText),
         source: "google_places_new",
       };
     });
 
     const deduped = uniqBy(
       mapped,
-      (x) => x.place_id || x.maps_url || `${x.name}::${x.address}`
+      (item) => item.place_id || item.maps_url || `${item.name}::${item.address}`
     );
 
     cacheSet(cacheKey, deduped);
     return deduped;
-  } catch (e) {
-    console.error("Places error:", e?.message || e);
+  } catch (error) {
+    console.error("Places error:", error?.message || error);
     return [];
   } finally {
     clearTimeout(timeout);
@@ -589,14 +703,16 @@ export async function performSearch(userQuery, userLocation, opts = {}) {
     placesRadiusMeters,
   } = opts;
 
-  const q = String(userQuery || "").trim();
+  const query = String(userQuery || "").trim();
 
-  const verified_data = q.length >= 2 ? searchLocalKB(q, maxResults) : [];
+  const verified_data =
+    query.length >= 2 ? searchLocalKB(query, maxResults) : [];
 
   let verified_workshops = [];
-  if (allowPlaces && looksLikePlacesIntent(q)) {
+
+  if (allowPlaces && looksLikePlacesIntent(query)) {
     verified_workshops = await searchPlaces({
-      query: q,
+      query,
       userLocation,
       locale,
       radiusMeters: placesRadiusMeters,
