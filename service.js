@@ -1,11 +1,11 @@
-// service.js — FixLens "Doctor Brain" v3.2.0
-// Clean version:
-// - Responses API for diagnosis
-// - Transcriptions API for speech-to-text
-// - Global multilingual behavior
-// - Data-first diagnosis before external refinement
-// - Places / GPS / shops / parts search support
-// - Hard gate: diagnosis vs places
+// service.js — FixLens Doctor Brain v4.0.0
+// Goals:
+// - Data-first diagnosis
+// - Global multilingual replies with language lock from first user language
+// - GPS + places support
+// - Search only when needed
+// - Clean Responses API flow
+// - Safer audio transcription flow using supported json format
 
 import OpenAI from "openai";
 import fs from "fs";
@@ -15,18 +15,23 @@ import { performSearch } from "./search.js";
 
 const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-const CHAT_MODEL = process.env.FIXLENS_MODEL || process.env.OPENAI_MODEL || "gpt-4.1";
-const TRANSCRIBE_MODEL =
-  process.env.FIXLENS_TRANSCRIBE_MODEL || "gpt-4o-mini-transcribe";
+const CHAT_MODEL =
+  process.env.FIXLENS_MODEL ||
+  process.env.OPENAI_MODEL ||
+  "gpt-4.1";
 
-/* =========================================================
-   LOAD DATA
-========================================================= */
+const TRANSCRIBE_MODEL =
+  process.env.FIXLENS_TRANSCRIBE_MODEL ||
+  "gpt-4o-mini-transcribe";
+
 const DATA_DIR = path.join(process.cwd(), "data");
 const VEHICLE_MAP_PATH = path.join(DATA_DIR, "vehicle_engine_map.json");
 const ENGINE_PATTERNS_PATH = path.join(DATA_DIR, "engine_patterns.json");
 const US_ENGINE_INTEL_PATH = path.join(DATA_DIR, "us_engine_intel_v1.json");
 
+/* =========================================================
+   LOAD DATA
+========================================================= */
 function safeLoadJson(filePath, fallback) {
   try {
     if (!fs.existsSync(filePath)) return fallback;
@@ -50,8 +55,34 @@ const US_ENGINE_INTEL = safeLoadJson(US_ENGINE_INTEL_PATH, {
 /* =========================================================
    BASICS
 ========================================================= */
-function normalizeToken(s = "") {
-  return String(s || "")
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function withTimeout(promise, ms, label = "timeout") {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => {
+      setTimeout(() => reject(new Error(label)), ms);
+    }),
+  ]);
+}
+
+async function withRetry(fn, tries = 2, baseDelay = 250) {
+  let lastError;
+  for (let i = 0; i < tries; i += 1) {
+    try {
+      return await fn(i);
+    } catch (error) {
+      lastError = error;
+      await sleep(baseDelay * (i + 1));
+    }
+  }
+  throw lastError;
+}
+
+function normalizeToken(value = "") {
+  return String(value || "")
     .toLowerCase()
     .replace(/[\u2010-\u2015]/g, "-")
     .replace(/[^\p{L}\p{N}\-\s\.]/gu, " ")
@@ -59,44 +90,53 @@ function normalizeToken(s = "") {
     .trim();
 }
 
-function sleep(ms) {
-  return new Promise((r) => setTimeout(r, ms));
-}
-
-async function withTimeout(promise, ms, label = "timeout") {
-  return Promise.race([
-    promise,
-    new Promise((_, reject) => setTimeout(() => reject(new Error(label)), ms)),
-  ]);
-}
-
-async function withRetry(fn, tries = 2, baseDelay = 250) {
-  let lastErr;
-  for (let i = 0; i < tries; i++) {
-    try {
-      return await fn(i);
-    } catch (e) {
-      lastErr = e;
-      await sleep(baseDelay * (i + 1));
-    }
-  }
-  throw lastErr;
+function isObject(value) {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
 function normalizeUserLocation(raw) {
-  if (!raw) return "";
+  if (!raw) return null;
+
   if (typeof raw === "string") {
-    const v = raw.trim();
-    if (!v) return "";
-    if (v.toLowerCase() === "global") return "";
-    return v;
+    const value = raw.trim();
+    if (!value || value.toLowerCase() === "global") return null;
+    return value;
   }
-  if (typeof raw === "object") return raw;
-  return "";
+
+  if (isObject(raw)) {
+    const lat = Number(raw.lat ?? raw.latitude);
+    const lng = Number(raw.lng ?? raw.longitude ?? raw.lon);
+    if (Number.isFinite(lat) && Number.isFinite(lng)) {
+      return { lat, lng };
+    }
+
+    const label = String(raw.label || raw.address || raw.name || "").trim();
+    if (label) return label;
+  }
+
+  return null;
+}
+
+function pickUserLocation(body = {}) {
+  return (
+    normalizeUserLocation(body.user_location) ||
+    normalizeUserLocation(body.location) ||
+    normalizeUserLocation(body.gps) ||
+    normalizeUserLocation(body.latlng) ||
+    null
+  );
+}
+
+function hasLatLng(location) {
+  return (
+    isObject(location) &&
+    Number.isFinite(Number(location.lat)) &&
+    Number.isFinite(Number(location.lng))
+  );
 }
 
 /* =========================================================
-   LANGUAGE
+   LANGUAGE LOCK
 ========================================================= */
 function detectTextLanguage(text = "") {
   const t = String(text || "");
@@ -108,39 +148,44 @@ function detectTextLanguage(text = "") {
   if (/[\u0900-\u097F]/.test(t)) return "hi";
   if (/[\u0E00-\u0E7F]/.test(t)) return "th";
   if (/[\u00C0-\u024F]/.test(t)) return "fr";
-  if (/[\u0100-\u017F]/.test(t)) return "de";
+  if (/[äöüß]/i.test(t)) return "de";
+  if (/[áéíóúñ¿¡]/i.test(t)) return "es";
+  if (/[ãõç]/i.test(t)) return "pt";
   return "en";
 }
 
 function normalizeLocale(input) {
-  const v = String(input || "").trim();
-  if (!v || v.toLowerCase() === "auto") return "";
-  return v;
+  const value = String(input || "").trim().toLowerCase();
+  if (!value || value === "auto") return "";
+  return value;
 }
 
-function inferLocale({ locale, text, history = [] }) {
-  const normalized = normalizeLocale(locale);
-  const detected = detectTextLanguage(text || "");
+function inferLockedLocale({ locale, text, history = [] }) {
+  const explicit = normalizeLocale(locale);
+  if (explicit) return explicit;
 
-  if (detected && detected !== "en") return detected;
-  if (normalized) return normalized;
-
-  for (let i = history.length - 1; i >= 0; i--) {
-    const c = String(history[i]?.content || "");
-    const h = detectTextLanguage(c);
-    if (h && h !== "en") return h;
+  // lock to the first meaningful user message language
+  for (const item of history) {
+    if (item?.role !== "user") continue;
+    const content = String(item?.content || "").trim();
+    if (!content) continue;
+    return detectTextLanguage(content);
   }
 
-  return detected || normalized || "en";
+  return detectTextLanguage(text || "") || "en";
+}
+
+function isArabic(locale = "") {
+  return String(locale || "").toLowerCase().startsWith("ar");
 }
 
 /* =========================================================
-   VEHICLE + ENGINE INTEL
+   VEHICLE / ENGINE INTEL
 ========================================================= */
 function extractVehicleInfo(text = "") {
-  const t = normalizeToken(text);
+  const normalized = normalizeToken(text);
 
-  const yearMatch = t.match(/\b(19|20)\d{2}\b/);
+  const yearMatch = normalized.match(/\b(19|20)\d{2}\b/);
   const year = yearMatch ? Number(yearMatch[0]) : null;
 
   let make = null;
@@ -150,11 +195,11 @@ function extractVehicleInfo(text = "") {
     const mk = normalizeToken(row?.make);
     const md = normalizeToken(row?.model);
 
-    if (mk && t.includes(mk)) make = row.make;
+    if (mk && normalized.includes(mk)) make = row.make;
 
+    const normalizedLoose = normalized.replace(/-/g, "");
     const mdLoose = md.replace(/-/g, "");
-    const tLoose = t.replace(/-/g, "");
-    if (md && (t.includes(md) || (mdLoose && tLoose.includes(mdLoose)))) {
+    if (md && (normalized.includes(md) || normalizedLoose.includes(mdLoose))) {
       model = row.model;
     }
 
@@ -170,52 +215,59 @@ function detectEngineFromVehicle(make, model, year) {
   const mk = normalizeToken(make);
   const md = normalizeToken(model);
 
-  const found = VEHICLE_ENGINE_MAP.find((v) => {
-    const vmk = normalizeToken(v?.make);
-    const vmd = normalizeToken(v?.model);
-    const range = Array.isArray(v?.year_range) ? v.year_range : [];
-    const y0 = Number(range?.[0]);
-    const y1 = Number(range?.[1]);
+  const found = VEHICLE_ENGINE_MAP.find((row) => {
+    const rowMake = normalizeToken(row?.make);
+    const rowModel = normalizeToken(row?.model);
+    const years = Array.isArray(row?.year_range) ? row.year_range : [];
+    const y0 = Number(years[0]);
+    const y1 = Number(years[1]);
 
-    if (!vmk || !vmd || !Number.isFinite(y0) || !Number.isFinite(y1)) return false;
+    if (!rowMake || !rowModel || !Number.isFinite(y0) || !Number.isFinite(y1)) {
+      return false;
+    }
 
-    const sameMake = vmk === mk;
-    const sameModel = vmd === md || vmd.replace(/-/g, "") === md.replace(/-/g, "");
+    const sameMake = rowMake === mk;
+    const sameModel =
+      rowModel === md ||
+      rowModel.replace(/-/g, "") === md.replace(/-/g, "");
 
     return sameMake && sameModel && year >= y0 && year <= y1;
   });
 
-  if (!found || !Array.isArray(found.engines) || found.engines.length === 0) return null;
+  if (!found || !Array.isArray(found.engines) || found.engines.length === 0) {
+    return null;
+  }
+
   return String(found.engines[0] || "").trim() || null;
 }
 
 function findSimpleEngineIssues(engineName = "") {
-  const e = String(engineName || "").trim();
-  if (!e) return [];
+  const name = String(engineName || "").trim().toLowerCase();
+  if (!name) return [];
 
   const hit = ENGINE_PATTERNS.find(
-    (x) => String(x?.engine || "").trim().toLowerCase() === e.toLowerCase()
+    (item) => String(item?.engine || "").trim().toLowerCase() === name
   );
 
-  const issues = Array.isArray(hit?.issues) ? hit.issues : [];
-  return issues.slice(0, 6);
+  return Array.isArray(hit?.issues) ? hit.issues.slice(0, 6) : [];
 }
 
 function matchSimpleEngineIssuesToText(issues = [], text = "") {
-  const t = normalizeToken(text);
-  const list = Array.isArray(issues) ? issues : [];
+  const normalized = normalizeToken(text);
 
-  return list
-    .map((it) => {
-      const kws = Array.isArray(it?.keywords) ? it.keywords : [];
+  return (Array.isArray(issues) ? issues : [])
+    .map((issue) => {
+      const keywords = Array.isArray(issue?.keywords) ? issue.keywords : [];
       let score = 0;
-      for (const k of kws) {
-        const kk = normalizeToken(k);
-        if (kk && t.includes(kk)) score += 1;
+
+      for (const keyword of keywords) {
+        const k = normalizeToken(keyword);
+        if (k && normalized.includes(k)) score += 1;
       }
-      return { ...it, __score: score };
+
+      return { ...issue, __score: score };
     })
-    .filter((x) => Number(x.__score || 0) >= 1)
+    .filter((item) => Number(item.__score || 0) >= 1)
     .sort((a, b) => (b.__score || 0) - (a.__score || 0))
     .slice(0, 3);
 }
@@ -223,66 +275,84 @@ function matchSimpleEngineIssuesToText(issues = [], text = "") {
 function findIntelEnginesForVehicle(make, model, year) {
   const mk = normalizeToken(make);
   const md = normalizeToken(model);
-  const y = Number(year);
+  const yy = Number(year);
 
-  const engines = Array.isArray(US_ENGINE_INTEL?.engines) ? US_ENGINE_INTEL.engines : [];
-  if (!mk || !md || !Number.isFinite(y)) return [];
+  if (!mk || !md || !Number.isFinite(yy)) return [];
+
+  const engines = Array.isArray(US_ENGINE_INTEL?.engines)
+    ? US_ENGINE_INTEL.engines
+    : [];
 
   return engines
-    .filter((e) => {
-      const makes = Array.isArray(e?.makes) ? e.makes : [];
-      const models = Array.isArray(e?.models) ? e.models : [];
-      const years = Array.isArray(e?.years) ? e.years : [];
+    .filter((engine) => {
+      const makes = Array.isArray(engine?.makes) ? engine.makes : [];
+      const models = Array.isArray(engine?.models) ? engine.models : [];
+      const years = Array.isArray(engine?.years) ? engine.years : [];
 
       const makeOk = makes.some((m) => normalizeToken(m) === mk);
       const modelOk = models.some((m) => normalizeToken(m) === md);
-      const yearOk = years.some((yy) => Number(yy) === y);
+      const yearOk = years.some((y) => Number(y) === yy);
 
       return makeOk && modelOk && yearOk;
     })
     .slice(0, 3);
 }
 
-function getIntelPatternByKey(pattern_key = "") {
-  const key = String(pattern_key || "").trim();
-  if (!key) return null;
+function getIntelPatternByKey(key = "") {
+  const target = String(key || "").trim();
+  if (!target) return null;
 
-  const patterns = Array.isArray(US_ENGINE_INTEL?.patterns) ? US_ENGINE_INTEL.patterns : [];
-  return patterns.find((p) => String(p?.pattern_key || "").trim() === key) || null;
+  const patterns = Array.isArray(US_ENGINE_INTEL?.patterns)
+    ? US_ENGINE_INTEL.patterns
+    : [];
+
+  return patterns.find(
+    (pattern) => String(pattern?.pattern_key || "").trim() === target
+  ) || null;
 }
 
 function scoreIntelPattern(pattern, text = "") {
   if (!pattern) return 0;
-  const t = normalizeToken(text);
 
+  const normalized = normalizeToken(text);
   const when = pattern?.when || {};
-  const sym = Array.isArray(when?.symptom_keywords_any) ? when.symptom_keywords_any : [];
-  const extra = Array.isArray(when?.extra_clues_any) ? when.extra_clues_any : [];
+  const symptomKeywords = Array.isArray(when?.symptom_keywords_any)
+    ? when.symptom_keywords_any
+    : [];
+  const extraClues = Array.isArray(when?.extra_clues_any)
+    ? when.extra_clues_any
+    : [];
 
   let score = 0;
-  for (const k of sym) {
-    const kk = normalizeToken(k);
-    if (kk && t.includes(kk)) score += 2;
+
+  for (const keyword of symptomKeywords) {
+    const k = normalizeToken(keyword);
+    if (k && normalized.includes(k)) score += 2;
   }
-  for (const k of extra) {
-    const kk = normalizeToken(k);
-    if (kk && t.includes(kk)) score += 1;
+
+  for (const keyword of extraClues) {
+    const k = normalizeToken(keyword);
+    if (k && normalized.includes(k)) score += 1;
   }
+
   return score;
 }
 
-function matchBestIntelPatternForEngine(engineObj, text = "") {
-  if (!engineObj) return { pattern: null, score: 0 };
+function matchBestIntelPatternForEngine(engine, text = "") {
+  if (!engine) return { pattern: null, score: 0 };
 
-  const common = Array.isArray(engineObj?.common_patterns) ? engineObj.common_patterns : [];
-  if (common.length === 0) return { pattern: null, score: 0 };
+  const commonPatterns = Array.isArray(engine?.common_patterns)
+    ? engine.common_patterns
+    : [];
+
+  if (commonPatterns.length === 0) return { pattern: null, score: 0 };
 
   let best = { pattern: null, score: 0 };
 
-  for (const key of common) {
-    const p = getIntelPatternByKey(key);
-    const s = scoreIntelPattern(p, text);
-    if (s > best.score) best = { pattern: p, score: s };
+  for (const key of commonPatterns) {
+    const pattern = getIntelPatternByKey(key);
+    const score = scoreIntelPattern(pattern, text);
+    if (score > best.score) best = { pattern, score };
   }
 
   if (best.score < 2) return { pattern: null, score: best.score };
@@ -291,26 +361,37 @@ function matchBestIntelPatternForEngine(engineObj, text = "") {
 
 function buildEnginePack(userText = "") {
   const vehicle = extractVehicleInfo(userText);
-  const detectedEngineName = detectEngineFromVehicle(vehicle.make, vehicle.model, vehicle.year);
+  const detectedEngineName = detectEngineFromVehicle(
+    vehicle.make,
+    vehicle.model,
+    vehicle.year
+  );
 
-  const simpleIssues = detectedEngineName ? findSimpleEngineIssues(detectedEngineName) : [];
-  const simpleMatched = matchSimpleEngineIssuesToText(simpleIssues, userText);
+  const simpleIssues = detectedEngineName
+    ? findSimpleEngineIssues(detectedEngineName)
+    : [];
+  const simpleMatches = matchSimpleEngineIssuesToText(simpleIssues, userText);
 
-  const intelEngines = findIntelEnginesForVehicle(vehicle.make, vehicle.model, vehicle.year);
+  const candidateEngines = findIntelEnginesForVehicle(
+    vehicle.make,
+    vehicle.model,
+    vehicle.year
+  );
 
   let bestIntel = { engine: null, pattern: null, score: 0 };
-  for (const eng of intelEngines) {
-    const m = matchBestIntelPatternForEngine(eng, userText);
-    if (m.score > bestIntel.score && m.pattern) {
-      bestIntel = { engine: eng, pattern: m.pattern, score: m.score };
+
+  for (const engine of candidateEngines) {
+    const match = matchBestIntelPatternForEngine(engine, userText);
+    if (match.pattern && match.score > bestIntel.score) {
+      bestIntel = { engine, pattern: match.pattern, score: match.score };
     }
   }
 
   return {
     vehicle,
     detected_engine_name: detectedEngineName || null,
-    simple_engine_issue_matches: simpleMatched,
-    intel_engine_candidate_count: intelEngines.length,
+    simple_engine_issue_matches: simpleMatches,
+    intel_engine_candidate_count: candidateEngines.length,
     intel_best_engine: bestIntel.engine,
     intel_best_pattern: bestIntel.pattern,
     intel_score: bestIntel.score,
@@ -328,31 +409,23 @@ function hasStrongInternalIntel(enginePack = {}) {
   if (intelPattern && intelScore >= 2) return true;
   if (simpleCount >= 2) return true;
   if (simpleCount >= 1 && enginePack?.detected_engine_name) return true;
+
   return false;
 }
 
-function buildEngineContextText(enginePack) {
-  const vehicle = enginePack?.vehicle || {};
-  const detectedEngineName = enginePack?.detected_engine_name || null;
-  const simpleMatches = Array.isArray(enginePack?.simple_engine_issue_matches)
-    ? enginePack.simple_engine_issue_matches
-    : [];
-  const intelEngine = enginePack?.intel_best_engine || null;
-  const intelPattern = enginePack?.intel_best_pattern || null;
-
+function buildEngineContextText(enginePack = {}) {
   return `
-ENGINE_CONTEXT (FixLens Engine Intelligence):
-- VEHICLE_MENTION: ${JSON.stringify(vehicle)}
-- DETECTED_ENGINE_NAME_FROM_MAP: ${detectedEngineName ? detectedEngineName : "null"}
-- SIMPLE_ENGINE_ISSUES_MATCHED: ${JSON.stringify(simpleMatches)}
-- BEST_ENGINE_OBJECT: ${JSON.stringify(intelEngine)}
-- BEST_PATTERN_OBJECT: ${JSON.stringify(intelPattern)}
+ENGINE_CONTEXT:
+VEHICLE_MENTION=${JSON.stringify(enginePack?.vehicle || {})}
+DETECTED_ENGINE_NAME=${JSON.stringify(enginePack?.detected_engine_name || null)}
+SIMPLE_ENGINE_MATCHES=${JSON.stringify(enginePack?.simple_engine_issue_matches || [])}
+INTEL_ENGINE=${JSON.stringify(enginePack?.intel_best_engine || null)}
+INTEL_PATTERN=${JSON.stringify(enginePack?.intel_best_pattern || null)}
 
 RULES:
-- Use engine context only to sharpen diagnosis and next tests.
-- If BEST_PATTERN_OBJECT exists, choose only the most useful questions.
-- If internal engine/data evidence is already strong, prefer that before external search.
-- Never invent details not present here.
+- Use this only to sharpen diagnosis.
+- Prefer internal data before external search.
+- Never invent engine details not present above.
 `.trim();
 }
 
@@ -361,60 +434,69 @@ RULES:
 ========================================================= */
 function looksLikeDiagnosisText(input = "") {
   const t = String(input || "").toLowerCase();
+
   const words = [
-    "noise","sound","rattle","knock","ticking","click","clunk","grind","squeal",
-    "vibration","shake","misfire","stall","idle","engine","brake","steering",
-    "overheat","smoke","leak","check engine","p0","code","codes",
-    "صوت","طقطقة","طرطقة","تك تك","نق","خبط","خشخشة","صرير","زقزقة",
-    "رجفة","اهتزاز","هزة","تقطيع","تنتيع","تفتفة",
-    "محرك","مكينة","فرامل","دركسون","ستيرنغ",
-    "حرارة","سخونة","دخان","تهريب","تسريب","لمبة","تشيك","عطل","كود","اكواد"
+    "noise", "sound", "rattle", "knock", "ticking", "click", "clunk",
+    "grind", "squeal", "vibration", "shake", "misfire", "stall",
+    "idle", "engine", "brake", "steering", "overheat", "smoke",
+    "leak", "check engine", "p0", "code", "codes",
+
+    "صوت", "طقطقة", "طرطقة", "تك تك", "نق", "خبط", "خشخشة", "صرير",
+    "رجفة", "اهتزاز", "هزة", "تقطيع", "تنتيع", "تفتفة", "محرك",
+    "مكينة", "فرامل", "دركسون", "ستيرنغ", "حرارة", "سخونة", "دخان",
+    "تهريب", "تسريب", "لمبة", "تشيك", "عطل", "كود", "اكواد"
   ];
-  return words.some((w) => t.includes(w));
+
+  return words.some((word) => t.includes(word));
 }
 
 function looksLikeNearbyRequest(input = "") {
   const t = String(input || "").toLowerCase();
-  const nearby = [
-    "near me","nearby","closest","around me","near",
-    "اقرب","أقرب","بالقرب","قريب","قريبة","حولّي","حولي","يمّي","جنبي"
+
+  const nearbyWords = [
+    "near me", "nearby", "closest", "around me", "near",
+    "اقرب", "أقرب", "بالقرب", "قريب", "قريبة", "حولي", "حوليّ", "جنبي", "يمي"
   ];
-  return nearby.some((w) => t.includes(w));
+
+  return nearbyWords.some((word) => t.includes(word));
 }
 
 function looksLikeShopOrPartsWords(input = "") {
   const t = String(input || "").toLowerCase();
-  const strong = [
-    "mechanic","garage","auto repair","repair shop","car repair",
-    "auto parts","car parts","parts store","tool store","hardware store",
-    "autozone","o'reilly","oreilly","advance auto","napa","price","prices","cost",
-    "ورشة","ورش","ورشة سيارات","تصليح سيارات","ميكانيكي","ميكانيك","مكانيكي","مكانيك",
-    "كراج","كراج سيارات","قطع غيار","محل قطع","محل قطع غيار","محل ادوات","محل أدوات",
-    "بنشر","بنچر","إطارات","اطارات","كهربائي سيارات","ورشة كهرباء","سمكري","حدادة سيارات",
-    "سعر","اسعار","تكلفة","قطعة","رقم القطعة"
+
+  const words = [
+    "mechanic", "garage", "auto repair", "repair shop", "car repair",
+    "auto parts", "car parts", "parts store", "autozone", "o'reilly",
+    "oreilly", "advance auto", "napa", "price", "prices", "cost",
+
+    "ورشة", "ورش", "ورشة سيارات", "تصليح سيارات", "ميكانيكي", "ميكانيك",
+    "كراج", "قطع غيار", "محل قطع", "محل قطع غيار", "سعر", "اسعار",
+    "تكلفة", "بنشر", "اطارات", "إطارات", "كهربائي سيارات", "سمكري"
   ];
-  return strong.some((w) => t.includes(w));
+
+  return words.some((word) => t.includes(word));
 }
 
-function looksLikeMapAddressWords(input = "") {
+function looksLikeMapWords(input = "") {
   const t = String(input || "").toLowerCase();
-  const weak = [
-    "address","location","map","google maps","directions","where","gps",
-    "عنوان","موقع","خرائط","خريطة","لوكيشن","دلني","وين","وينه","اشرلي","رمز بريدي"
+
+  const words = [
+    "address", "location", "map", "google maps", "directions", "gps", "where",
+    "عنوان", "موقع", "خرائط", "خريطة", "لوكيشن", "وين", "وينه", "دلني", "اشرلي"
   ];
-  return weak.some((w) => t.includes(w));
+
+  return words.some((word) => t.includes(word));
 }
 
 function looksLikePlacesRequest(input = "") {
-  const t = String(input || "").toLowerCase();
-  if (looksLikeNearbyRequest(t)) return true;
-  if (looksLikeShopOrPartsWords(t)) return true;
-  if (looksLikeMapAddressWords(t) && looksLikeShopOrPartsWords(t)) return true;
+  if (looksLikeNearbyRequest(input)) return true;
+  if (looksLikeShopOrPartsWords(input)) return true;
+  if (looksLikeMapWords(input) && looksLikeShopOrPartsWords(input)) return true;
   return false;
 }
 
 function getLastAssistantText(history = []) {
-  for (let i = history.length - 1; i >= 0; i--) {
+  for (let i = history.length - 1; i >= 0; i -= 1) {
     if (history[i]?.role === "assistant") {
       return String(history[i]?.content || "");
     }
@@ -423,18 +505,31 @@ function getLastAssistantText(history = []) {
 }
 
 function looksLikePlacesFollowUp(history = []) {
-  const a = getLastAssistantText(history).toLowerCase();
-  if (!a) return false;
+  const lastAssistant = getLastAssistantText(history).toLowerCase();
+  if (!lastAssistant) return false;
 
-  const askSignals = [
-    "gps", "enable location", "allow location",
-    "zip", "zipcode", "postal",
-    "area", "neighborhood", "district", "where are you",
-    "فعّل gps", "فعل gps", "اسم المنطقة", "اسم الحي", "اسم الشارع",
-    "حدد المنطقة", "حدد الحي", "حدد موقعك", "موقعك", "وين انت", "وين", "بالقرب"
+  const signals = [
+    "gps",
+    "enable location",
+    "allow location",
+    "zip",
+    "zipcode",
+    "postal",
+    "area",
+    "neighborhood",
+    "district",
+    "where are you",
+    "فعّل gps",
+    "فعل gps",
+    "حدد موقعك",
+    "اسم المنطقة",
+    "اسم الحي",
+    "اسم الشارع",
+    "وين انت",
+    "بالقرب"
   ];
 
-  return askSignals.some((w) => a.includes(w));
+  return signals.some((signal) => lastAssistant.includes(signal));
 }
 
 function looksLikeLocationOnlyText(text = "") {
@@ -449,52 +544,50 @@ function looksLikeLocationOnlyText(text = "") {
 /* =========================================================
    PLACES QUERY
 ========================================================= */
-function hasLatLng(loc) {
-  if (!loc || typeof loc !== "object") return false;
-  const lat = Number(loc.lat ?? loc.latitude);
-  const lng = Number(loc.lng ?? loc.longitude ?? loc.lon);
-  return Number.isFinite(lat) && Number.isFinite(lng);
-}
-
 function inferPlacesCategory(text = "") {
   const t = String(text || "").toLowerCase();
 
   if (
-    ["parts", "auto parts", "car parts", "parts store", "autozone", "o'reilly", "oreilly",
-      "advance auto", "napa", "قطع", "قطع غيار", "محل قطع", "محل قطع غيار", "price", "prices"
-    ].some((w) => t.includes(w))
+    [
+      "parts", "auto parts", "car parts", "parts store", "autozone", "o'reilly",
+      "oreilly", "advance auto", "napa", "قطع", "قطع غيار", "محل قطع",
+      "محل قطع غيار", "price", "prices"
+    ].some((word) => t.includes(word))
   ) {
     return "auto parts store";
   }
 
   if (
-    ["tire", "tyre", "tires", "tyres", "tire shop", "wheel", "alignment",
-      "إطارات", "اطارات", "بنشر", "بنچر", "ميزان", "ترصيص"
-    ].some((w) => t.includes(w))
+    [
+      "tire", "tyre", "tires", "tyres", "tire shop", "wheel", "alignment",
+      "إطارات", "اطارات", "بنشر", "ميزان", "ترصيص"
+    ].some((word) => t.includes(word))
   ) {
     return "tire shop";
   }
 
   if (
-    ["brake", "brakes", "brake shop", "فرامل", "بريك", "هوبات", "سفايف"].some((w) =>
-      t.includes(w)
-    )
+    [
+      "brake", "brakes", "brake shop", "فرامل", "بريك", "هوبات", "سفايف"
+    ].some((word) => t.includes(word))
   ) {
     return "brake shop";
   }
 
   if (
-    ["auto electrician", "car electrician", "electrical", "starter", "alternator", "battery",
-      "كهربائي سيارات", "كهرباء سيارات", "دينمو", "سلف", "بطارية"
-    ].some((w) => t.includes(w))
+    [
+      "auto electrician", "car electrician", "electrical", "starter",
+      "alternator", "battery", "كهربائي سيارات", "كهرباء سيارات",
+      "دينمو", "سلف", "بطارية"
+    ].some((word) => t.includes(word))
   ) {
     return "auto electrical repair";
   }
 
   if (
-    ["body shop", "collision", "paint", "dent", "panel", "سمكري", "صبغ", "دهان"].some((w) =>
-      t.includes(w)
-    )
+    [
+      "body shop", "collision", "paint", "dent", "panel", "سمكري", "صبغ", "دهان"
+    ].some((word) => t.includes(word))
   ) {
     return "auto body shop";
   }
@@ -518,24 +611,30 @@ function extractLocationHint(text = "") {
   return "";
 }
 
-function buildPlacesQuerySmart({ userText = "", user_location = "", placesFollowUp = false }) {
+function buildPlacesQuerySmart({
+  userText = "",
+  userLocation = null,
+  placesFollowUp = false,
+}) {
   const raw = String(userText || "").trim();
   const category = inferPlacesCategory(raw);
 
-  if (hasLatLng(user_location)) return category;
+  if (hasLatLng(userLocation)) return category;
 
-  const locStr =
-    typeof user_location === "string" && user_location.trim() ? user_location.trim() : "";
+  const locationString =
+    typeof userLocation === "string" && userLocation.trim()
+      ? userLocation.trim()
+      : "";
 
   if (placesFollowUp) {
-    const followLoc = raw.length <= 80 ? raw : extractLocationHint(raw);
-    const finalLoc = (followLoc || locStr || raw).trim();
-    return finalLoc ? `${category} near ${finalLoc}` : category;
+    const followLocation = raw.length <= 80 ? raw : extractLocationHint(raw);
+    const finalLocation = (followLocation || locationString || raw).trim();
+    return finalLocation ? `${category} near ${finalLocation}` : category;
   }
 
   const hint = extractLocationHint(raw);
-  const bestLoc = (hint || locStr || "").trim();
-  if (bestLoc) return `${category} near ${bestLoc}`;
+  const bestLocation = (hint || locationString || "").trim();
+  if (bestLocation) return `${category} near ${bestLocation}`;
 
   return category;
 }
@@ -543,8 +642,8 @@ function buildPlacesQuerySmart({ userText = "", user_location = "", placesFollow
 /* =========================================================
    AUDIO
 ========================================================= */
-function containsSmellWords(s = "") {
-  const t = String(s || "").toLowerCase();
+function containsSmellWords(text = "") {
+  const t = String(text || "").toLowerCase();
   return (
     t.includes("smell") ||
     t.includes("burning") ||
@@ -556,35 +655,13 @@ function containsSmellWords(s = "") {
   );
 }
 
-function estimateSpeechFromVerboseOrText(res) {
-  const segments = Array.isArray(res?.segments) ? res.segments : [];
-  if (segments.length > 0) {
-    let speechVotes = 0;
-    let total = 0;
-    for (const s of segments) {
-      const p = Number(s?.no_speech_prob);
-      if (!Number.isFinite(p)) continue;
-      total += 1;
-      if (p < 0.6) speechVotes += 1;
-    }
-    if (total > 0) {
-      const ratio = speechVotes / total;
-      if (ratio >= 0.5) return { hasSpeech: true, score: ratio };
-      if (ratio <= 0.25) return { hasSpeech: false, score: ratio };
-      return { hasSpeech: null, score: ratio };
-    }
-  }
-
-  const rawText = String(res?.text || "").trim();
-  if (!rawText) return { hasSpeech: false, score: 0 };
-  const looksWordy = /[a-zA-Z\u0600-\u06FF]{3,}/.test(rawText);
-  if (!looksWordy) return { hasSpeech: null, score: 0.3 };
-  return { hasSpeech: true, score: 0.8 };
-}
-
 async function transcribeAudioSmart(audioBase64, locale, audioKind = "car_sound") {
   if (!audioBase64 || String(audioBase64).length < 50) {
-    return { ok: false, text: "", audio_type: "none", speech_score: 0 };
+    return {
+      ok: false,
+      text: "",
+      audio_type: "none",
+    };
   }
 
   const kind = String(audioKind || "car_sound").toLowerCase().trim();
@@ -594,67 +671,75 @@ async function transcribeAudioSmart(audioBase64, locale, audioKind = "car_sound"
   try {
     fs.writeFileSync(tempPath, Buffer.from(audioBase64, "base64"));
 
-    const res = await withRetry(() =>
+    const result = await withRetry(() =>
       withTimeout(
         client.audio.transcriptions.create({
           file: fs.createReadStream(tempPath),
           model: TRANSCRIBE_MODEL,
-          response_format: "verbose_json",
-          prompt:
-            "Audio may be speech or non-speech automotive sounds such as engine, brakes, ticking, squeal, idle, steering, or exhaust. If no spoken words, keep text very short or empty.",
+          response_format: "json",
           language: String(locale || "").split("-")[0] || undefined,
+          prompt:
+            "Audio may contain spoken automotive diagnosis or non-speech car sounds. If no spoken words are present, return an empty or very short transcript.",
         }),
         Number(process.env.WHISPER_TIMEOUT_MS || 15000),
-        "whisper_timeout"
+        "transcription_timeout"
       )
     );
 
-    const rawText = String(res?.text || "").trim();
-    const speechEst = estimateSpeechFromVerboseOrText(res);
+    const text = String(result?.text || "").trim();
+    const looksLikeSpeech = /[a-zA-Z\u0600-\u06FF]{3,}/.test(text);
 
     if (!isVoice) {
-      const looksWordy = /[a-zA-Z\u0600-\u06FF]{3,}/.test(rawText);
-      if (rawText && looksWordy && rawText.length <= 240) {
+      if (looksLikeSpeech && text.length <= 240) {
         return {
           ok: true,
-          text: rawText,
+          text,
           audio_type: "speech_detected_in_car_sound",
-          speech_score: speechEst.score,
         };
       }
-      return { ok: true, text: "", audio_type: "non_speech", speech_score: speechEst.score };
+
+      return {
+        ok: true,
+        text: "",
+        audio_type: "non_speech",
+      };
     }
 
-    if (rawText.length > 320) {
-      return { ok: true, text: "", audio_type: "speech_garbage", speech_score: speechEst.score };
+    if (!looksLikeSpeech || text.length > 320) {
+      return {
+        ok: true,
+        text: "",
+        audio_type: "non_speech",
+      };
     }
 
-    if (speechEst.hasSpeech === false) {
-      return { ok: true, text: "", audio_type: "non_speech", speech_score: speechEst.score };
-    }
-
-    const looksWordy = /[a-zA-Z\u0600-\u06FF]{3,}/.test(rawText);
-    if (rawText && looksWordy) {
-      return { ok: true, text: rawText, audio_type: "speech", speech_score: speechEst.score };
-    }
-
-    return { ok: true, text: "", audio_type: "non_speech", speech_score: speechEst.score };
-  } catch (err) {
-    console.error("Audio Error:", err?.message || err);
-    return { ok: false, text: "", audio_type: "error", speech_score: 0 };
+    return {
+      ok: true,
+      text,
+      audio_type: "speech",
+    };
+  } catch (error) {
+    console.error("Audio Error:", error?.message || error);
+    return {
+      ok: false,
+      text: "",
+      audio_type: "error",
+    };
   } finally {
     try {
       if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
-    } catch {}
+    } catch {
+      // ignore cleanup errors
+    }
   }
 }
 
 /* =========================================================
    RESPONSES API HELPERS
 ========================================================= */
-function tryJsonParse(s = "") {
+function tryJsonParse(input = "") {
   try {
-    return JSON.parse(String(s || "").trim());
+    return JSON.parse(String(input || "").trim());
   } catch {
     return null;
   }
@@ -667,7 +752,10 @@ function extractFirstJsonObject(text = "") {
   const direct = tryJsonParse(raw);
   if (direct) return direct;
 
-  const fenced = raw.match(/```json\s*([\s\S]*?)```/i) || raw.match(/```\s*([\s\S]*?)```/i);
+  const fenced =
+    raw.match(/```json\s*([\s\S]*?)```/i) ||
+    raw.match(/```\s*([\s\S]*?)```/i);
+
   if (fenced?.[1]) {
     const parsed = tryJsonParse(fenced[1]);
     if (parsed) return parsed;
@@ -683,17 +771,21 @@ function extractFirstJsonObject(text = "") {
   return null;
 }
 
-function getResponseText(res) {
-  if (!res) return "";
-  if (typeof res.output_text === "string" && res.output_text.trim()) return res.output_text.trim();
+function getResponseText(response) {
+  if (!response) return "";
+  if (typeof response.output_text === "string" && response.output_text.trim()) {
+    return response.output_text.trim();
+  }
 
-  const output = Array.isArray(res.output) ? res.output : [];
+  const output = Array.isArray(response.output) ? response.output : [];
   const texts = [];
 
   for (const item of output) {
     const content = Array.isArray(item?.content) ? item.content : [];
-    for (const c of content) {
-      if (c?.type === "output_text" && c?.text) texts.push(String(c.text));
+    for (const chunk of content) {
+      if (chunk?.type === "output_text" && chunk?.text) {
+        texts.push(String(chunk.text));
+      }
     }
   }
 
@@ -712,7 +804,10 @@ function historyItemToResponsesMessage(item) {
 }
 
 function buildResponsesHistory(history = []) {
-  return history.slice(-6).map(historyItemToResponsesMessage).filter(Boolean);
+  return history
+    .slice(-8)
+    .map(historyItemToResponsesMessage)
+    .filter(Boolean);
 }
 
 async function createDoctorResponse({
@@ -721,7 +816,7 @@ async function createDoctorResponse({
   imageBase64 = "",
   extraUserInstruction = "",
   maxOutputTokens = 900,
-  temperature = 0.3,
+  temperature = 0.2,
 }) {
   const input = [
     ...buildResponsesHistory(history),
@@ -749,20 +844,18 @@ async function createDoctorResponse({
     });
   }
 
-  const response = await withRetry(
-    () =>
-      withTimeout(
-        client.responses.create({
-          model: CHAT_MODEL,
-          instructions: buildDoctorSystemPrompt(),
-          input,
-          temperature,
-          max_output_tokens: maxOutputTokens,
-        }),
-        Number(process.env.CHAT_TIMEOUT_MS || 25000),
-        "responses_timeout"
-      ),
-    2
+  const response = await withRetry(() =>
+    withTimeout(
+      client.responses.create({
+        model: CHAT_MODEL,
+        instructions: buildDoctorSystemPrompt(),
+        input,
+        temperature,
+        max_output_tokens: maxOutputTokens,
+      }),
+      Number(process.env.CHAT_TIMEOUT_MS || 25000),
+      "responses_timeout"
+    )
   );
 
   return {
@@ -774,19 +867,9 @@ async function createDoctorResponse({
 /* =========================================================
    OUTPUT GUARDS
 ========================================================= */
-function violatesNoPlaces(reply = "") {
-  const t = String(reply || "").toLowerCase();
-  const bad = [
-    "zip","zipcode","postal","postcode","gps","near me","nearby","closest","google maps","maps","address","location",
-    "area","neighborhood","district","city","town","where are you",
-    "ورشة","ورش","ميكانيك","ميكانيكي","كراج","خرائط","خريطة","لوكيشن","عنوان","موقعك","حدد موقعك",
-    "رمز بريدي","قريب","اقرب","أقرب","منطقة","حي","مدينة","وين انت","دلني","اشرلي"
-  ];
-  return bad.some((w) => t.includes(w));
-}
-
 function looksLikeRefusal(text = "") {
   const t = String(text || "").toLowerCase();
+
   return [
     "i can't assist",
     "i cannot assist",
@@ -795,35 +878,63 @@ function looksLikeRefusal(text = "") {
     "cannot help with that request",
     "can't help with that",
     "not able to help",
-    "policy",
     "cannot comply",
     "i can't provide",
-  ].some((p) => t.includes(p));
+    "policy",
+  ].some((phrase) => t.includes(phrase));
+}
+
+function violatesNoPlaces(reply = "") {
+  const t = String(reply || "").toLowerCase();
+
+  const blocked = [
+    "zip", "zipcode", "postal", "postcode", "gps", "near me", "nearby", "closest",
+    "google maps", "maps", "address", "location", "area", "neighborhood", "district",
+    "city", "town", "where are you",
+    "ورشة", "ورش", "ميكانيكي", "ميكانيك", "كراج", "خرائط", "خريطة", "لوكيشن",
+    "عنوان", "حدد موقعك", "موقعك", "قريب", "اقرب", "أقرب", "منطقة", "حي", "مدينة"
+  ];
+
+  return blocked.some((word) => t.includes(word));
 }
 
 function safeFallbackReply(locale = "en") {
-  const isAr = String(locale || "").toLowerCase().startsWith("ar");
-  return isAr
-    ? "وصلتني الأعراض أو المرفقات. أقوى الاحتمالات الآن: misfire من بواجي أو كويلات، خلل هواء أو وقود مثل MAF أو بخاخ، أو دق حقيقي بسبب توقيت أو وقود. حتى أحددها بدقة: هل لمبة Check Engine شغالة، وهل الصوت أقرب إلى تك تك سريع أم دق ثقيل؟"
-    : "I got your symptoms or attachments. The strongest possibilities right now are misfire from plugs or coils, an air-fuel issue like MAF or injectors, or true knock from timing or fuel. To narrow it down properly: is the Check Engine light on, and is the sound more like a fast tick or a deeper knock?";
+  if (isArabic(locale)) {
+    return "وصلتني الأعراض أو المرفقات. أقوى الاحتمالات الآن هي misfire من البواجي أو الكويلات، أو خلل هواء ووقود مثل MAF أو البخاخات، أو دق حقيقي بسبب التوقيت أو الوقود. حتى أحددها أدق: هل لمبة Check Engine شغالة، وهل الصوت أقرب إلى تك تك سريع أم دق ثقيل؟";
+  }
+
+  return "I got your symptoms or attachments. The strongest possibilities right now are misfire from plugs or coils, an air-fuel issue like MAF or injectors, or true knock from timing or fuel. To narrow it down properly: is the Check Engine light on, and is the sound more like a fast tick or a deeper knock?";
 }
 
 /* =========================================================
    WORKSHOP FORMATTING
 ========================================================= */
 function formatWorkshopsForContext(workshops = []) {
-  const list = Array.isArray(workshops) ? workshops : [];
-  return list
+  return (Array.isArray(workshops) ? workshops : [])
     .slice(0, 6)
-    .map((w, idx) => {
-      const name = w?.name || w?.title || "Workshop";
-      const addr = w?.address || w?.formatted_address || w?.vicinity || "";
-      const phone = w?.phone || w?.formatted_phone_number || "";
-      const rating = w?.rating ? `rating:${w.rating}` : "";
-      const url = w?.maps_url || w?.google_maps_url || w?.googleMapsUri || w?.url || "";
-      const website = w?.website || w?.websiteUri || "";
-      const price = w?.price_hint || "";
-      return `${idx + 1}) ${[name, addr, phone, rating, price, url, website]
+    .map((shop, index) => {
+      const name = shop?.name || shop?.title || "Workshop";
+      const address = shop?.address || shop?.formatted_address || shop?.vicinity || "";
+      const phone = shop?.phone || shop?.formatted_phone_number || "";
+      const rating = shop?.rating ? `rating:${shop.rating}` : "";
+      const mapsUrl =
+        shop?.maps_url ||
+        shop?.google_maps_url ||
+        shop?.googleMapsUri ||
+        shop?.url ||
+        "";
+      const website = shop?.website || shop?.websiteUri || "";
+      const price = shop?.price_hint || "";
+
+      return `${index + 1}) ${[
+        name,
+        address,
+        phone,
+        rating,
+        price,
+        mapsUrl,
+        website,
+      ]
         .filter(Boolean)
         .join(" | ")}`;
     })
@@ -831,24 +942,28 @@ function formatWorkshopsForContext(workshops = []) {
 }
 
 function formatWorkshopsForUser(workshops = [], locale = "en") {
-  const isAr = String(locale || "").toLowerCase().startsWith("ar");
-  const list = Array.isArray(workshops) ? workshops : [];
+  const arabic = isArabic(locale);
 
-  return list
+  return (Array.isArray(workshops) ? workshops : [])
     .slice(0, 5)
-    .map((w, i) => {
-      const name = w?.name || w?.title || (isAr ? "ورشة" : "Shop");
-      const addr = w?.address || w?.formatted_address || w?.vicinity || "";
-      const phone = w?.phone || w?.formatted_phone_number || "";
-      const url = w?.maps_url || w?.google_maps_url || w?.googleMapsUri || w?.url || "";
-      const price = w?.price_hint || "";
+    .map((shop, index) => {
+      const name = shop?.name || shop?.title || (arabic ? "ورشة" : "Shop");
+      const address = shop?.address || shop?.formatted_address || shop?.vicinity || "";
+      const phone = shop?.phone || shop?.formatted_phone_number || "";
+      const mapsUrl =
+        shop?.maps_url ||
+        shop?.google_maps_url ||
+        shop?.googleMapsUri ||
+        shop?.url ||
+        "";
+      const price = shop?.price_hint || "";
 
       return [
-        `${i + 1}) ${name}`,
-        addr ? (isAr ? `العنوان: ${addr}` : `Address: ${addr}`) : "",
-        phone ? (isAr ? `هاتف: ${phone}` : `Phone: ${phone}`) : "",
+        `${index + 1}) ${name}`,
+        address ? (arabic ? `العنوان: ${address}` : `Address: ${address}`) : "",
+        phone ? (arabic ? `هاتف: ${phone}` : `Phone: ${phone}`) : "",
         price || "",
-        url ? (isAr ? `خرائط: ${url}` : `Maps: ${url}`) : "",
+        mapsUrl ? (arabic ? `خرائط: ${mapsUrl}` : `Maps: ${mapsUrl}`) : "",
       ]
         .filter(Boolean)
         .join("\n");
@@ -861,55 +976,52 @@ function formatWorkshopsForUser(workshops = [], locale = "en") {
 ========================================================= */
 function buildStrictContext({
   locale,
-  user_location,
+  userLocation,
+  text,
+  voiceText,
+  includeVoiceText,
+  audioAttached,
+  audioKindFinal,
+  audioType,
   placesIntent,
   engineContextText,
   verifiedData,
   verifiedWorkshops,
-  audioAttached,
-  audioKindFinal,
-  audioType,
-  includeVoiceText,
-  voiceText,
-  text,
-  dataFirstStrong,
+  internalIntelStrong,
 }) {
-  const audioNote = audioAttached
-    ? `AUDIO_NOTE: AUDIO_ATTACHED=true. AUDIO_KIND=${audioKindFinal || "car_sound"}. If AUDIO_KIND is non-speech car sound, do not pretend you analyzed the waveform.`
-    : "";
-
   return `
 STRICT_CONTEXT
-LOCALE: ${locale}
-PLACES_INTENT: ${placesIntent ? "true" : "false"}
-LOCATION: ${typeof user_location === "string" ? user_location : JSON.stringify(user_location)}
-DATA_FIRST_INTERNAL_INTEL_STRONG: ${dataFirstStrong ? "true" : "false"}
+LOCALE=${locale}
+PLACES_INTENT=${placesIntent ? "true" : "false"}
+LOCATION=${typeof userLocation === "string" ? userLocation : JSON.stringify(userLocation)}
+DATA_FIRST_INTERNAL_INTEL_STRONG=${internalIntelStrong ? "true" : "false"}
 
 ABSOLUTE_RULES:
-- If PLACES_INTENT:false => NEVER ask for ZIP/GPS/city and NEVER mention nearby shops/maps.
-- Reply in the user's language.
-- Sound like a senior diagnostic mechanic, not a generic assistant.
+- Reply in the locked user language only.
+- Sound like a senior diagnostic mechanic.
 - Lead with the strongest likely cause first.
-- Use internal data first before asking for external refinement when evidence is already strong.
-- No headings. No bullets. No numbering.
-- Ask max 2 questions only if they materially improve the next step.
-- If the issue is safety-critical, say so briefly and clearly.
+- Use internal data first.
+- If PLACES_INTENT=false, never ask for GPS, ZIP, city, maps, workshop, nearby shop, or location.
+- No headings.
+- No bullets.
+- No numbering.
+- Ask at most 2 questions only if they materially improve the next step.
+- If safety critical, say so briefly and clearly.
+- Be practical and causal.
 
 ${engineContextText}
 
-VERIFIED_DATA_JSON: ${JSON.stringify(verifiedData)}
-VERIFIED_WORKSHOPS_JSON: ${JSON.stringify(verifiedWorkshops)}
-WORKSHOPS_CONTEXT_TEXT:
-${formatWorkshopsForContext(verifiedWorkshops)}
+VERIFIED_DATA_JSON=${JSON.stringify(verifiedData || [])}
+VERIFIED_WORKSHOPS_JSON=${JSON.stringify(verifiedWorkshops || [])}
+WORKSHOPS_CONTEXT_TEXT=
+${formatWorkshopsForContext(verifiedWorkshops || [])}
 
-AUDIO_ATTACHED: ${audioAttached ? "true" : "false"}
-AUDIO_KIND: ${audioKindFinal || ""}
-AUDIO_TYPE: ${audioType}
-AUDIO_TRANSCRIPT: ${includeVoiceText ? voiceText : ""}
+AUDIO_ATTACHED=${audioAttached ? "true" : "false"}
+AUDIO_KIND=${audioKindFinal || ""}
+AUDIO_TYPE=${audioType || "none"}
+AUDIO_TRANSCRIPT=${includeVoiceText ? voiceText : ""}
 
-${audioNote}
-
-USER_INPUT: ${text.trim()}
+USER_INPUT=${text.trim()}
 `.trim();
 }
 
@@ -934,30 +1046,29 @@ Rules:
 - likely_causes: 1 to 4 items, strongest first
 - must_ask: 0 to 2 only
 - tests: 1 to 5 practical checks
-- needs_search=true only if external verified search materially improves the answer beyond current context and internal data
+- needs_search=true only if verified external search materially improves the answer beyond internal data
 - query="" unless needs_search=true
 - final_answer must be in locale "${locale}"
 - final_answer must sound like a trusted master mechanic
-- final_answer must be practical, causal, and natural
 - final_answer must not contain headings, bullets, or numbering
-- final_answer asks max 2 questions only if necessary
+- final_answer must ask max 2 questions only if truly needed
 `.trim();
 }
 
 function buildRewriteInstruction(locale = "en") {
   return `
-Rewrite the answer in locale "${locale}" as a real diagnostic mechanic.
+Rewrite the answer in locale "${locale}" as a real senior mechanic.
 
 Rules:
 - No headings
 - No bullets
 - No numbering
-- No ZIP/GPS/city/maps/shops unless PLACES_INTENT is true
+- No places/maps/GPS/location unless PLACES_INTENT=true
 - Max 2 questions only if essential
-- Sound calm, confident, and practical
-- Lead with the strongest likely cause
+- Calm, confident, practical
+- Strongest likely cause first
 
-Return only the final answer text.
+Return only final answer text.
 `.trim();
 }
 
@@ -970,10 +1081,10 @@ Rules:
 - No headings
 - No bullets
 - No numbering
-- No map/shop/location talk unless PLACES_INTENT is true
+- No place or location talk unless PLACES_INTENT=true
 - Max 2 questions only if essential
-- Use verified data only to sharpen diagnosis and next step
-- Clear, confident, natural
+- Use verified data only to sharpen the next step
+- Clear, practical, natural
 
 Return only the answer text.
 `.trim();
@@ -987,31 +1098,58 @@ function shouldAllowExternalRefinement({ diag1, enginePack, placesIntent }) {
 }
 
 /* =========================================================
+   SEARCH HELPERS
+========================================================= */
+async function searchSmart({
+  query,
+  userLocation,
+  locale,
+  allowPlaces,
+  placesRadiusMeters,
+}) {
+  return withRetry(() =>
+    withTimeout(
+      performSearch(query, userLocation, {
+        locale,
+        allowPlaces,
+        placesRadiusMeters,
+      }),
+      Number(process.env.SEARCH_TIMEOUT_MS || 15000),
+      "search_timeout"
+    )
+  );
+}
+
+/* =========================================================
    MAIN HANDLER
 ========================================================= */
 export async function handleFixLensRequest(req) {
-  const body = req.body || {};
-  const text = String(body.text || "");
+  const body = req?.body || {};
+  const text = String(body.text || body.message || body.userText || "").trim();
   const history = Array.isArray(body.history) ? body.history : [];
-
-  let locale = inferLocale({ locale: body.locale, text, history });
-
-  const user_location = normalizeUserLocation(body.user_location) || "";
-  const image_base_64 = body.image_base_64 || body.image_base64 || "";
-  const audio_base_64 = body.audio_base_64 || body.audio_base64 || "";
+  const imageBase64 = body.image_base_64 || body.image_base64 || "";
+  const audioBase64 = body.audio_base_64 || body.audio_base64 || "";
+  const audioKind = String(body.audio_kind || "").trim();
   const debugMode = Boolean(body.debug);
 
-  const audio_kind = String(body.audio_kind || "").trim();
-  const audioKindFinal = audio_base_64 ? (audio_kind || "car_sound") : "";
+  const userLocation = pickUserLocation(body);
   const placesRadiusMeters = Number(
-    body.places_radius_meters || process.env.PLACES_RADIUS_METERS || 25000
+    body.places_radius_meters ||
+      process.env.PLACES_RADIUS_METERS ||
+      25000
   );
 
+  let locale = inferLockedLocale({
+    locale: body.locale,
+    text,
+    history,
+  });
+
   try {
-    if (!text.trim() && !audio_base_64 && !image_base_64) {
+    if (!text && !imageBase64 && !audioBase64) {
       return {
         ok: false,
-        reply: String(locale || "").toLowerCase().startsWith("ar")
+        reply: isArabic(locale)
           ? "اكتب الأعراض أو أرسل صورة أو صوت، وأنا أبدأ معك."
           : "Send symptoms or attach a photo or audio and I’ll start.",
         locale,
@@ -1021,88 +1159,103 @@ export async function handleFixLensRequest(req) {
     }
 
     // AUDIO
-    const audioAttached = Boolean(audio_base_64);
-    const audioSmart = await transcribeAudioSmart(audio_base_64, locale, audioKindFinal);
-    let voiceText = audioSmart.ok ? String(audioSmart.text || "").trim() : "";
-    const audioType = audioSmart.audio_type || "none";
+    const audioAttached = Boolean(audioBase64);
+    const audioKindFinal = audioAttached ? (audioKind || "car_sound") : "";
+    const audioResult = await transcribeAudioSmart(audioBase64, locale, audioKindFinal);
+
+    let voiceText = audioResult.ok ? String(audioResult.text || "").trim() : "";
+    const audioType = audioResult.audio_type || "none";
 
     if (!containsSmellWords(text) && containsSmellWords(voiceText)) {
       voiceText = "";
     }
 
     const includeVoiceText =
-      audioType === "speech" || audioType === "speech_detected_in_car_sound";
+      audioType === "speech" ||
+      audioType === "speech_detected_in_car_sound";
 
     const fullInput = `${text} ${includeVoiceText ? voiceText : ""}`.trim();
-    locale = inferLocale({ locale: body.locale || locale, text: fullInput || text, history });
+
+    // Keep locale locked from first user language unless explicit locale was sent
+    locale = inferLockedLocale({
+      locale: body.locale || locale,
+      text: fullInput || text,
+      history,
+    });
 
     // INTENT
     const diagnosisLikely = looksLikeDiagnosisText(fullInput || text);
-    const placesFollowUp = looksLikePlacesFollowUp(history) && looksLikeLocationOnlyText(text);
-    const placesRequested = looksLikePlacesRequest(text);
-    const placesIntent = Boolean((placesRequested || placesFollowUp) && !diagnosisLikely);
+    const placesFollowUp =
+      looksLikePlacesFollowUp(history) && looksLikeLocationOnlyText(text);
+    const placesRequested = looksLikePlacesRequest(fullInput || text);
+    const placesIntent = Boolean(
+      (placesRequested || placesFollowUp) && !diagnosisLikely
+    );
 
     const placesQuery = buildPlacesQuerySmart({
       userText: fullInput || text,
-      user_location,
+      userLocation,
       placesFollowUp,
     });
 
-    // INTERNAL DATA
+    // INTERNAL INTEL
     const enginePack = buildEnginePack(fullInput || text);
     const internalIntelStrong = hasStrongInternalIntel(enginePack);
 
-    // SEARCH (keep active for places / verified KB)
-    const searchPack = await withRetry(
-      () =>
-        withTimeout(
-          performSearch(placesQuery, user_location, {
-            locale,
-            allowPlaces: placesIntent,
-            placesRadiusMeters,
-          }),
-          Number(process.env.SEARCH_TIMEOUT_MS || 15000),
-          "search_timeout"
-        ),
-      2
-    );
+    // DATA-FIRST SEARCH
+    // Always allow search.js to use internal KB/data first.
+    // External places only when placesIntent=true.
+    const searchPack = await searchSmart({
+      query: placesIntent ? placesQuery : fullInput || text,
+      userLocation,
+      locale,
+      allowPlaces: placesIntent,
+      placesRadiusMeters,
+    });
 
-    const VERIFIED_DATA = Array.isArray(searchPack?.verified_data) ? searchPack.verified_data : [];
-    const VERIFIED_WORKSHOPS = Array.isArray(searchPack?.verified_workshops)
+    const verifiedData = Array.isArray(searchPack?.verified_data)
+      ? searchPack.verified_data
+      : [];
+
+    const verifiedWorkshops = Array.isArray(searchPack?.verified_workshops)
       ? searchPack.verified_workshops
       : [];
 
-    // DIRECT PLACES RESPONSE
-    if (placesIntent && VERIFIED_WORKSHOPS.length > 0) {
-      const isAr = String(locale || "").toLowerCase().startsWith("ar");
+    // DIRECT PLACES MODE
+    if (placesIntent && verifiedWorkshops.length > 0) {
       return {
         ok: true,
-        reply: isAr
-          ? `تفضل هذه النتائج القريبة حسب طلبك:\n\n${formatWorkshopsForUser(VERIFIED_WORKSHOPS, locale)}`
-          : `Here are nearby results based on your request:\n\n${formatWorkshopsForUser(VERIFIED_WORKSHOPS, locale)}`,
+        reply: isArabic(locale)
+          ? `تفضل هذه النتائج القريبة حسب طلبك:\n\n${formatWorkshopsForUser(
+              verifiedWorkshops,
+              locale
+            )}`
+          : `Here are nearby results based on your request:\n\n${formatWorkshopsForUser(
+              verifiedWorkshops,
+              locale
+            )}`,
         locale,
-        workshops_count: VERIFIED_WORKSHOPS.length,
+        workshops_count: verifiedWorkshops.length,
         ...(debugMode
           ? {
               debug: {
                 stage: "places_direct_list",
+                locale,
                 placesIntent,
                 placesRequested,
                 placesFollowUp,
                 placesQuery,
-                user_location,
+                userLocation,
               },
             }
           : {}),
       };
     }
 
-    // NO PLACES RESULTS
-    if (placesIntent && VERIFIED_WORKSHOPS.length === 0) {
-      const isAr = String(locale || "").toLowerCase().startsWith("ar");
+    if (placesIntent && verifiedWorkshops.length === 0) {
       return {
         ok: true,
-        reply: isAr
+        reply: isArabic(locale)
           ? (placesFollowUp
               ? "ما ظهرت نتائج واضحة لهذا الموقع. جرّب تكتب المكان بشكل أدق أو فعّل GPS داخل التطبيق، وبعدها أعطيك النتائج مع الخرائط."
               : "أقدر أطلع لك ورش أو محلات أو أسعار قريبة، لكن أحتاج GPS أو اسم المنطقة أو الشارع بشكل أوضح. بعدها أعطيك النتائج مع الخرائط.")
@@ -1114,65 +1267,61 @@ export async function handleFixLensRequest(req) {
         ...(debugMode
           ? {
               debug: {
-                stage: "places_intent_but_zero_results",
-                diagnosisLikely,
+                stage: "places_zero_results",
+                locale,
                 placesIntent,
                 placesRequested,
                 placesFollowUp,
                 placesQuery,
-                user_location,
+                userLocation,
               },
             }
           : {}),
       };
     }
 
-    // MAIN CONTEXT
+    // DIAGNOSIS MODE
     const engineContextText = buildEngineContextText(enginePack);
 
-    const strictText = buildStrictContext({
+    const strictContext = buildStrictContext({
       locale,
-      user_location,
-      placesIntent,
-      engineContextText,
-      verifiedData: VERIFIED_DATA,
-      verifiedWorkshops: VERIFIED_WORKSHOPS,
+      userLocation,
+      text: fullInput || text,
+      voiceText,
+      includeVoiceText,
       audioAttached,
       audioKindFinal,
       audioType,
-      includeVoiceText,
-      voiceText,
-      text,
-      dataFirstStrong: internalIntelStrong,
+      placesIntent,
+      engineContextText,
+      verifiedData,
+      verifiedWorkshops,
+      internalIntelStrong,
     });
 
-    // STAGE 1
     const stage1 = await createDoctorResponse({
       history,
-      userTextBlock: strictText,
-      imageBase64: image_base_64,
+      userTextBlock: strictContext,
+      imageBase64,
       extraUserInstruction: buildStage1Instruction(locale),
       maxOutputTokens: Number(process.env.FIXLENS_MAX_TOKENS || 1100),
-      temperature: Number(process.env.FIXLENS_TEMPERATURE || 0.3),
+      temperature: Number(process.env.FIXLENS_TEMPERATURE || 0.2),
     });
 
-    const raw1 = String(stage1?.text || "").trim();
+    const rawStage1 = String(stage1?.text || "").trim();
 
-    if (looksLikeRefusal(raw1)) {
+    if (looksLikeRefusal(rawStage1)) {
       return {
         ok: true,
         reply: safeFallbackReply(locale),
         locale,
-        workshops_count: VERIFIED_WORKSHOPS.length,
+        workshops_count: verifiedWorkshops.length,
         ...(debugMode
           ? {
               debug: {
                 stage: "refusal_guard_stage1",
-                raw1,
-                audioType,
-                speech_score: audioSmart.speech_score,
-                diagnosisLikely,
-                placesIntent,
+                locale,
+                rawStage1,
                 enginePack,
               },
             }
@@ -1180,25 +1329,23 @@ export async function handleFixLensRequest(req) {
       };
     }
 
-    const diag1 = extractFirstJsonObject(raw1);
-    let answer1 = String(diag1?.final_answer || "").trim();
+    const diag1 = extractFirstJsonObject(rawStage1);
 
     if (!diag1) {
-      const fallback = raw1 || safeFallbackReply(locale);
+      const fallback = rawStage1 || safeFallbackReply(locale);
       return {
         ok: true,
-        reply: looksLikeRefusal(fallback) ? safeFallbackReply(locale) : fallback,
+        reply: looksLikeRefusal(fallback)
+          ? safeFallbackReply(locale)
+          : fallback,
         locale,
-        workshops_count: VERIFIED_WORKSHOPS.length,
+        workshops_count: verifiedWorkshops.length,
         ...(debugMode
           ? {
               debug: {
-                stage: "ok_no_json_stage1",
-                raw1,
-                audioType,
-                speech_score: audioSmart.speech_score,
-                diagnosisLikely,
-                placesIntent,
+                stage: "stage1_non_json_fallback",
+                locale,
+                rawStage1,
                 enginePack,
               },
             }
@@ -1206,27 +1353,27 @@ export async function handleFixLensRequest(req) {
       };
     }
 
-    if (!answer1) answer1 = safeFallbackReply(locale);
+    let answer = String(diag1?.final_answer || "").trim() || safeFallbackReply(locale);
 
-    if (!placesIntent && violatesNoPlaces(answer1)) {
+    if (!placesIntent && violatesNoPlaces(answer)) {
       const rewrite = await createDoctorResponse({
         history: [],
-        userTextBlock: strictText,
-        imageBase64: image_base_64,
+        userTextBlock: strictContext,
+        imageBase64,
         extraUserInstruction: buildRewriteInstruction(locale),
-        maxOutputTokens: 750,
-        temperature: 0.2,
+        maxOutputTokens: 700,
+        temperature: 0.15,
       });
 
-      const forced = String(rewrite?.text || "").trim();
-      if (forced) answer1 = forced;
+      const rewritten = String(rewrite?.text || "").trim();
+      if (rewritten) answer = rewritten;
     }
 
-    if (looksLikeRefusal(answer1)) {
-      answer1 = safeFallbackReply(locale);
+    if (looksLikeRefusal(answer)) {
+      answer = safeFallbackReply(locale);
     }
 
-    // STAGE 2 (optional, data-first)
+    // OPTIONAL REFINEMENT
     const needsSearch = Boolean(diag1?.needs_search);
     const searchQuery = String(diag1?.query || "").trim();
     const queryLooksPlacey = looksLikePlacesRequest(searchQuery);
@@ -1243,84 +1390,80 @@ export async function handleFixLensRequest(req) {
       searchQuery.length >= 3 &&
       !(!placesIntent && queryLooksPlacey)
     ) {
-      const searchPack2 = await withRetry(
-        () =>
-          withTimeout(
-            performSearch(searchQuery, user_location, {
-              locale,
-              allowPlaces: placesIntent,
-              placesRadiusMeters,
-            }),
-            Number(process.env.SEARCH_TIMEOUT_MS || 15000),
-            "search_timeout"
-          ),
-        2
-      );
+      const refineSearch = await searchSmart({
+        query: searchQuery,
+        userLocation,
+        locale,
+        allowPlaces: placesIntent,
+        placesRadiusMeters,
+      });
 
-      const VERIFIED_DATA_2 = Array.isArray(searchPack2?.verified_data)
-        ? searchPack2.verified_data
-        : [];
-      const VERIFIED_WORKSHOPS_2 = Array.isArray(searchPack2?.verified_workshops)
-        ? searchPack2.verified_workshops
+      const verifiedData2 = Array.isArray(refineSearch?.verified_data)
+        ? refineSearch.verified_data
         : [];
 
-      const refineStrict = `
+      const verifiedWorkshops2 = Array.isArray(refineSearch?.verified_workshops)
+        ? refineSearch.verified_workshops
+        : [];
+
+      const refineContext = `
 STRICT_CONTEXT
-LOCALE: ${locale}
-PLACES_INTENT: ${placesIntent ? "true" : "false"}
-LOCATION: ${typeof user_location === "string" ? user_location : JSON.stringify(user_location)}
+LOCALE=${locale}
+PLACES_INTENT=${placesIntent ? "true" : "false"}
+LOCATION=${typeof userLocation === "string" ? userLocation : JSON.stringify(userLocation)}
 
 ABSOLUTE_RULES:
-- If PLACES_INTENT:false => NEVER ask for ZIP/GPS/city and NEVER mention shops/maps.
-- Reply in the user's language only.
+- Reply in the locked user language only.
 - Sound like a senior mechanic.
-- No headings. No bullets. No numbering.
-- Ask max 2 questions only if essential.
+- No headings.
+- No bullets.
+- No numbering.
+- If PLACES_INTENT=false, do not mention maps, shops, GPS, or location.
+- Ask at most 2 questions only if essential.
 
 ${engineContextText}
 
-DIAG_JSON_FROM_STAGE1: ${JSON.stringify(diag1)}
-VERIFIED_DATA_JSON: ${JSON.stringify(VERIFIED_DATA_2)}
-VERIFIED_WORKSHOPS_JSON: ${JSON.stringify(VERIFIED_WORKSHOPS_2)}
-WORKSHOPS_CONTEXT_TEXT:
-${formatWorkshopsForContext(VERIFIED_WORKSHOPS_2)}
+DIAG_JSON_FROM_STAGE1=${JSON.stringify(diag1)}
+VERIFIED_DATA_JSON=${JSON.stringify(verifiedData2)}
+VERIFIED_WORKSHOPS_JSON=${JSON.stringify(verifiedWorkshops2)}
+WORKSHOPS_CONTEXT_TEXT=
+${formatWorkshopsForContext(verifiedWorkshops2)}
 
-AUDIO_ATTACHED: ${audioAttached ? "true" : "false"}
-AUDIO_KIND: ${audioKindFinal || ""}
-AUDIO_TYPE: ${audioType}
-AUDIO_TRANSCRIPT: ${includeVoiceText ? voiceText : ""}
+AUDIO_ATTACHED=${audioAttached ? "true" : "false"}
+AUDIO_KIND=${audioKindFinal || ""}
+AUDIO_TYPE=${audioType}
+AUDIO_TRANSCRIPT=${includeVoiceText ? voiceText : ""}
 
-USER_INPUT: ${text.trim()}
+USER_INPUT=${(fullInput || text).trim()}
 `.trim();
 
       const stage2 = await createDoctorResponse({
         history: [],
-        userTextBlock: refineStrict,
-        imageBase64: image_base_64,
+        userTextBlock: refineContext,
+        imageBase64,
         extraUserInstruction: buildRefineInstruction(locale),
         maxOutputTokens: Number(process.env.FIXLENS_MAX_TOKENS || 850),
-        temperature: 0.28,
+        temperature: 0.2,
       });
 
       let reply2 =
-        String(stage2?.text || "").trim() || answer1 || safeFallbackReply(locale);
+        String(stage2?.text || "").trim() ||
+        answer ||
+        safeFallbackReply(locale);
 
       if (looksLikeRefusal(reply2)) reply2 = safeFallbackReply(locale);
-      if (!placesIntent && violatesNoPlaces(reply2)) reply2 = answer1;
+      if (!placesIntent && violatesNoPlaces(reply2)) reply2 = answer;
 
       return {
         ok: true,
         reply: reply2,
         locale,
-        workshops_count: VERIFIED_WORKSHOPS_2.length,
+        workshops_count: verifiedWorkshops2.length,
         ...(debugMode
           ? {
               debug: {
                 stage: "ok_refined_external",
-                audioType,
-                speech_score: audioSmart.speech_score,
-                diagnosisLikely,
-                placesIntent,
+                locale,
                 diag1,
                 searchQuery,
                 enginePack,
@@ -1334,21 +1477,18 @@ USER_INPUT: ${text.trim()}
 
     return {
       ok: true,
-      reply: answer1 || safeFallbackReply(locale),
+      reply: answer,
       locale,
-      workshops_count: VERIFIED_WORKSHOPS.length,
+      workshops_count: verifiedWorkshops.length,
       ...(debugMode
         ? {
             debug: {
               stage: "ok_stage1",
-              audioType,
-              speech_score: audioSmart.speech_score,
+              locale,
               diagnosisLikely,
               placesIntent,
-              diag1,
-              enginePack,
               placesQuery,
-              allowExternalRefinement,
+              enginePack,
               internalIntelStrong,
             },
           }
@@ -1356,9 +1496,10 @@ USER_INPUT: ${text.trim()}
     };
   } catch (error) {
     console.error("FixLens Fatal:", error?.message || error);
+
     return {
       ok: false,
-      reply: String(locale || "").toLowerCase().startsWith("ar")
+      reply: isArabic(locale)
         ? "حدث خطأ مؤقت، أعد المحاولة."
         : "Temporary error, please retry.",
       locale,
