@@ -1,4 +1,4 @@
-// search.js — FixLens v3.0.0
+// search.js — FixLens v3.0.1
 // Clean + data-first + stable fields
 // Goals:
 // - Search internal KB first using manifest-selected files
@@ -70,7 +70,7 @@ function loadManifestOnce() {
 function normalizeText(s = "") {
   return String(s || "")
     .toLowerCase()
-    .replace(/[^\p{L}\p{N}\s\-\.\,]/gu, " ")
+    .replace(/[^a-z0-9\u0600-\u06FF\u0400-\u04FF\u4E00-\u9FFF\u3040-\u30FF\uAC00-\uD7AF\s\-\.\,]/gi, " ")
     .replace(/\s+/g, " ")
     .trim();
 }
@@ -347,9 +347,7 @@ function looksLikePlacesIntent(q = "") {
 function detectModeFromText(q = "") {
   const t = String(q || "").toLowerCase();
 
-  if (
-    hasAny(t, ["tire", "tyre", "اطار", "إطار", "اطارات", "إطارات", "بنشر", "ترصيص"])
-  ) {
+  if (hasAny(t, ["tire", "tyre", "اطار", "إطار", "اطارات", "إطارات", "بنشر", "ترصيص"])) {
     return "tire";
   }
 
@@ -478,7 +476,6 @@ async function searchPlaces({ query, userLocation, locale, radiusMeters }) {
   const zip = extractZip(query);
   if (zip) locText = zip;
 
-  // No GPS and no text location => skip to avoid random/wasteful results
   if (!gps && !locText) return [];
 
   const textQuery = gps ? baseQuery : `${baseQuery} in ${locText}`;
@@ -594,10 +591,8 @@ export async function performSearch(userQuery, userLocation, opts = {}) {
 
   const q = String(userQuery || "").trim();
 
-  // A) Local KB first
   const verified_data = q.length >= 2 ? searchLocalKB(q, maxResults) : [];
 
-  // B) Places only if clearly allowed + intent detected
   let verified_workshops = [];
   if (allowPlaces && looksLikePlacesIntent(q)) {
     verified_workshops = await searchPlaces({
