@@ -1,11 +1,10 @@
-// service.js — FixLens Doctor Brain v4.0.0
-// Goals:
+// service.js — FixLens Doctor Brain v4.1.0
+// Stable version:
 // - Data-first diagnosis
-// - Global multilingual replies with language lock from first user language
-// - GPS + places support
+// - Language lock
+// - Safer GPS / places routing
+// - Safer image handling
 // - Search only when needed
-// - Clean Responses API flow
-// - Safer audio transcription flow using supported json format
 
 import OpenAI from "openai";
 import fs from "fs";
@@ -164,7 +163,6 @@ function inferLockedLocale({ locale, text, history = [] }) {
   const explicit = normalizeLocale(locale);
   if (explicit) return explicit;
 
-  // lock to the first meaningful user message language
   for (const item of history) {
     if (item?.role !== "user") continue;
     const content = String(item?.content || "").trim();
@@ -532,13 +530,29 @@ function looksLikePlacesFollowUp(history = []) {
   return signals.some((signal) => lastAssistant.includes(signal));
 }
 
-function looksLikeLocationOnlyText(text = "") {
+function looksLikeActualLocationAnswer(text = "") {
   const t = String(text || "").trim();
   if (!t) return false;
-  if (t.length > 80) return false;
-  if (looksLikeDiagnosisText(t)) return false;
-  if (looksLikePlacesRequest(t)) return false;
-  return /^[\u0600-\u06FFa-zA-Z0-9\s\-\.,#]+$/.test(t);
+
+  if (/^-?\d+(\.\d+)?\s*,\s*-?\d+(\.\d+)?$/.test(t)) return true;
+  if (/^\d{5}(?:-\d{4})?$/.test(t)) return true;
+
+  const lower = t.toLowerCase();
+
+  const locWords = [
+    "louisville", "kentucky", "ky", "new york", "california", "texas",
+    "street", "st.", "ave", "avenue", "road", "rd", "blvd",
+    "شارع", "الشارع", "منطقة", "حي", "قرب", "بالقرب", "جنب", "خلف",
+    "بغداد", "الرياض", "دبي", "عمان", "القاهرة"
+  ];
+
+  if (locWords.some((w) => lower.includes(w))) return true;
+
+  if (/^[a-zA-Z\u0600-\u06FF\s.\-']{2,40},\s*[a-zA-Z]{2,20}$/.test(t)) {
+    return true;
+  }
+
+  return false;
 }
 
 /* =========================================================
@@ -728,9 +742,7 @@ async function transcribeAudioSmart(audioBase64, locale, audioKind = "car_sound"
   } finally {
     try {
       if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
-    } catch {
-      // ignore cleanup errors
-    }
+    } catch {}
   }
 }
 
@@ -814,6 +826,7 @@ async function createDoctorResponse({
   history = [],
   userTextBlock = "",
   imageBase64 = "",
+  imageMimeType = "image/jpeg",
   extraUserInstruction = "",
   maxOutputTokens = 900,
   temperature = 0.2,
@@ -828,8 +841,8 @@ async function createDoctorResponse({
           ? [
               {
                 type: "input_image",
-                image_url: `data:image/jpeg;base64,${imageBase64}`,
-                detail: "high",
+                image_url: `data:${imageMimeType};base64,${imageBase64}`,
+                detail: "low",
               },
             ]
           : []),
@@ -1098,7 +1111,7 @@ function shouldAllowExternalRefinement({ diag1, enginePack, placesIntent }) {
 }
 
 /* =========================================================
-   SEARCH HELPERS
+   SEARCH
 ========================================================= */
 async function searchSmart({
   query,
@@ -1121,13 +1134,16 @@ async function searchSmart({
 }
 
 /* =========================================================
-   MAIN HANDLER
+   MAIN
 ========================================================= */
 export async function handleFixLensRequest(req) {
   const body = req?.body || {};
   const text = String(body.text || body.message || body.userText || "").trim();
   const history = Array.isArray(body.history) ? body.history : [];
   const imageBase64 = body.image_base_64 || body.image_base64 || "";
+  const imageMimeType = String(
+    body.image_mime_type || body.imageMimeType || "image/jpeg"
+  ).trim();
   const audioBase64 = body.audio_base_64 || body.audio_base64 || "";
   const audioKind = String(body.audio_kind || "").trim();
   const debugMode = Boolean(body.debug);
@@ -1153,12 +1169,11 @@ export async function handleFixLensRequest(req) {
           ? "اكتب الأعراض أو أرسل صورة أو صوت، وأنا أبدأ معك."
           : "Send symptoms or attach a photo or audio and I’ll start.",
         locale,
-        workshops_count: 0,
+    workshops_count: 0,
         ...(debugMode ? { debug: { stage: "empty_input" } } : {}),
       };
     }
 
-    // AUDIO
     const audioAttached = Boolean(audioBase64);
     const audioKindFinal = audioAttached ? (audioKind || "car_sound") : "";
     const audioResult = await transcribeAudioSmart(audioBase64, locale, audioKindFinal);
@@ -1175,38 +1190,38 @@ export async function handleFixLensRequest(req) {
       audioType === "speech_detected_in_car_sound";
 
     const fullInput = `${text} ${includeVoiceText ? voiceText : ""}`.trim();
+    const effectiveUserText =
+      fullInput ||
+      text ||
+      (imageBase64 ? "Analyze the attached car image and continue the diagnosis." : "");
 
-    // Keep locale locked from first user language unless explicit locale was sent
     locale = inferLockedLocale({
       locale: body.locale || locale,
-      text: fullInput || text,
+      text: effectiveUserText,
       history,
     });
 
-    // INTENT
-    const diagnosisLikely = looksLikeDiagnosisText(fullInput || text);
+    const diagnosisLikely = looksLikeDiagnosisText(effectiveUserText);
     const placesFollowUp =
-      looksLikePlacesFollowUp(history) && looksLikeLocationOnlyText(text);
-    const placesRequested = looksLikePlacesRequest(fullInput || text);
+      looksLikePlacesFollowUp(history) &&
+      looksLikeActualLocationAnswer(text);
+
+    const placesRequested = looksLikePlacesRequest(effectiveUserText);
     const placesIntent = Boolean(
       (placesRequested || placesFollowUp) && !diagnosisLikely
     );
 
     const placesQuery = buildPlacesQuerySmart({
-      userText: fullInput || text,
+      userText: effectiveUserText,
       userLocation,
       placesFollowUp,
     });
 
-    // INTERNAL INTEL
-    const enginePack = buildEnginePack(fullInput || text);
+    const enginePack = buildEnginePack(effectiveUserText);
     const internalIntelStrong = hasStrongInternalIntel(enginePack);
 
-    // DATA-FIRST SEARCH
-    // Always allow search.js to use internal KB/data first.
-    // External places only when placesIntent=true.
     const searchPack = await searchSmart({
-      query: placesIntent ? placesQuery : fullInput || text,
+      query: placesIntent ? placesQuery : effectiveUserText,
       userLocation,
       locale,
       allowPlaces: placesIntent,
@@ -1221,7 +1236,6 @@ export async function handleFixLensRequest(req) {
       ? searchPack.verified_workshops
       : [];
 
-    // DIRECT PLACES MODE
     if (placesIntent && verifiedWorkshops.length > 0) {
       return {
         ok: true,
@@ -1280,13 +1294,12 @@ export async function handleFixLensRequest(req) {
       };
     }
 
-    // DIAGNOSIS MODE
     const engineContextText = buildEngineContextText(enginePack);
 
     const strictContext = buildStrictContext({
       locale,
       userLocation,
-      text: fullInput || text,
+      text: effectiveUserText,
       voiceText,
       includeVoiceText,
       audioAttached,
@@ -1303,6 +1316,7 @@ export async function handleFixLensRequest(req) {
       history,
       userTextBlock: strictContext,
       imageBase64,
+      imageMimeType,
       extraUserInstruction: buildStage1Instruction(locale),
       maxOutputTokens: Number(process.env.FIXLENS_MAX_TOKENS || 1100),
       temperature: Number(process.env.FIXLENS_TEMPERATURE || 0.2),
@@ -1360,6 +1374,7 @@ export async function handleFixLensRequest(req) {
         history: [],
         userTextBlock: strictContext,
         imageBase64,
+        imageMimeType,
         extraUserInstruction: buildRewriteInstruction(locale),
         maxOutputTokens: 700,
         temperature: 0.15,
@@ -1373,7 +1388,6 @@ export async function handleFixLensRequest(req) {
       answer = safeFallbackReply(locale);
     }
 
-    // OPTIONAL REFINEMENT
     const needsSearch = Boolean(diag1?.needs_search);
     const searchQuery = String(diag1?.query || "").trim();
     const queryLooksPlacey = looksLikePlacesRequest(searchQuery);
@@ -1434,13 +1448,14 @@ AUDIO_KIND=${audioKindFinal || ""}
 AUDIO_TYPE=${audioType}
 AUDIO_TRANSCRIPT=${includeVoiceText ? voiceText : ""}
 
-USER_INPUT=${(fullInput || text).trim()}
+USER_INPUT=${effectiveUserText.trim()}
 `.trim();
 
       const stage2 = await createDoctorResponse({
         history: [],
         userTextBlock: refineContext,
         imageBase64,
+        imageMimeType,
         extraUserInstruction: buildRefineInstruction(locale),
         maxOutputTokens: Number(process.env.FIXLENS_MAX_TOKENS || 850),
         temperature: 0.2,
@@ -1499,7 +1514,9 @@ USER_INPUT=${(fullInput || text).trim()}
 
     return {
       ok: false,
-      reply: isArabic(locale)
+      reply: debugMode
+        ? `Temporary error: ${error?.message || "unknown_error"}`
+        : isArabic(locale)
         ? "حدث خطأ مؤقت، أعد المحاولة."
         : "Temporary error, please retry.",
       locale,
