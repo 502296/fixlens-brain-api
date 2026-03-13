@@ -1,4 +1,6 @@
-// service.js — FixLens Brain v7 (Clean Stable Orchestrator)
+// service.js — FixLens Brain v8
+// Unified global diagnostic orchestrator
+// English-only code, one brain, multilingual output
 
 import OpenAI from "openai";
 
@@ -6,7 +8,7 @@ import { buildDoctorSystemPrompt } from "./doctorPrompt.js";
 import { buildDiagnosticMemory } from "./memoryEngine.js";
 import { buildResponsePlan } from "./responsePlanner.js";
 import { buildEnginePack } from "./engineIntel.js";
-import { detectIntent } from "./IntentDetector.js";
+import { detectIntent } from "./intentDetector.js";
 
 import { processAudio } from "./audioProcessor.js";
 import { performSearch } from "./search.js";
@@ -20,9 +22,7 @@ const MODEL =
   "gpt-4o";
 
 export async function handleFixLensRequest(req) {
-
   try {
-
     const body = req.body || {};
 
     const text =
@@ -42,8 +42,12 @@ export async function handleFixLensRequest(req) {
       body.audio_base64 || "";
 
     const location =
-      body.location ||
       body.user_location ||
+      body.location ||
+      body.gps ||
+      body.latlng ||
+      body.city ||
+      body.zip ||
       null;
 
     let userText = text;
@@ -53,39 +57,79 @@ export async function handleFixLensRequest(req) {
     ------------------------- */
 
     if (audio) {
-
       try {
-
         const audioText = await processAudio(audio);
 
-        if (audioText) {
-          userText = audioText;
+        if (audioText && typeof audioText === "string" && audioText.trim()) {
+          userText = audioText.trim();
         }
-
-      } catch (e) {
-        console.log("Audio processing failed:", e.message);
+      } catch (error) {
+        console.log("Audio processing failed:", error?.message || error);
       }
-
     }
 
-    if (!userText) {
+    if (!userText || !String(userText).trim()) {
       return {
-        reply: "Please describe the problem you are experiencing with the vehicle.",
-        intent: "unknown"
+        reply: "Please describe what the vehicle is doing, when it happens, and what car or truck you have.",
+        intent: "general"
       };
     }
 
     /* -------------------------
-       INTENT DETECTION
+       RULE-BASED INTENT
     ------------------------- */
 
-    let intent = "diagnostic";
+    let ruleIntent = {
+      primaryIntent: "diagnosis",
+      diagnosis: true,
+      places: false,
+      needsSearch: false,
+      askForLocation: false,
+      hasVehicleSymptom: true,
+      hasLocationHint: false
+    };
 
     try {
-      intent = detectIntent(userText);
-    } catch (e) {
-      console.log("Intent detection failed");
+      ruleIntent = detectIntent({
+        text: userText,
+        history,
+        location
+      });
+    } catch (error) {
+      console.log("Intent detector failed:", error?.message || error);
     }
+
+    /* -------------------------
+       MODEL INTENT BRIDGE
+       Language-agnostic classification
+    ------------------------- */
+
+    const modelIntent = await classifyIntentWithModel({
+      text: userText,
+      history,
+      location,
+      ruleIntent
+    });
+
+    const primaryIntent =
+      modelIntent.primaryIntent ||
+      ruleIntent.primaryIntent ||
+      "diagnosis";
+
+    const needsSearch =
+      Boolean(modelIntent.needsSearch) ||
+      Boolean(ruleIntent.needsSearch);
+
+    const askForLocation =
+      Boolean(modelIntent.askForLocation);
+
+    const detectedLanguage =
+      modelIntent.userLanguage ||
+      "same-as-user";
+
+    const detectedDialect =
+      modelIntent.userDialect ||
+      "natural-user-style";
 
     /* -------------------------
        MEMORY ENGINE
@@ -98,8 +142,8 @@ export async function handleFixLensRequest(req) {
         text: userText,
         history
       });
-    } catch (e) {
-      console.log("Memory engine failed");
+    } catch (error) {
+      console.log("Memory engine failed:", error?.message || error);
     }
 
     /* -------------------------
@@ -110,31 +154,34 @@ export async function handleFixLensRequest(req) {
 
     try {
       engineIntel = buildEnginePack(userText);
-    } catch (e) {
-      console.log("Engine intel failed");
+    } catch (error) {
+      console.log("Engine intel failed:", error?.message || error);
     }
 
     /* -------------------------
-       WEB SEARCH
+       SEARCH
     ------------------------- */
 
     let searchResults = "";
+    let searchSummary = "none";
 
     try {
+      const shouldSearch =
+        needsSearch === true;
 
-      if (intent === "places" || intent === "repair" || intent === "nearby") {
-
+      if (shouldSearch) {
         const search = await performSearch({
           query: userText,
           location
         });
 
-        searchResults = JSON.stringify(search);
-
+        if (search) {
+          searchResults = JSON.stringify(search, null, 2);
+          searchSummary = "available";
+        }
       }
-
-    } catch (e) {
-      console.log("Search failed");
+    } catch (error) {
+      console.log("Search failed:", error?.message || error);
     }
 
     /* -------------------------
@@ -144,15 +191,13 @@ export async function handleFixLensRequest(req) {
     let responsePlan = "";
 
     try {
-
       responsePlan = buildResponsePlan({
         text: userText,
-        intent,
+        intent: primaryIntent,
         memory: memoryBlock
       });
-
-    } catch (e) {
-      console.log("Response planner failed");
+    } catch (error) {
+      console.log("Response planner failed:", error?.message || error);
     }
 
     /* -------------------------
@@ -162,31 +207,52 @@ export async function handleFixLensRequest(req) {
     const systemPrompt = buildDoctorSystemPrompt();
 
     /* -------------------------
-       USER CONTEXT
+       CONTEXT BLOCK
     ------------------------- */
 
-    let contextBlock = `
+    const contextBlock = `
+Case Mode:
+Unified global FixLens doctor
+
+Detected User Language:
+${detectedLanguage}
+
+Detected User Dialect:
+${detectedDialect}
+
+Primary Intent:
+${primaryIntent}
+
+Needs Search:
+${String(needsSearch)}
+
+Ask For Location:
+${String(askForLocation)}
+
+Known Location Input:
+${location ? JSON.stringify(location) : "none"}
+
 User Problem:
 ${userText}
 
-Intent:
-${intent}
-
 Memory:
-${memoryBlock}
+${memoryBlock || "none"}
 
 Engine Intelligence:
-${engineIntel}
+${engineIntel || "none"}
+
+Search Results Status:
+${searchSummary}
 
 Search Results:
-${searchResults}
+${searchResults || "none"}
 
 Response Plan:
-${responsePlan}
-`;
+${responsePlan || "none"}
+`.trim();
 
     /* -------------------------
-       IMAGE SUPPORT
+       MESSAGES
     ------------------------- */
 
     let messages = [
@@ -201,11 +267,13 @@ ${responsePlan}
     }
 
     if (image) {
-
       messages.push({
         role: "user",
         content: [
-          { type: "text", text: contextBlock },
+          {
+            type: "text",
+            text: contextBlock
+          },
           {
             type: "image_url",
             image_url: {
@@ -214,44 +282,216 @@ ${responsePlan}
           }
         ]
       });
-
     } else {
-
       messages.push({
         role: "user",
         content: contextBlock
       });
-
     }
 
     /* -------------------------
-       OPENAI CALL
+       OPENAI RESPONSE
     ------------------------- */
 
     const completion = await client.chat.completions.create({
       model: MODEL,
-      temperature: 0.4,
+      temperature: 0.35,
       messages
     });
 
     const reply =
-      completion?.choices?.[0]?.message?.content ||
-      "I couldn't generate a diagnostic answer.";
+      completion?.choices?.[0]?.message?.content?.trim() ||
+      "I could not produce a reliable diagnostic answer.";
 
     return {
       reply,
-      intent
+      intent: primaryIntent,
+      language: detectedLanguage,
+      dialect: detectedDialect,
+      searched: Boolean(searchResults)
     };
-
   } catch (error) {
-
     console.error("FixLens service error:", error);
 
     return {
-      reply: "FixLens encountered an internal error while analyzing the request.",
+      reply: "FixLens hit an internal error while analyzing this case.",
       intent: "error"
     };
+  }
+}
 
+async function classifyIntentWithModel({
+  text,
+  history = [],
+  location = null,
+  ruleIntent = {}
+}) {
+  try {
+    const condensedHistory = history
+      .slice(-6)
+      .map((item) => {
+        const role = item?.role || "unknown";
+        const content =
+          typeof item?.content === "string"
+            ? item.content
+            : JSON.stringify(item?.content || "");
+        return `${role}: ${content}`;
+      })
+      .join("\n");
+
+    const classifierPrompt = `
+You classify the user's latest vehicle-related request.
+Use the same logic regardless of the language or dialect.
+Do not create separate Arabic, English, or regional policies.
+
+Return JSON only.
+
+Required keys:
+- primaryIntent: one of "diagnosis", "places", "hybrid", "general"
+- needsSearch: boolean
+- askForLocation: boolean
+- userLanguage: short human-readable label
+- userDialect: short human-readable label
+
+Rules:
+- "diagnosis" = the user mainly wants fault analysis or next checks
+- "places" = the user mainly wants nearby shops, addresses, maps, towing, parts stores, or local help
+- "hybrid" = the user wants both diagnosis and local help
+- "general" = greeting, vague opener, or unclear request
+
+needsSearch:
+- true only when location-based help is actually requested
+- false for pure diagnosis
+
+askForLocation:
+- true only when local help is requested but there is no usable city / zip / GPS / location in the request or provided location field
+- false otherwise
+
+userLanguage:
+- identify the language of the user's latest message
+
+userDialect:
+- identify the nearest natural style or dialect when possible
+- if unclear, keep it broad and simple
+`.trim();
+
+    const classifierInput = `
+Latest user text:
+${text}
+
+Provided location field:
+${location ? JSON.stringify(location) : "none"}
+
+Recent history:
+${condensedHistory || "none"}
+
+Rule intent:
+${JSON.stringify(ruleIntent)}
+`.trim();
+
+    const result = await client.chat.completions.create({
+      model: MODEL,
+      temperature: 0,
+      messages: [
+        {
+          role: "system",
+          content: classifierPrompt
+        },
+        {
+          role: "user",
+          content: classifierInput
+        }
+      ]
+    });
+
+    const raw =
+      result?.choices?.[0]?.message?.content?.trim() || "";
+
+    const parsed = safeParseJson(raw);
+
+    if (!parsed || typeof parsed !== "object") {
+      return fallbackIntent(ruleIntent);
+    }
+
+    return {
+      primaryIntent: normalizePrimaryIntent(parsed.primaryIntent),
+      needsSearch: Boolean(parsed.needsSearch),
+      askForLocation: Boolean(parsed.askForLocation),
+      userLanguage: cleanShortText(parsed.userLanguage, "same-as-user"),
+      userDialect: cleanShortText(parsed.userDialect, "natural-user-style")
+    };
+  } catch (error) {
+    console.log("Model intent bridge failed:", error?.message || error);
+    return fallbackIntent(ruleIntent);
+  }
+}
+
+function fallbackIntent(ruleIntent = {}) {
+  return {
+    primaryIntent: normalizePrimaryIntent(ruleIntent.primaryIntent),
+    needsSearch: Boolean(ruleIntent.needsSearch),
+    askForLocation: Boolean(ruleIntent.askForLocation),
+    userLanguage: "same-as-user",
+    userDialect: "natural-user-style"
+  };
+}
+
+function normalizePrimaryIntent(value) {
+  const allowed = new Set([
+    "diagnosis",
+    "places",
+    "hybrid",
+    "general"
+  ]);
+
+  if (typeof value !== "string") {
+    return "diagnosis";
   }
 
+  const normalized = value.trim().toLowerCase();
+
+  if (allowed.has(normalized)) {
+    return normalized;
+  }
+
+  return "diagnosis";
+}
+
+function cleanShortText(value, fallback) {
+  if (typeof value !== "string") {
+    return fallback;
+  }
+
+  const trimmed = value.trim();
+
+  if (!trimmed) {
+    return fallback;
+  }
+
+  return trimmed.slice(0, 60);
+}
+
+function safeParseJson(raw) {
+  if (!raw || typeof raw !== "string") {
+    return null;
+  }
+
+  try {
+    return JSON.parse(raw);
+  } catch {
+    const firstBrace = raw.indexOf("{");
+    const lastBrace = raw.lastIndexOf("}");
+
+    if (firstBrace === -1 || lastBrace === -1 || lastBrace <= firstBrace) {
+      return null;
+    }
+
+    const sliced = raw.slice(firstBrace, lastBrace + 1);
+
+    try {
+      return JSON.parse(sliced);
+    } catch {
+      return null;
+    }
+  }
 }
