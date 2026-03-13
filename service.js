@@ -5,7 +5,7 @@
 // - Safer GPS / places routing
 // - Safer image handling
 // - Search only when needed
-
+import { buildDiagnosticMemory } from "./memoryEngine.js";
 import OpenAI from "openai";
 import fs from "fs";
 import path from "path";
@@ -1189,6 +1189,13 @@ export async function handleFixLensRequest(req) {
       audioType === "speech" ||
       audioType === "speech_detected_in_car_sound";
 
+    const diagnosticMemory = buildDiagnosticMemory({
+    text,
+    history,
+    voiceText,
+    audioType,
+   });
+
     const fullInput = `${text} ${includeVoiceText ? voiceText : ""}`.trim();
     const effectiveUserText =
       fullInput ||
@@ -1296,21 +1303,22 @@ export async function handleFixLensRequest(req) {
 
     const engineContextText = buildEngineContextText(enginePack);
 
-    const strictContext = buildStrictContext({
-      locale,
-      userLocation,
-      text: effectiveUserText,
-      voiceText,
-      includeVoiceText,
-      audioAttached,
-      audioKindFinal,
-      audioType,
-      placesIntent,
-      engineContextText,
-      verifiedData,
-      verifiedWorkshops,
-      internalIntelStrong,
-    });
+ const strictContext = buildStrictContext({
+  locale,
+  userLocation,
+  text: effectiveUserText,
+  voiceText,
+  includeVoiceText,
+  audioAttached,
+  audioKindFinal,
+  audioType,
+  placesIntent,
+  engineContextText,
+  diagnosticMemoryText: diagnosticMemory.memory_text,
+  verifiedData,
+  verifiedWorkshops,
+  internalIntelStrong,
+});
 
     const stage1 = await createDoctorResponse({
       history,
