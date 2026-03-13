@@ -1,9 +1,5 @@
 // responsePlanner.js
 // FixLens Response Planner v1.0
-// Purpose:
-// - Turn raw case context into a structured diagnostic plan
-// - Make replies stronger, less generic, more mechanic-like
-// - Rank likely causes and next steps before final writing
 
 function normalizeToken(value = "") {
   return String(value || "")
@@ -12,10 +8,6 @@ function normalizeToken(value = "") {
     .replace(/[^\p{L}\p{N}\-\s\.]/gu, " ")
     .replace(/\s+/g, " ")
     .trim();
-}
-
-function isArabic(locale = "") {
-  return String(locale || "").toLowerCase().startsWith("ar");
 }
 
 function dedupe(items = []) {
@@ -67,13 +59,11 @@ function rankLikelyCauses({
       9,
       "rough idle / misfire / hesitation pattern"
     );
-
     pushCause(
       "vacuum leak or unmetered air issue",
       7,
       "idle-related shake with air-fuel behavior"
     );
-
     pushCause(
       "fuel delivery imbalance such as injector issue",
       6,
@@ -93,7 +83,6 @@ function rankLikelyCauses({
       9,
       "temperature and coolant behavior"
     );
-
     pushCause(
       "thermostat, air pocket, or weak water pump path",
       7,
@@ -111,7 +100,6 @@ function rankLikelyCauses({
       8,
       "deep knock wording"
     );
-
     pushCause(
       "spark knock / detonation under load",
       6,
@@ -132,10 +120,7 @@ function rankLikelyCauses({
     );
   }
 
-  if (
-    combined.includes("squeal") ||
-    combined.includes("صرير")
-  ) {
+  if (combined.includes("squeal") || combined.includes("صرير")) {
     pushCause(
       "belt, pulley, or bearing noise",
       8,
@@ -156,17 +141,10 @@ function rankLikelyCauses({
     );
   }
 
-  if (
-    Array.isArray(enginePack?.simple_engine_issue_matches) &&
-    enginePack.simple_engine_issue_matches.length > 0
-  ) {
+  if (Array.isArray(enginePack?.simple_engine_issue_matches)) {
     for (const item of enginePack.simple_engine_issue_matches.slice(0, 3)) {
       if (!item?.label) continue;
-      pushCause(
-        String(item.label),
-        7,
-        "matched internal engine issue pattern"
-      );
+      pushCause(String(item.label), 7, "matched internal engine issue pattern");
     }
   }
 
@@ -195,10 +173,7 @@ function rankLikelyCauses({
     .slice(0, 4);
 }
 
-function buildTests({
-  memorySummary = {},
-  topCause = "",
-}) {
+function buildTests({ memorySummary = {}, topCause = "" }) {
   const symptomsText = lowerJoined(memorySummary?.symptoms || []);
   const repairs = lowerJoined(memorySummary?.prior_repairs || []);
   const tests = [];
@@ -228,9 +203,7 @@ function buildTests({
     pushTest("confirm radiator fan behavior and thermostat path");
   }
 
-  if (
-    topCause.includes("knock")
-  ) {
+  if (topCause.includes("knock")) {
     pushTest("do not keep driving hard until the knock direction is clearer");
     pushTest("check oil level and warning lights immediately");
     pushTest("compare whether the sound is light tick or deep load-sensitive knock");
@@ -262,15 +235,11 @@ function buildTests({
   return dedupe(tests).slice(0, 5);
 }
 
-function buildQuestions({
-  memorySummary = {},
-  topCause = "",
-}) {
+function buildQuestions({ memorySummary = {}, topCause = "" }) {
   const questions = [];
   const codes = Array.isArray(memorySummary?.fault_codes)
     ? memorySummary.fault_codes
     : [];
-
   const unresolved = lowerJoined(memorySummary?.unresolved_points || []);
   const symptomsText = lowerJoined(memorySummary?.symptoms || []);
 
@@ -289,32 +258,22 @@ function buildQuestions({
     pushQuestion("Is the shake strongest at idle and does it smooth out when you give it throttle?");
   }
 
-  if (
-    topCause.includes("knock")
-  ) {
+  if (topCause.includes("knock")) {
     pushQuestion("Is the sound a light fast tick, or a deeper knock that gets heavier under load?");
   }
 
-  if (
-    topCause.includes("cooling")
-  ) {
+  if (topCause.includes("cooling")) {
     pushQuestion("Does the temperature rise mainly while driving, at idle, or both?");
   }
 
-  if (
-    unresolved.includes("fault_codes_unknown")
-  ) {
+  if (unresolved.includes("fault_codes_unknown")) {
     pushQuestion("If you do not have a scanner yet, tell me whether the check-engine light is steady or flashing.");
   }
 
   return dedupe(questions).slice(0, 2);
 }
 
-function detectSeverity({
-  memorySummary = {},
-  topCause = "",
-  text = "",
-}) {
+function detectSeverity({ memorySummary = {}, topCause = "", text = "" }) {
   const combined = `${lowerJoined(memorySummary?.symptoms || [])} | ${String(text || "").toLowerCase()}`;
 
   if (
@@ -374,13 +333,8 @@ function detectDomain(topCause = "", text = "") {
     value.includes("charging")
   ) return "electrical";
 
-  if (
-    value.includes("brake")
-  ) return "brakes";
-
-  if (
-    value.includes("steering")
-  ) return "steering";
+  if (value.includes("brake")) return "brakes";
+  if (value.includes("steering")) return "steering";
 
   return "general";
 }
@@ -402,7 +356,6 @@ function buildSearchQuery({
   topCause = "",
   memorySummary = {},
   text = "",
-  locale = "en",
 }) {
   const vehicle = memorySummary?.vehicle || {};
   const vehicleText = [vehicle?.year, vehicle?.make, vehicle?.model]
@@ -413,12 +366,11 @@ function buildSearchQuery({
     ? memorySummary.symptoms.slice(0, 2).join(" ")
     : "";
 
-  const q = [vehicleText, topCause, symptomLead, text]
+  return [vehicleText, topCause, symptomLead, text]
     .filter(Boolean)
     .join(" ")
-    .trim();
-
-  return q.slice(0, 220);
+    .trim()
+    .slice(0, 220);
 }
 
 export function buildResponsePlan({
@@ -439,7 +391,9 @@ export function buildResponsePlan({
     verifiedData,
   });
 
-  const topCause = ranked[0]?.label || "general mechanical fault path still needs narrowing";
+  const topCause =
+    ranked[0]?.label || "general mechanical fault path still needs narrowing";
+
   const severity = detectSeverity({
     memorySummary,
     topCause,
@@ -447,6 +401,7 @@ export function buildResponsePlan({
   });
 
   const domain = detectDomain(topCause, text);
+
   const tests = buildTests({
     memorySummary,
     topCause,
@@ -469,7 +424,6 @@ export function buildResponsePlan({
         topCause,
         memorySummary,
         text,
-        locale,
       })
     : "";
 
