@@ -1,10 +1,5 @@
 // memoryEngine.js
 // FixLens Diagnostic Memory Engine v1.0
-// Purpose:
-// - Extract case memory from current text + recent history
-// - Keep the diagnostic thread coherent
-// - Reduce repetition
-// - Help the model sound like it remembers the case
 
 function normalizeToken(value = "") {
   return String(value || "")
@@ -95,8 +90,7 @@ function extractVehicleFromText(text = "") {
 }
 
 function extractSymptoms(text = "") {
-  const raw = String(text || "");
-  const lower = raw.toLowerCase();
+  const lower = String(text || "").toLowerCase();
 
   const patterns = [
     ["rough idle", ["rough idle", "idle rough", "shaking at idle", "رجفة", "اهتزاز", "هزة", "يرجف"]],
@@ -128,7 +122,7 @@ function extractSymptoms(text = "") {
     }
   }
 
-  return uniqueStrings(hits).slice(0, 8);
+  return uniqueStrings(hits).slice(0, 10);
 }
 
 function extractTemperatureBehavior(text = "") {
@@ -199,7 +193,7 @@ function extractPriorRepairs(text = "") {
     lines.filter((line) =>
       repairWords.some((word) => line.toLowerCase().includes(word))
     )
-  ).slice(0, 6);
+  ).slice(0, 8);
 }
 
 function extractCodes(text = "") {
@@ -236,7 +230,7 @@ function extractQuestionsStillOpen(text = "") {
     out.push("plug_status_unknown");
   }
 
-  return uniqueStrings(out).slice(0, 6);
+  return uniqueStrings(out).slice(0, 8);
 }
 
 function mergeVehicle(base = {}, next = {}) {
@@ -273,17 +267,8 @@ function detectCaseDirection(summary = {}) {
     return "electrical_charging";
   }
 
-  if (
-    joined.includes("brake issue")
-  ) {
-    return "braking_system";
-  }
-
-  if (
-    joined.includes("steering issue")
-  ) {
-    return "steering_or_suspension";
-  }
+  if (joined.includes("brake issue")) return "braking_system";
+  if (joined.includes("steering issue")) return "steering_or_suspension";
 
   if (
     joined.includes("knocking noise") ||
