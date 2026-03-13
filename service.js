@@ -841,15 +841,14 @@ async function createDoctorResponse({
       role: "user",
       content: [
         { type: "input_text", text: userTextBlock },
-        ...(imageBase64
-          ? [
-              {
-                type: "input_image",
-                image_url: `data:${imageMimeType};base64,${imageBase64}`,
-                detail: "low",
-              },
-            ]
-          : []),
+       ...(imageBase64 && String(imageBase64).trim().length > 100
+  ? [
+      {
+        type: "input_image",
+        image_url: `data:${imageMimeType || "image/jpeg"};base64,${String(imageBase64).trim()}`,
+      },
+    ]
+  : []),
       ],
     },
   ];
