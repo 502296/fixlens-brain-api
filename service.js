@@ -5,11 +5,13 @@
 // - Safer GPS / places routing
 // - Safer image handling
 // - Search only when needed
+
 import { buildDiagnosticMemory } from "./memoryEngine.js";
 import OpenAI from "openai";
 import fs from "fs";
 import path from "path";
 import { buildDoctorSystemPrompt } from "./doctorPrompt.js";
+import { buildResponsePlan } from "./responsePlanner.js";
 import { performSearch } from "./search.js";
 
 const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
