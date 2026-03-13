@@ -1,16 +1,18 @@
-// service.js — FixLens Doctor Brain v4.1.0
+// service.js — FixLens Doctor Brain v5.0.0
 // Stable version:
 // - Data-first diagnosis
 // - Language lock
 // - Safer GPS / places routing
 // - Safer image handling
 // - Search only when needed
+// - Diagnostic memory
+// - Response planning
 
-import { buildDiagnosticMemory } from "./memoryEngine.js";
 import OpenAI from "openai";
 import fs from "fs";
 import path from "path";
 import { buildDoctorSystemPrompt } from "./doctorPrompt.js";
+import { buildDiagnosticMemory } from "./memoryEngine.js";
 import { buildResponsePlan } from "./responsePlanner.js";
 import { performSearch } from "./search.js";
 
@@ -915,10 +917,10 @@ function violatesNoPlaces(reply = "") {
 
 function safeFallbackReply(locale = "en") {
   if (isArabic(locale)) {
-    return "وصلتني الأعراض أو المرفقات. أقوى الاحتمالات الآن هي misfire من البواجي أو الكويلات، أو خلل هواء ووقود مثل MAF أو البخاخات، أو دق حقيقي بسبب التوقيت أو الوقود. حتى أحددها أدق: هل لمبة Check Engine شغالة، وهل الصوت أقرب إلى تك تك سريع أم دق ثقيل؟";
+    return "وصلتني الأعراض أو المرفقات. الاتجاه الأقوى الآن ليس حساسًا عشوائيًا، بل misfire من جهة الكويلات أو البواجي أو خلل هواء ووقود مثل vacuum leak أو MAF. إذا لمبة Check Engine شغالة فهذه أسرع نقطة حسم، وإذا ما عندك سكانر الآن فابدأ بالكويلات والبواجي لأن هذا المسار عادة أقصر وأرخص.";
   }
 
-  return "I got your symptoms or attachments. The strongest possibilities right now are misfire from plugs or coils, an air-fuel issue like MAF or injectors, or true knock from timing or fuel. To narrow it down properly: is the Check Engine light on, and is the sound more like a fast tick or a deeper knock?";
+  return "I got your symptoms or attachments. The stronger direction here is not a random sensor first. It is more likely an ignition-side misfire from coils or plugs, or an air-fuel issue like a vacuum leak or MAF problem. If the Check Engine light is on, that is the fastest way to narrow it down, and if you do not have a scanner yet, start with coils and plugs because that path is usually shorter and cheaper.";
 }
 
 /* =========================================================
@@ -1000,6 +1002,8 @@ function buildStrictContext({
   audioType,
   placesIntent,
   engineContextText,
+  diagnosticMemoryText,
+  plannerText,
   verifiedData,
   verifiedWorkshops,
   internalIntelStrong,
@@ -1026,6 +1030,10 @@ ABSOLUTE_RULES:
 
 ${engineContextText}
 
+${diagnosticMemoryText || ""}
+
+${plannerText || ""}
+
 VERIFIED_DATA_JSON=${JSON.stringify(verifiedData || [])}
 VERIFIED_WORKSHOPS_JSON=${JSON.stringify(verifiedWorkshops || [])}
 WORKSHOPS_CONTEXT_TEXT=
@@ -1048,6 +1056,7 @@ Required schema:
 {
   "severity": "low|medium|high|urgent",
   "domain": "engine|transmission|cooling|brakes|steering|suspension|electrical|fuel|exhaust|ac|body|general",
+  "strongest_hypothesis": "string",
   "likely_causes": ["string"],
   "must_ask": ["string"],
   "tests": ["string"],
@@ -1058,15 +1067,19 @@ Required schema:
 }
 
 Rules:
+- strongest_hypothesis is required and must be the strongest likely direction, not a generic category
 - likely_causes: 1 to 4 items, strongest first
 - must_ask: 0 to 2 only
 - tests: 1 to 5 practical checks
 - needs_search=true only if verified external search materially improves the answer beyond internal data
 - query="" unless needs_search=true
+- Use RESPONSE_PLANNER and DIAGNOSTIC_MEMORY as primary structure
 - final_answer must be in locale "${locale}"
 - final_answer must sound like a trusted master mechanic
 - final_answer must not contain headings, bullets, or numbering
 - final_answer must ask max 2 questions only if truly needed
+- final_answer must start close to the strongest mechanical direction
+- final_answer must avoid filler like "there could be many reasons"
 `.trim();
 }
 
@@ -1082,6 +1095,8 @@ Rules:
 - Max 2 questions only if essential
 - Calm, confident, practical
 - Strongest likely cause first
+- Avoid generic filler
+- Sound like a diagnostician, not support staff
 
 Return only final answer text.
 `.trim();
@@ -1099,7 +1114,8 @@ Rules:
 - No place or location talk unless PLACES_INTENT=true
 - Max 2 questions only if essential
 - Use verified data only to sharpen the next step
-- Clear, practical, natural
+- Start from the strongest likely mechanical direction
+- Be clear, practical, natural, and non-generic
 
 Return only the answer text.
 `.trim();
@@ -1171,7 +1187,7 @@ export async function handleFixLensRequest(req) {
           ? "اكتب الأعراض أو أرسل صورة أو صوت، وأنا أبدأ معك."
           : "Send symptoms or attach a photo or audio and I’ll start.",
         locale,
-    workshops_count: 0,
+        workshops_count: 0,
         ...(debugMode ? { debug: { stage: "empty_input" } } : {}),
       };
     }
@@ -1192,11 +1208,11 @@ export async function handleFixLensRequest(req) {
       audioType === "speech_detected_in_car_sound";
 
     const diagnosticMemory = buildDiagnosticMemory({
-    text,
-    history,
-    voiceText,
-    audioType,
-   });
+      text,
+      history,
+      voiceText,
+      audioType,
+    });
 
     const fullInput = `${text} ${includeVoiceText ? voiceText : ""}`.trim();
     const effectiveUserText =
@@ -1244,6 +1260,17 @@ export async function handleFixLensRequest(req) {
     const verifiedWorkshops = Array.isArray(searchPack?.verified_workshops)
       ? searchPack.verified_workshops
       : [];
+
+    const responsePlanFinal = buildResponsePlan({
+      locale,
+      text: effectiveUserText,
+      placesIntent,
+      enginePack,
+      diagnosticMemory,
+      verifiedData,
+      verifiedWorkshops,
+      internalIntelStrong,
+    });
 
     if (placesIntent && verifiedWorkshops.length > 0) {
       return {
@@ -1305,22 +1332,23 @@ export async function handleFixLensRequest(req) {
 
     const engineContextText = buildEngineContextText(enginePack);
 
- const strictContext = buildStrictContext({
-  locale,
-  userLocation,
-  text: effectiveUserText,
-  voiceText,
-  includeVoiceText,
-  audioAttached,
-  audioKindFinal,
-  audioType,
-  placesIntent,
-  engineContextText,
-  diagnosticMemoryText: diagnosticMemory.memory_text,
-  verifiedData,
-  verifiedWorkshops,
-  internalIntelStrong,
-});
+    const strictContext = buildStrictContext({
+      locale,
+      userLocation,
+      text: effectiveUserText,
+      voiceText,
+      includeVoiceText,
+      audioAttached,
+      audioKindFinal,
+      audioType,
+      placesIntent,
+      engineContextText,
+      diagnosticMemoryText: diagnosticMemory.memory_text,
+      plannerText: responsePlanFinal.planner_text,
+      verifiedData,
+      verifiedWorkshops,
+      internalIntelStrong,
+    });
 
     const stage1 = await createDoctorResponse({
       history,
@@ -1347,6 +1375,8 @@ export async function handleFixLensRequest(req) {
                 locale,
                 rawStage1,
                 enginePack,
+                diagnosticMemory,
+                responsePlanFinal,
               },
             }
           : {}),
@@ -1371,13 +1401,16 @@ export async function handleFixLensRequest(req) {
                 locale,
                 rawStage1,
                 enginePack,
+                diagnosticMemory,
+                responsePlanFinal,
               },
             }
           : {}),
       };
     }
 
-    let answer = String(diag1?.final_answer || "").trim() || safeFallbackReply(locale);
+    let answer =
+      String(diag1?.final_answer || "").trim() || safeFallbackReply(locale);
 
     if (!placesIntent && violatesNoPlaces(answer)) {
       const rewrite = await createDoctorResponse({
@@ -1398,8 +1431,15 @@ export async function handleFixLensRequest(req) {
       answer = safeFallbackReply(locale);
     }
 
-    const needsSearch = Boolean(diag1?.needs_search);
-    const searchQuery = String(diag1?.query || "").trim();
+    const needsSearch =
+      typeof diag1?.needs_search === "boolean"
+        ? Boolean(diag1.needs_search)
+        : Boolean(responsePlanFinal?.needs_search);
+
+    const searchQuery =
+      String(diag1?.query || "").trim() ||
+      String(responsePlanFinal?.query || "").trim();
+
     const queryLooksPlacey = looksLikePlacesRequest(searchQuery);
 
     const allowExternalRefinement = shouldAllowExternalRefinement({
@@ -1444,8 +1484,13 @@ ABSOLUTE_RULES:
 - No numbering.
 - If PLACES_INTENT=false, do not mention maps, shops, GPS, or location.
 - Ask at most 2 questions only if essential.
+- Start from the strongest likely mechanical direction.
 
 ${engineContextText}
+
+${diagnosticMemory.memory_text}
+
+${responsePlanFinal.planner_text}
 
 DIAG_JSON_FROM_STAGE1=${JSON.stringify(diag1)}
 VERIFIED_DATA_JSON=${JSON.stringify(verifiedData2)}
@@ -1494,6 +1539,8 @@ USER_INPUT=${effectiveUserText.trim()}
                 enginePack,
                 allowExternalRefinement,
                 internalIntelStrong,
+                diagnosticMemory,
+                responsePlanFinal,
               },
             }
           : {}),
@@ -1515,6 +1562,8 @@ USER_INPUT=${effectiveUserText.trim()}
               placesQuery,
               enginePack,
               internalIntelStrong,
+              diagnosticMemory,
+              responsePlanFinal,
             },
           }
         : {}),
