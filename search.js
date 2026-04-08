@@ -101,7 +101,7 @@ function normalizeText(value = "") {
   return String(value || "")
     .toLowerCase()
     .replace(/[\u2010-\u2015]/g, "-")
-    .replace(/[^a-zA-Z0-9\s\-\.\,]/g, " ")
+    .replace(/[^a-zA-Z0-9\u0600-\u06FF\s\-.,]/g, " ")
     .replace(/\s+/g, " ")
     .trim();
 }
@@ -173,7 +173,7 @@ function buildSearchSignals(query = "") {
       "near me", "nearby", "closest", "shop", "mechanic", "garage", "repair",
       "address", "location", "map", "maps", "tow", "towing", "parts store",
       "workshop", "specialist",
-      "اقرب", "بالقرب", "ورشة", "ميكانيكي", "كراج", "عنوان", "موقع", "خرائط",
+      "اقرب", "أقرب", "بالقرب", "ورشة", "ميكانيكي", "ميكانيك", "كراج", "عنوان", "موقع", "خرائط",
       "سطحة", "سحب", "محل قطع", "قطع غيار"
     ]),
     hasPurchaseWords: hasAny(q, [
@@ -264,11 +264,11 @@ function extractLocationFromQuery(userQuery = "") {
   }
 
   const ar = query.match(
-    /(?:\bفي\b|\bبال\b|\bبـ\b|\bب)(\s*[\p{L},\s.\-]{3,60})/u
+    /(?:\bفي\b|\bبال\b|\bبـ\b|\bب)(\s*[\u0600-\u06FF,\s.\-]{3,60})/
   );
   if (ar?.[1]) {
     const candidate = ar[1]
-      .replace(/[^\p{L},\s.\-]/gu, " ")
+      .replace(/[^\u0600-\u06FF,\s.\-]/g, " ")
       .trim();
     if (candidate.length >= 3) return candidate;
   }
@@ -915,6 +915,55 @@ function buildPlacesBaseQuery(mode) {
   return "auto repair shop OR mechanic";
 }
 
+function normalizeArabicPlacesQuery(query = "") {
+  const q = String(query || "").trim();
+
+  if (!/[اأإآء-ي]/.test(q)) return q;
+
+  const t = q.toLowerCase();
+
+  if (
+    t.includes("ورشة") ||
+    t.includes("ميكانيك") ||
+    t.includes("ميكانيكي") ||
+    t.includes("كراج")
+  ) {
+    return "auto repair shop";
+  }
+
+  if (
+    t.includes("اطارات") ||
+    t.includes("إطارات") ||
+    t.includes("تواير") ||
+    t.includes("بنشر") ||
+    t.includes("ترصيص")
+  ) {
+    return "tire shop";
+  }
+
+  if (t.includes("بطارية") || t.includes("دينمو") || t.includes("كهرباء")) {
+    return "auto electrical specialist";
+  }
+
+  if (t.includes("قطع") || t.includes("قطع غيار") || t.includes("محل قطع")) {
+    return "auto parts store";
+  }
+
+  if (t.includes("فرامل") || t.includes("abs") || t.includes("مانع الانغلاق")) {
+    return "brake repair";
+  }
+
+  if (t.includes("قير") || t.includes("ناقل") || t.includes("جير")) {
+    return "transmission specialist";
+  }
+
+  if (t.includes("سطحة") || t.includes("سحب") || t.includes("ونش")) {
+    return "towing service";
+  }
+
+  return "auto repair shop";
+}
+
 /* =========================================================
    PRICE HELPERS
 ========================================================= */
@@ -1055,6 +1104,7 @@ async function searchPlaces({ query, userLocation, locale, radiusMeters }) {
   const languageCode = normalizeLocale(locale);
   const mode = detectModeFromText(query);
   const baseQuery = buildPlacesBaseQuery(mode);
+  const normalizedBaseQuery = normalizeArabicPlacesQuery(query);
 
   let gps = parseLatLng(userLocation);
   let locationText = safeCityText(userLocation);
@@ -1081,8 +1131,8 @@ async function searchPlaces({ query, userLocation, locale, radiusMeters }) {
   if (!gps && !locationLooksUsable(locationText)) return [];
 
   const textQuery = gps
-    ? baseQuery
-    : `${baseQuery} in ${locationText}`;
+    ? normalizedBaseQuery
+    : `${normalizedBaseQuery} in ${locationText}`;
 
   const radius = Number(radiusMeters || DEFAULT_RADIUS_METERS);
 
