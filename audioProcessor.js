@@ -90,10 +90,11 @@ function extractAudioPayload(input) {
         input.audioType ||
         input.audio_type ||
         "unknown",
-      mimeType:
-        input.mimeType ||
-        input.mime_type ||
-        "",
+     mimeType:
+input.mimeType ||
+input.mime_type ||
+input.audio_mime ||
+"",
     };
   }
 
