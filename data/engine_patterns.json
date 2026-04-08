@@ -4,9 +4,81 @@
     "issues": [
       {
         "name": "Timing chain tensioner bleed-down",
-        "keywords": ["cold rattle", "startup rattle", "timing noise"],
+        "keywords": [
+          "cold rattle",
+          "startup rattle",
+          "timing noise",
+          "chain rattle on startup",
+          "brief rattle when cold",
+          "rattle for a few seconds after start",
+          "metallic startup noise",
+          "timing chain rattle",
+          "engine rattles cold",
+          "بارد يصدر رجة",
+          "صوت جنزير عند التشغيل",
+          "صوت توقيت عند التشغيل",
+          "خشخشة عند التشغيل البارد"
+        ],
         "severity": "medium",
-        "mechanism": "Rear hydraulic tensioner losing oil pressure overnight"
+        "mechanism": "Rear hydraulic tensioner loses oil pressure overnight, allowing temporary timing chain slack on cold start before oil pressure builds.",
+        "symptom_notes": [
+          "Usually strongest on cold start after sitting overnight",
+          "Often lasts a few seconds, then fades",
+          "Can be mistaken for general top-end noise",
+          "May worsen over time if guides also wear"
+        ],
+        "common_misreads": [
+          "Not every startup tick is lifter noise",
+          "Can be confused with exhaust manifold leak on cold start",
+          "Can be confused with accessory rattle"
+        ],
+        "first_checks": [
+          "Confirm whether the noise is strongest after overnight parking",
+          "Check oil level, oil condition, and service history",
+          "Listen near timing cover area during cold start",
+          "Check if the rattle fades quickly as oil pressure stabilizes"
+        ],
+        "do_not_confuse_with": [
+          "Exhaust manifold leak",
+          "Accessory pulley rattle",
+          "Short-lived injector tick"
+        ]
+      },
+      {
+        "name": "Cam phaser wear / phaser knock",
+        "keywords": [
+          "cam phaser noise",
+          "phaser knock",
+          "diesel-like rattle",
+          "top end knock",
+          "warm rattling at idle",
+          "timing control noise",
+          "صوت فايزر",
+          "صوت دق من فوق المكينة",
+          "يشبه صوت ديزل"
+        ],
+        "severity": "high",
+        "mechanism": "Cam phaser wear or oil-control instability causes variable valve timing noise and unstable timing behavior, especially with poor oil condition or low oil pressure control.",
+        "symptom_notes": [
+          "Can be louder warm at idle than true cold-start tensioner noise",
+          "May come with drivability complaints or timing-related faults",
+          "Can sound deeper and more persistent than a brief startup rattle"
+        ],
+        "common_misreads": [
+          "Often blamed on generic lifter noise",
+          "Can be confused with timing chain problems even when phasers are central"
+        ],
+        "first_checks": [
+          "Check whether the noise continues after warm idle",
+          "Review oil viscosity and service interval history",
+          "Look for timing correlation faults if scanner data is available",
+          "Distinguish short startup rattle from persistent warm-idle knock"
+        ],
+        "do_not_confuse_with": [
+          "Temporary chain tensioner bleed-down",
+          "Rod knock",
+          "Exhaust leak tick"
+        ]
       }
     ]
   },
@@ -15,9 +87,77 @@
     "issues": [
       {
         "name": "AFM lifter collapse",
-        "keywords": ["ticking", "misfire", "engine knock at idle"],
+        "keywords": [
+          "ticking",
+          "misfire",
+          "engine knock at idle",
+          "collapsed lifter",
+          "valvetrain tick",
+          "rough idle with tick",
+          "misfire with ticking",
+          "top end ticking",
+          "tapping noise with misfire",
+          "طقطقة مع تقطيع",
+          "تفتفة مع صوت تك تك",
+          "صوت تكايات مع ميسفاير",
+          "رجفة وصوت من فوق المكينة"
+        ],
         "severity": "high",
-        "mechanism": "Active Fuel Management lifter failure"
+        "mechanism": "Active Fuel Management lifter fails mechanically or hydraulically, causing valve motion loss, misfire, and upper valvetrain ticking or tapping.",
+        "symptom_notes": [
+          "Often combines ticking noise with rough idle or cylinder-specific misfire",
+          "May be worse at idle and lower RPM",
+          "Can progress from intermittent misfire to clear mechanical noise"
+        ],
+        "common_misreads": [
+          "Can be mistaken for injector tick",
+          "Can be misdiagnosed as only a coil or spark plug problem",
+          "May be blamed on generic top-end noise until misfire becomes obvious"
+        ],
+        "first_checks": [
+          "Check for cylinder-specific misfire pattern",
+          "Listen for top-end mechanical tick that matches the misfire case",
+          "Do not assume ignition parts are the root cause if the tick is mechanical",
+          "Review whether the problem worsened over time from intermittent to constant"
+        ],
+        "do_not_confuse_with": [
+          "Injector tick",
+          "Exhaust manifold leak",
+          "Simple ignition misfire without mechanical noise"
+        ]
+      },
+      {
+        "name": "AFM oil-control instability",
+        "keywords": [
+          "intermittent lifter noise",
+          "random misfire with afm",
+          "noise after oil issue",
+          "valve tick after oil change",
+          "afm tick",
+          "صوت متقطع مع afm",
+          "تقطيع متقطع وصوت"
+        ],
+        "severity": "medium",
+        "mechanism": "Oil-control problems in the AFM system reduce stable lifter operation and can create intermittent noise, unstable cylinder deactivation behavior, or misleading drivability complaints.",
+        "symptom_notes": [
+          "May not begin as a full lifter collapse case",
+          "Can feel intermittent before becoming a harder failure",
+          "Oil quality and pressure behavior matter heavily"
+        ],
+        "common_misreads": [
+          "Can be mistaken for random ignition weakness",
+          "Can be confused with a temporary oil-pressure quirk"
+        ],
+        "first_checks": [
+          "Check oil level, oil condition, and maintenance history",
+          "Check whether the issue is intermittent or constant",
+          "Compare cold behavior versus warm behavior",
+          "Separate soft AFM instability from a hard collapsed-lifter failure"
+        ],
+        "do_not_confuse_with": [
+          "Pure ignition misfire",
+          "Normal injector sound"
+        ]
       }
     ]
   },
@@ -26,9 +166,73 @@
     "issues": [
       {
         "name": "Timing chain stretch",
-        "keywords": ["metallic rattle", "timing fault", "chain noise"],
+        "keywords": [
+          "metallic rattle",
+          "timing fault",
+          "chain noise",
+          "timing chain noise",
+          "front engine rattle",
+          "cold metallic rattle",
+          "rattle near timing cover",
+          "bmw chain noise",
+          "صوت جنزير",
+          "خشخشة حديد من قدام المكينة",
+          "صوت توقيت"
+        ],
         "severity": "high",
-        "mechanism": "Chain elongation and guide wear"
+        "mechanism": "Timing chain elongation and guide wear create unstable chain control, mechanical rattle, and possible timing correlation faults if the wear progresses.",
+        "symptom_notes": [
+          "Often comes from the front engine area",
+          "May appear as metallic rattle before severe drivability issues",
+          "Can coexist with timing faults or rough running if advanced"
+        ],
+        "common_misreads": [
+          "Can be confused with accessory noise",
+          "Can be mistaken for a brief harmless startup rattle when it is becoming a real chain problem"
+        ],
+        "first_checks": [
+          "Identify whether the noise comes from the timing side of the engine",
+          "Check if the rattle is brief, repeated, or becoming persistent",
+          "Check for timing-related fault codes if available",
+          "Do not dismiss metallic chain-like rattle on this engine family"
+        ],
+        "do_not_confuse_with": [
+          "Accessory pulley noise",
+          "Brief harmless cold tick",
+          "Injector clicking"
+        ]
+      },
+      {
+        "name": "Timing guide wear progression",
+        "keywords": [
+          "persistent chain noise",
+          "guide wear",
+          "timing rattle getting worse",
+          "chain slap",
+          "noise after startup and while idling",
+          "صوت جنزير يزيد",
+          "خشخشة مستمرة"
+        ],
+        "severity": "high",
+        "mechanism": "Timing guide wear reduces chain stability further, allowing longer-duration rattle, harsher chain movement, and increasing risk of major timing failure if ignored.",
+        "symptom_notes": [
+          "More persistent than a very short startup event",
+          "May worsen gradually",
+          "Risk becomes more serious if noise grows louder or more frequent"
+        ],
+        "common_misreads": [
+          "Can be dismissed as normal BMW valvetrain sound",
+          "Can be mistaken for harmless startup noise"
+        ],
+        "first_checks": [
+          "Ask whether the noise is getting worse over weeks or months",
+          "Check whether the sound lasts beyond initial startup",
+          "Treat persistent metallic chain noise as higher risk"
+        ],
+        "do_not_confuse_with": [
+          "Normal injector tick",
+          "Short-lived cold-start accessory noise"
+        ]
       }
     ]
   }
