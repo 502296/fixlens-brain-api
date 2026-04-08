@@ -660,7 +660,7 @@ function normalizeText(value = "") {
   return String(value || "")
     .toLowerCase()
     .replace(/[\u2010-\u2015]/g, "-")
-    .replace(/[^\p{L}\p{N}\s\-\.\,]/gu, " ")
+    .replace(/[^a-zA-Z0-9\s\-\.\,]/g, " ")
     .replace(/\s+/g, " ")
     .trim();
 }
