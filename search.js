@@ -1,10 +1,11 @@
-// search.js — FixLens v4.0.0
-// Clean + data-first + stable fields
+// search.js — FixLens v5.0.0
+// Global + data-first + stable fields
 // Goals:
 // - Search internal KB first using manifest-selected files
-// - Use Google Places only when places intent is clear and allowed
-// - Return stable fields for service.js
-// - Keep costs lower by avoiding unnecessary external calls
+// - Use Google Places only when local-help intent is clear and allowed
+// - Return stable, rich fields for service.js
+// - Prefer internal diagnosis intelligence before external lookups
+// - Support broader global language / script input without splitting logic by language
 
 import fs from "fs";
 import path from "path";
@@ -29,11 +30,14 @@ async function ensureFetch() {
 ========================================================= */
 const PLACES_CACHE = new Map();
 const KB_CACHE = new Map();
+const GEO_CACHE = new Map();
 
 const CACHE_TTL_MS = Number(process.env.PLACES_CACHE_TTL_MS || 10 * 60 * 1000);
 const PLACES_TIMEOUT_MS = Number(process.env.PLACES_TIMEOUT_MS || 7000);
+const GEO_TIMEOUT_MS = Number(process.env.GEO_TIMEOUT_MS || 5000);
 const PLACES_MAX_RESULTS = Number(process.env.PLACES_MAX_RESULTS || 5);
 const DEFAULT_RADIUS_METERS = Number(process.env.PLACES_RADIUS_METERS || 25000);
+const DEFAULT_KB_RESULTS = Number(process.env.KB_DEFAULT_RESULTS || 4);
 
 /* =========================================================
    JSON / FILE HELPERS
@@ -60,6 +64,10 @@ function uniqBy(arr, keyFn) {
   }
 
   return out;
+}
+
+function clamp(n, min, max) {
+  return Math.max(min, Math.min(max, n));
 }
 
 /* =========================================================
@@ -89,8 +97,9 @@ function loadManifestOnce() {
 function normalizeText(value = "") {
   return String(value || "")
     .toLowerCase()
+    .replace(/[\u2010-\u2015]/g, "-")
     .replace(
-      /[^a-z0-9\u0600-\u06FF\u0400-\u04FF\u4E00-\u9FFF\u3040-\u30FF\uAC00-\uD7AF\s\-\.\,]/gi,
+      /[^\p{L}\p{N}\s\-\.\,]/gu,
       " "
     )
     .replace(/\s+/g, " ")
@@ -105,12 +114,75 @@ function normalizeLocale(locale = "en") {
 
 function hasAny(text = "", words = []) {
   const normalized = normalizeText(text);
-  return words.some((word) => normalized.includes(normalizeText(word)));
+  return (Array.isArray(words) ? words : []).some((word) =>
+    normalized.includes(normalizeText(word))
+  );
+}
+
+function tokenize(value = "") {
+  return normalizeText(value)
+    .split(" ")
+    .map((x) => x.trim())
+    .filter(Boolean);
 }
 
 function extractZip(text = "") {
   const match = String(text || "").match(/\b\d{5}(?:-\d{4})?\b/);
   return match ? match[0] : "";
+}
+
+function extractFaultCodes(text = "") {
+  const matches =
+    String(text || "").match(/\b([PCUB][0-9]{3,4}|[A-Z][0-9]{4})\b/gi) || [];
+  return [...new Set(matches.map((x) => x.toUpperCase()))].slice(0, 10);
+}
+
+function detectScript(value = "") {
+  const text = String(value || "");
+
+  if (/[\u0600-\u06FF]/.test(text)) return "arabic";
+  if (/[\u0400-\u04FF]/.test(text)) return "cyrillic";
+  if (/[\u4E00-\u9FFF]/.test(text)) return "han";
+  if (/[\u3040-\u30FF]/.test(text)) return "japanese";
+  if (/[\uAC00-\uD7AF]/.test(text)) return "hangul";
+  if (/[\u0900-\u097F]/.test(text)) return "devanagari";
+  if (/[A-Za-z]/.test(text)) return "latin";
+
+  return "unknown";
+}
+
+function buildSearchSignals(query = "") {
+  const q = normalizeText(query);
+  const codes = extractFaultCodes(query);
+
+  return {
+    normalized: q,
+    tokens: tokenize(q),
+    codes,
+    script: detectScript(query),
+    hasDiagnosisWords: hasAny(q, [
+      "engine", "misfire", "knock", "noise", "overheat", "coolant", "battery",
+      "alternator", "brake", "steering", "abs", "traction", "stability",
+      "transmission", "suspension", "leak", "smoke", "rough idle",
+      "محرك", "تقطيع", "خبط", "حرارة", "فرامل", "دركسون", "بطارية", "دينمو",
+      "تعليق", "تهريب", "دخان", "رجفة", "ثبات", "مانع الانغلاق"
+    ]),
+    hasPlacesWords: hasAny(q, [
+      "near me", "nearby", "closest", "shop", "mechanic", "garage", "repair",
+      "address", "location", "map", "maps", "tow", "towing", "parts store",
+      "workshop", "specialist",
+      "اقرب", "بالقرب", "ورشة", "ميكانيكي", "كراج", "عنوان", "موقع", "خرائط",
+      "سطحة", "سحب", "محل قطع", "قطع غيار"
+    ]),
+    hasPurchaseWords: hasAny(q, [
+      "should i buy", "worth buying", "pre purchase", "pre-purchase", "buy this car",
+      "اشتريها", "تنصحني اشتري", "قبل لا اشتري", "افحصها قبل الشراء"
+    ]),
+    hasSafetyWords: hasAny(q, [
+      "safe to drive", "can i drive", "is it safe", "dangerous to drive",
+      "هل امشي بيها", "هل أسوقها", "آمنة", "أقدر أمشي", "خطر"
+    ]),
+  };
 }
 
 /* =========================================================
@@ -176,6 +248,9 @@ function extractLocationFromQuery(userQuery = "") {
   const zip = extractZip(query);
   if (zip) return zip;
 
+  const gps = parseLatLng(query);
+  if (gps) return `${gps.lat},${gps.lng}`;
+
   const en = query.match(
     /\b(?:in|near|around|at)\s+([A-Za-z][A-Za-z\s.\-']{2,})(?:,\s*([A-Za-z]{2,}))?/i
   );
@@ -187,16 +262,24 @@ function extractLocationFromQuery(userQuery = "") {
   }
 
   const ar = query.match(
-    /(?:\bفي\b|\bبال\b|\bبـ\b|\bب)(\s*[\u0600-\u06FFa-zA-Z,\s.\-]{3,50})/
+    /(?:\bفي\b|\bبال\b|\bبـ\b|\bب)(\s*[\p{L},\s.\-]{3,60})/u
   );
   if (ar?.[1]) {
     const candidate = ar[1]
-      .replace(/[^\u0600-\u06FFa-zA-Z,\s.\-]/g, " ")
+      .replace(/[^\p{L},\s.\-]/gu, " ")
       .trim();
     if (candidate.length >= 3) return candidate;
   }
 
   return "";
+}
+
+function locationLooksUsable(value = "") {
+  const v = String(value || "").trim();
+  if (!v) return false;
+  if (parseLatLng(v)) return true;
+  if (extractZip(v)) return true;
+  return v.length >= 3;
 }
 
 /* =========================================================
@@ -206,6 +289,8 @@ function pickDomainsForQuery(query = "") {
   const manifest = loadManifestOnce();
   const normalizedQuery = normalizeText(query);
   if (!normalizedQuery) return [];
+
+  const codes = extractFaultCodes(query);
 
   const scored = (manifest.domains || [])
     .map((domain) => {
@@ -219,6 +304,16 @@ function pickDomainsForQuery(query = "") {
         }
       }
 
+      if (codes.length > 0) {
+        const codeKeywords = keywords.filter((k) =>
+          /^[PCUB]/i.test(String(k || ""))
+        );
+        for (const codeKeyword of codeKeywords) {
+          const nk = normalizeText(codeKeyword);
+          if (nk && normalizedQuery.includes(nk)) hits += 3;
+        }
+      }
+
       const priority = Number(domain.priority || 0);
       const score = hits * 10 + priority;
 
@@ -227,7 +322,7 @@ function pickDomainsForQuery(query = "") {
     .filter((item) => item.score > 0)
     .sort((a, b) => b.score - a.score);
 
-  const chosen = scored.slice(0, 2).map((item) => item.domain);
+  const chosen = scored.slice(0, 3).map((item) => item.domain);
 
   const meta = (manifest.domains || []).find(
     (domain) => String(domain.id || "") === "meta"
@@ -304,63 +399,130 @@ function recordToText(record) {
       record.issues,
       record.codes,
       record.code,
+      record.make,
+      record.model,
+      record.year,
+      record.warning,
+      record.risk,
+      record.purchase_notes,
+      record.subsystem,
     ]
       .filter(Boolean)
       .join(" ")
   );
 }
 
-function scoreMatch(query, recordText) {
+function getRecordCodes(record = {}) {
+  const out = [];
+
+  if (Array.isArray(record.codes)) out.push(...record.codes);
+  if (typeof record.code === "string") out.push(record.code);
+
+  return [...new Set(out.map((x) => String(x || "").toUpperCase()))];
+}
+
+function scoreMatch(query, record) {
   const q = normalizeText(query);
-  const text = normalizeText(recordText);
+  const text = recordToText(record);
 
   if (!q || !text) return 0;
 
+  const tokens = tokenize(q);
+  const queryCodes = extractFaultCodes(query);
+  const recordCodes = getRecordCodes(record);
+
   let score = 0;
 
-  if (text.includes(q)) score += 14;
+  if (text.includes(q)) score += 18;
 
-  const tokens = q.split(" ").filter(Boolean);
   for (const token of tokens) {
     if (token.length < 2) continue;
-    if (text.includes(token)) score += 2;
+    if (text.includes(token)) score += token.length >= 4 ? 3 : 1;
   }
 
-  const code = q.match(/\bp0\d{3}\b/i);
-  if (code && text.includes(code[0].toLowerCase())) score += 8;
+  for (const code of queryCodes) {
+    if (recordCodes.includes(code)) score += 15;
+    else if (text.includes(code.toLowerCase())) score += 10;
+    else if (text.includes(code.slice(0, 3).toLowerCase())) score += 4;
+  }
+
+  if (record.make && q.includes(normalizeText(record.make))) score += 4;
+  if (record.model && q.includes(normalizeText(record.model))) score += 5;
+  if (record.year && q.includes(String(record.year))) score += 3;
+
+  if (record.system && q.includes(normalizeText(record.system))) score += 4;
+  if (record.category && q.includes(normalizeText(record.category))) score += 3;
 
   return score;
 }
 
-function searchLocalKB(query, maxResults = 4) {
+function scoreResultQuality(item = {}) {
+  let quality = 0;
+  if (item.title) quality += 1;
+  if (item.causes) quality += 1;
+  if (item.checks) quality += 1;
+  if (item.steps) quality += 1;
+  if (item.tags) quality += 1;
+  if (item.raw?.codes || item.raw?.code) quality += 1;
+  return quality;
+}
+
+function searchLocalKB(query, maxResults = DEFAULT_KB_RESULTS) {
   const domains = pickDomainsForQuery(query);
   const kb = getKBForDomains(domains);
 
   if (!query || kb.length === 0) return [];
 
-  const limit = Math.max(1, Math.min(Number(maxResults || 4), 10));
+  const limit = clamp(Number(maxResults || DEFAULT_KB_RESULTS), 1, 10);
 
   const scored = kb
     .map((record) => ({
       record,
-      score: scoreMatch(query, recordToText(record)),
+      score: scoreMatch(query, record),
     }))
     .filter((item) => item.score > 0)
-    .sort((a, b) => b.score - a.score)
-    .slice(0, limit);
+    .sort((a, b) => {
+      if (b.score !== a.score) return b.score - a.score;
+      return scoreResultQuality({
+        raw: b.record,
+        title: b.record.title,
+        causes: b.record.likely_causes || b.record.causes,
+        checks: b.record.recommended_checks || b.record.checks,
+        steps: b.record.steps,
+        tags: b.record.tags || b.record.category || b.record.system,
+      }) - scoreResultQuality({
+        raw: a.record,
+        title: a.record.title,
+        causes: a.record.likely_causes || a.record.causes,
+        checks: a.record.recommended_checks || a.record.checks,
+        steps: a.record.steps,
+        tags: a.record.tags || a.record.category || a.record.system,
+      });
+    })
+    .slice(0, limit * 2);
+
+  const mapped = scored.map(({ record, score }) => ({
+    title: record.title || record.problem || "Verified item",
+    score,
+    source: record.__source || "data",
+    causes: record.likely_causes || record.causes || "",
+    checks: record.recommended_checks || record.checks || "",
+    steps: record.steps || "",
+    tags: record.tags || record.category || record.system || "",
+    codes: getRecordCodes(record),
+    vehicle_fit: [record.year, record.make, record.model, record.engine]
+      .filter(Boolean)
+      .join(" ")
+      .trim(),
+    raw: record,
+  }));
 
   return uniqBy(
-    scored.map(({ record, score }) => ({
-      title: record.title || record.problem || "Verified item",
-      score,
-      source: record.__source || "data",
-      causes: record.likely_causes || record.causes || "",
-      checks: record.recommended_checks || record.checks || "",
-      steps: record.steps || "",
-      tags: record.tags || record.category || record.system || "",
-      raw: record,
-    })),
-    (item) => `${String(item.title).toLowerCase()}::${item.source}`
+    mapped.slice(0, limit),
+    (item) =>
+      `${String(item.title).toLowerCase()}::${item.source}::${
+        (item.codes || []).join(",")
+      }`
   );
 }
 
@@ -384,6 +546,14 @@ function looksLikePlacesIntent(query = "") {
     "map",
     "google maps",
     "workshop",
+    "specialist",
+    "tow",
+    "towing",
+    "dealer",
+    "dealership",
+    "inspection shop",
+    "prepurchase inspection",
+
     "ورشة",
     "ورش",
     "ميكانيك",
@@ -397,6 +567,9 @@ function looksLikePlacesIntent(query = "") {
     "وين اصلح",
     "وين اروح",
     "دلني",
+    "سطحة",
+    "سحب",
+    "فحص قبل الشراء",
   ];
 
   const partsWords = [
@@ -449,8 +622,30 @@ function detectModeFromText(query = "") {
     return "tire";
   }
 
-  if (hasAny(text, ["brake", "فرامل", "هوبات", "سفايف"])) {
-    return "brake";
+  if (hasAny(text, ["brake", "abs", "فرامل", "هوبات", "سفايف", "مانع الانغلاق"])) {
+    return "brake_abs";
+  }
+
+  if (
+    hasAny(text, [
+      "battery",
+      "alternator",
+      "voltage",
+      "electrical",
+      "بطارية",
+      "دينمو",
+      "كهرباء",
+    ])
+  ) {
+    return "electrical";
+  }
+
+  if (hasAny(text, ["transmission", "gearbox", "gear", "قير", "ناقل"])) {
+    return "transmission";
+  }
+
+  if (hasAny(text, ["body shop", "سمكري", "حدادة سيارات", "صبغ", "دهان"])) {
+    return "body_shop";
   }
 
   if (
@@ -481,8 +676,32 @@ function detectModeFromText(query = "") {
     return "parts_tools";
   }
 
-  if (hasAny(text, ["body shop", "سمكري", "حدادة سيارات", "صبغ", "دهان"])) {
-    return "body_shop";
+  if (
+    hasAny(text, [
+      "tow",
+      "towing",
+      "tow truck",
+      "roadside",
+      "سطحة",
+      "سحب",
+      "ونش",
+    ])
+  ) {
+    return "towing";
+  }
+
+  if (
+    hasAny(text, [
+      "pre purchase",
+      "pre-purchase",
+      "inspection before buying",
+      "used car inspection",
+      "فحص قبل الشراء",
+      "قبل لا اشتري",
+      "اشتريها",
+    ])
+  ) {
+    return "prepurchase";
   }
 
   return "auto_repair";
@@ -491,8 +710,12 @@ function detectModeFromText(query = "") {
 function buildPlacesBaseQuery(mode) {
   if (mode === "parts_tools") return "auto parts store OR tool store OR hardware store";
   if (mode === "tire") return "tire shop";
-  if (mode === "brake") return "brake shop OR brake repair";
+  if (mode === "brake_abs") return "ABS brake specialist OR brake repair";
+  if (mode === "electrical") return "auto electrical specialist";
+  if (mode === "transmission") return "transmission specialist";
   if (mode === "body_shop") return "auto body shop OR collision repair";
+  if (mode === "towing") return "tow truck OR towing service";
+  if (mode === "prepurchase") return "pre purchase inspection OR used car inspection";
   return "auto repair shop OR mechanic";
 }
 
@@ -544,23 +767,86 @@ function priceHint({ mode, priceLevelLabel, locale }) {
 /* =========================================================
    CACHE
 ========================================================= */
-function cacheGet(key) {
-  const hit = PLACES_CACHE.get(key);
+function cacheGet(cacheMap, key) {
+  const hit = cacheMap.get(key);
   if (!hit) return null;
 
   if (Date.now() > hit.expiry) {
-    PLACES_CACHE.delete(key);
+    cacheMap.delete(key);
     return null;
   }
 
   return hit.value;
 }
 
-function cacheSet(key, value) {
-  PLACES_CACHE.set(key, {
+function cacheSet(cacheMap, key, value, ttlMs = CACHE_TTL_MS) {
+  cacheMap.set(key, {
     value,
-    expiry: Date.now() + CACHE_TTL_MS,
+    expiry: Date.now() + ttlMs,
   });
+}
+
+/* =========================================================
+   GEO NORMALIZATION (OPTIONAL FUTURE USE)
+========================================================= */
+async function geocodeTextLocation(locationText, locale = "en") {
+  const apiKey = process.env.GOOGLE_PLACES_API_KEY;
+  if (!apiKey || !locationText) return null;
+
+  const cacheKey = `geo::${normalizeLocale(locale)}::${locationText}`;
+  const cached = cacheGet(GEO_CACHE, cacheKey);
+  if (cached) return cached;
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), GEO_TIMEOUT_MS);
+
+  try {
+    const fetchFn = await ensureFetch();
+    const response = await fetchFn(
+      "https://places.googleapis.com/v1/places:searchText",
+      {
+        method: "POST",
+        signal: controller.signal,
+        headers: {
+          "Content-Type": "application/json",
+          "X-Goog-Api-Key": apiKey,
+          "X-Goog-FieldMask":
+            "places.location,places.formattedAddress,places.displayName",
+        },
+        body: JSON.stringify({
+          textQuery: String(locationText),
+          maxResultCount: 1,
+          languageCode: normalizeLocale(locale),
+        }),
+      }
+    );
+
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) return null;
+
+    const place = Array.isArray(data?.places) ? data.places[0] : null;
+    const location = place?.location;
+    if (
+      location &&
+      Number.isFinite(Number(location.latitude)) &&
+      Number.isFinite(Number(location.longitude))
+    ) {
+      const result = {
+        lat: Number(location.latitude),
+        lng: Number(location.longitude),
+        formatted_address: place?.formattedAddress || "",
+        display_name: place?.displayName?.text || "",
+      };
+      cacheSet(GEO_CACHE, cacheKey, result, CACHE_TTL_MS);
+      return result;
+    }
+
+    return null;
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 /* =========================================================
@@ -571,19 +857,37 @@ async function searchPlaces({ query, userLocation, locale, radiusMeters }) {
   if (!apiKey) return [];
 
   const languageCode = normalizeLocale(locale);
-  const gps = parseLatLng(userLocation);
   const mode = detectModeFromText(query);
   const baseQuery = buildPlacesBaseQuery(mode);
 
+  let gps = parseLatLng(userLocation);
   let locationText = safeCityText(userLocation);
-  if (!locationText) locationText = extractLocationFromQuery(query);
+
+  if (!gps && !locationText) {
+    const extracted = extractLocationFromQuery(query);
+    if (parseLatLng(extracted)) {
+      gps = parseLatLng(extracted);
+    } else {
+      locationText = extracted;
+    }
+  }
 
   const zip = extractZip(query);
   if (zip) locationText = zip;
 
-  if (!gps && !locationText) return [];
+  if (!gps && locationText && !parseLatLng(locationText)) {
+    const geo = await geocodeTextLocation(locationText, locale);
+    if (geo?.lat && geo?.lng) {
+      gps = { lat: geo.lat, lng: geo.lng };
+    }
+  }
 
-  const textQuery = gps ? baseQuery : `${baseQuery} in ${locationText}`;
+  if (!gps && !locationLooksUsable(locationText)) return [];
+
+  const textQuery = gps
+    ? baseQuery
+    : `${baseQuery} in ${locationText}`;
+
   const radius = Number(radiusMeters || DEFAULT_RADIUS_METERS);
 
   const cacheKey = `${languageCode}::${textQuery}::${
@@ -592,12 +896,12 @@ async function searchPlaces({ query, userLocation, locale, radiusMeters }) {
       : `anchor:${locationText}`
   }`;
 
-  const cached = cacheGet(cacheKey);
+  const cached = cacheGet(PLACES_CACHE, cacheKey);
   if (cached) return cached;
 
   const body = {
     textQuery,
-    maxResultCount: Math.max(1, Math.min(PLACES_MAX_RESULTS, 10)),
+    maxResultCount: clamp(PLACES_MAX_RESULTS, 1, 10),
     languageCode,
   };
 
@@ -634,6 +938,9 @@ async function searchPlaces({ query, userLocation, locale, radiusMeters }) {
             "places.nationalPhoneNumber",
             "places.websiteUri",
             "places.priceLevel",
+            "places.businessStatus",
+            "places.currentOpeningHours",
+            "places.primaryTypeDisplayName",
           ].join(","),
         },
         body: JSON.stringify(body),
@@ -671,8 +978,18 @@ async function searchPlaces({ query, userLocation, locale, radiusMeters }) {
           priceLevelLabel: price.label,
           locale,
         }),
+        business_status: place?.businessStatus || "",
+        open_now:
+          typeof place?.currentOpeningHours?.openNow === "boolean"
+            ? place.currentOpeningHours.openNow
+            : null,
+        primary_type:
+          place?.primaryTypeDisplayName?.text ||
+          "",
         mode,
-        location_anchor: gps ? "gps" : String(locationText),
+        location_anchor: gps
+          ? "gps"
+          : String(locationText || ""),
         source: "google_places_new",
       };
     });
@@ -682,7 +999,7 @@ async function searchPlaces({ query, userLocation, locale, radiusMeters }) {
       (item) => item.place_id || item.maps_url || `${item.name}::${item.address}`
     );
 
-    cacheSet(cacheKey, deduped);
+    cacheSet(PLACES_CACHE, cacheKey, deduped);
     return deduped;
   } catch (error) {
     console.error("Places error:", error?.message || error);
@@ -693,24 +1010,81 @@ async function searchPlaces({ query, userLocation, locale, radiusMeters }) {
 }
 
 /* =========================================================
+   DECISION LAYER
+========================================================= */
+function shouldSearchPlaces({
+  allowPlaces = false,
+  query = "",
+  userLocation = null,
+  forcePlaces = false,
+}) {
+  if (!allowPlaces && !forcePlaces) return false;
+
+  const signals = buildSearchSignals(query);
+  const extractedLocation = extractLocationFromQuery(query);
+  const usableLocation =
+    Boolean(parseLatLng(userLocation)) ||
+    locationLooksUsable(safeCityText(userLocation)) ||
+    locationLooksUsable(extractedLocation);
+
+  if (forcePlaces) return true;
+
+  if (!signals.hasPlacesWords) return false;
+
+  if (signals.hasPlacesWords && usableLocation) return true;
+
+  return signals.hasPlacesWords;
+}
+
+function deriveSearchMeta({
+  query = "",
+  verified_data = [],
+  verified_workshops = [],
+}) {
+  const signals = buildSearchSignals(query);
+
+  return {
+    query_script: signals.script,
+    detected_fault_codes: signals.codes,
+    used_internal_kb: Array.isArray(verified_data) && verified_data.length > 0,
+    used_places: Array.isArray(verified_workshops) && verified_workshops.length > 0,
+    diagnosis_signal: signals.hasDiagnosisWords,
+    places_signal: signals.hasPlacesWords,
+    purchase_signal: signals.hasPurchaseWords,
+    safety_signal: signals.hasSafetyWords,
+  };
+}
+
+/* =========================================================
    MAIN EXPORT
 ========================================================= */
 export async function performSearch(userQuery, userLocation, opts = {}) {
   const {
     locale = "en",
     allowPlaces = false,
-    maxResults = 4,
+    maxResults = DEFAULT_KB_RESULTS,
     placesRadiusMeters,
+    forcePlaces = false,
+    skipInternalKb = false,
   } = opts;
 
   const query = String(userQuery || "").trim();
 
   const verified_data =
-    query.length >= 2 ? searchLocalKB(query, maxResults) : [];
+    !skipInternalKb && query.length >= 2
+      ? searchLocalKB(query, maxResults)
+      : [];
 
   let verified_workshops = [];
 
-  if (allowPlaces && looksLikePlacesIntent(query)) {
+  if (
+    shouldSearchPlaces({
+      allowPlaces,
+      query,
+      userLocation,
+      forcePlaces,
+    })
+  ) {
     verified_workshops = await searchPlaces({
       query,
       userLocation,
@@ -722,5 +1096,10 @@ export async function performSearch(userQuery, userLocation, opts = {}) {
   return {
     verified_data,
     verified_workshops,
+    search_meta: deriveSearchMeta({
+      query,
+      verified_data,
+      verified_workshops,
+    }),
   };
 }
