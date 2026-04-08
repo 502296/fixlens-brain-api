@@ -1,4 +1,4 @@
-// service.js — FixLens Brain v9
+// service.js — FixLens Brain v10
 // Unified global diagnostic orchestrator
 // English-only code, one brain, multilingual output
 
@@ -275,6 +275,7 @@ export async function handleFixLensRequest(req) {
     ------------------------- */
     let search = {
       verified_data: [],
+      verified_actions: [],
       verified_workshops: [],
       search_meta: {},
     };
@@ -283,12 +284,18 @@ export async function handleFixLensRequest(req) {
       if (searchNeededByIntent) {
         search = await performSearch(userText, location, {
           locale,
-          allowPlaces: Boolean(routedIntent.isPlaces || primaryIntent === "places" || primaryIntent === "hybrid"),
-          forcePlaces: Boolean(routedIntent.isPlaces || routedIntent.mode === "places_handoff_from_diagnosis"),
+          allowPlaces: Boolean(
+            routedIntent.isPlaces ||
+            primaryIntent === "places" ||
+            primaryIntent === "hybrid"
+          ),
+          forcePlaces: Boolean(
+            routedIntent.isPlaces ||
+            routedIntent.mode === "places_handoff_from_diagnosis"
+          ),
           maxResults: 4,
         });
       } else {
-        // Internal KB can still help diagnosis without external local search
         search = await performSearch(userText, location, {
           locale,
           allowPlaces: false,
@@ -302,6 +309,10 @@ export async function handleFixLensRequest(req) {
 
     const verifiedData = Array.isArray(search?.verified_data)
       ? search.verified_data
+      : [];
+
+    const verifiedActions = Array.isArray(search?.verified_actions)
+      ? search.verified_actions
       : [];
 
     const verifiedWorkshops = Array.isArray(search?.verified_workshops)
@@ -401,6 +412,7 @@ export async function handleFixLensRequest(req) {
       enginePack,
       responsePlan,
       verifiedData,
+      verifiedActions,
       verifiedWorkshops,
       searchMeta,
     });
@@ -435,7 +447,9 @@ export async function handleFixLensRequest(req) {
       language: detectedLanguage,
       dialect: detectedDialect,
       searched:
-        verifiedData.length > 0 || verifiedWorkshops.length > 0,
+        verifiedData.length > 0 ||
+        verifiedActions.length > 0 ||
+        verifiedWorkshops.length > 0,
       debug: body?.debug
         ? {
             route_mode: routedIntent.mode,
@@ -444,6 +458,7 @@ export async function handleFixLensRequest(req) {
             strongest_hypothesis: responsePlan?.strongest_hypothesis || null,
             local_search_type: routedIntent?.localSearchType || null,
             codes: responsePlan?.codes || [],
+            matched_action_ids: verifiedActions.map((x) => x?.id).filter(Boolean),
           }
         : undefined,
     };
@@ -775,6 +790,25 @@ function formatSearchDataForContext(items = [], maxItems = 4) {
     }));
 }
 
+function formatVerifiedActionsForContext(items = [], maxItems = 4) {
+  return (Array.isArray(items) ? items : [])
+    .slice(0, maxItems)
+    .map((item, i) => ({
+      index: i + 1,
+      id: item?.id || "",
+      match_score: item?.match_score ?? null,
+      diagnostic_priority: item?.diagnostic_priority ?? null,
+      safety_level: item?.safety_level || "",
+      match_type: item?.match_type || [],
+      confidence_boost_if: item?.confidence_boost_if || [],
+      kill_other_hypotheses: item?.kill_other_hypotheses || [],
+      actions: item?.actions || [],
+      stop_now_if: item?.stop_now_if || [],
+      ignore_risk: item?.ignore_risk || "",
+      source: item?.source || "",
+    }));
+}
+
 function buildUnifiedContextBlock({
   locale,
   detectedLanguage,
@@ -791,6 +825,7 @@ function buildUnifiedContextBlock({
   enginePack,
   responsePlan,
   verifiedData,
+  verifiedActions,
   verifiedWorkshops,
   searchMeta,
 }) {
@@ -825,6 +860,9 @@ ${JSON.stringify(searchMeta || {}, null, 2)}
 VERIFIED_INTERNAL_DATA:
 ${JSON.stringify(formatSearchDataForContext(verifiedData, 4), null, 2)}
 
+VERIFIED_ACTIONS:
+${JSON.stringify(formatVerifiedActionsForContext(verifiedActions, 4), null, 2)}
+
 VERIFIED_LOCAL_RESULTS:
 ${JSON.stringify(formatSearchDataForContext(verifiedWorkshops, 5), null, 2)}
 
@@ -836,6 +874,8 @@ FINAL_ORCHESTRATION_RULES:
 - Use ENGINE_PACK to improve vehicle-specific reasoning.
 - Use RESPONSE_PLAN to structure diagnosis, severity, next tests, safety, and purchase judgment.
 - Use VERIFIED_INTERNAL_DATA to refine diagnosis when relevant.
+- Use VERIFIED_ACTIONS as execution-grade decision support when they match the case strongly.
+- If VERIFIED_ACTIONS contains a strong match, use its actions, stop_now_if, and ignore_risk intelligently.
 - Use VERIFIED_LOCAL_RESULTS only when local help is requested or clearly useful.
 - If nearby help is requested and local results are available, present the strongest ones clearly.
 - If this is a pre-purchase case, protect the user financially.
