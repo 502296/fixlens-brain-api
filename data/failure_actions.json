@@ -1,10 +1,15 @@
 [
   {
     "id": "hydraulic_lifter_tick",
+    "diagnostic_priority": 7,
+    "match_type": ["noise", "tick", "top_end"],
+    "confidence_boost_if": ["cold_start", "fades_warm", "no_power_loss"],
+    "kill_other_hypotheses": ["rod_bearing_knock", "valvetrain_severe"],
+    "safety_level": "moderate",
     "actions": [
       "Check engine oil level and correct viscosity/spec first.",
-      "If it’s cold-start only and fades within 30–90s, monitor for a few days and avoid hard revs while cold.",
-      "If it persists longer than ~2 minutes or worsens, verify oil pressure and inspect for restriction (filter/galley)."
+      "If it’s cold-start only and fades within 30–90 seconds, monitor for a few days and avoid hard revs while cold.",
+      "If it persists longer than about 2 minutes or worsens, verify oil pressure and inspect for restriction such as filter or oil galley blockage."
     ],
     "stop_now_if": [
       "Oil pressure warning light appears or the tick becomes suddenly loud with power loss.",
@@ -14,10 +19,15 @@
   },
   {
     "id": "timing_chain_tensioner_rattle",
+    "diagnostic_priority": 9,
+    "match_type": ["noise", "rattle", "timing"],
+    "confidence_boost_if": ["cold_start", "startup_only", "brief_duration"],
+    "kill_other_hypotheses": ["injector_tick_normal", "piston_slap"],
+    "safety_level": "high",
     "actions": [
-      "Confirm pattern: brief 1–3s rattle on cold start then gone is classic tensioner behavior.",
-      "Reduce repeated short start/stop cycles temporarily (they repeat the same chain slap).",
-      "If the rattle gets longer/louder, inspect tensioner and guides before timing jumps."
+      "Confirm pattern: brief 1–3 second rattle on cold start then gone is classic tensioner behavior.",
+      "Reduce repeated short start/stop cycles temporarily because they repeat the same chain slap.",
+      "If the rattle gets longer or louder, inspect tensioner and guides before timing jumps."
     ],
     "stop_now_if": [
       "Rattle becomes sustained or appears with misfire, rough running, or check engine light.",
@@ -27,10 +37,15 @@
   },
   {
     "id": "timing_chain_tensioner_rattle_light",
+    "diagnostic_priority": 6,
+    "match_type": ["noise", "rattle", "timing"],
+    "confidence_boost_if": ["cold_start", "quick_fade", "light_noise"],
+    "kill_other_hypotheses": ["valvetrain_severe"],
+    "safety_level": "moderate",
     "actions": [
       "Track whether it’s only cold and disappears quickly when warm.",
-      "Use correct oil spec and a quality filter (oil pressure stability matters).",
-      "If it evolves, inspect tensioner/guides and oil control path."
+      "Use correct oil spec and a quality filter because oil pressure stability matters.",
+      "If it evolves, inspect tensioner, guides, and oil control path."
     ],
     "stop_now_if": [
       "Noise starts lasting longer or appears when warm."
@@ -39,8 +54,13 @@
   },
   {
     "id": "timing_chain_guides_worn",
+    "diagnostic_priority": 10,
+    "match_type": ["noise", "rattle", "timing", "decel_related"],
+    "confidence_boost_if": ["decel_noise", "load_transition_noise", "persistent_rattle"],
+    "kill_other_hypotheses": ["injector_tick_normal", "exhaust_heat_shield_rattle"],
+    "safety_level": "high",
     "actions": [
-      "Test: is it loudest on decel/lift-off or during load transitions? That fits guide wear.",
+      "Test: is it loudest on decel or lift-off or during load transitions? That fits guide wear.",
       "Avoid high RPM and hard kickdown until inspected.",
       "Inspect guides and tensioner promptly."
     ],
@@ -51,142 +71,207 @@
   },
   {
     "id": "vvt_cam_phaser_rattle",
+    "diagnostic_priority": 8,
+    "match_type": ["noise", "timing", "load_related"],
+    "confidence_boost_if": ["under_load", "quiets_on_lift_off", "timing_codes_present"],
+    "kill_other_hypotheses": ["injector_tick_normal", "loose_undertray"],
+    "safety_level": "high",
     "actions": [
-      "Test: appears under load and quiets immediately when you lift? Consider phaser control/knock separation.",
-      "Verify oil level/quality (VVT is oil-pressure dependent).",
+      "Test: if it appears under load and quiets immediately when you lift, consider phaser control and knock separation.",
+      "Verify oil level and oil quality because VVT is oil-pressure dependent.",
       "If timing-related codes exist, inspect VVT solenoid and phaser operation."
     ],
     "stop_now_if": [
-      "Strong vibration/roughness with metallic noise under load."
+      "Strong vibration or roughness appears with metallic noise under load."
     ],
     "ignore_risk": "Can worsen into persistent timing noise and poor performance."
   },
   {
     "id": "vvt_issue",
+    "diagnostic_priority": 7,
+    "match_type": ["timing", "drivability", "oil_dependent"],
+    "confidence_boost_if": ["after_oil_service", "timing_codes_present", "idle_instability"],
+    "kill_other_hypotheses": ["injector_tick_normal"],
+    "safety_level": "moderate",
     "actions": [
       "If symptoms started after an oil service, confirm correct oil spec and level.",
-      "Pull trouble codes if a light is on—this is a shortcut to the real cause.",
-      "Inspect VVT solenoids/oil control and verify actual cam timing."
+      "Pull trouble codes if a light is on because this is a shortcut to the real cause.",
+      "Inspect VVT solenoids and oil control path and verify actual cam timing."
     ],
     "stop_now_if": [
-      "Severe misfire/limp mode behavior under throttle."
+      "Severe misfire or limp mode behavior appears under throttle."
     ],
     "ignore_risk": "Ongoing timing instability increases stress, fuel use, and drivability issues."
   },
   {
     "id": "injector_tick_normal",
+    "diagnostic_priority": 3,
+    "match_type": ["noise", "tick", "normal_behavior"],
+    "confidence_boost_if": ["light_even_tick", "follows_rpm", "no_symptoms"],
+    "kill_other_hypotheses": ["hydraulic_lifter_tick", "rod_bearing_knock"],
+    "safety_level": "low",
     "actions": [
       "Confirm it’s a light, even tick that cleanly follows RPM with no performance symptoms.",
-      "Listen near injectors: direct-injection engines often tick normally.",
-      "If misfire/roughness appears, shift to ignition/fuel diagnosis."
+      "Listen near injectors because direct-injection engines often tick normally.",
+      "If misfire or roughness appears, shift to ignition or fuel diagnosis."
     ],
     "stop_now_if": [],
     "ignore_risk": "Usually harmless when no other symptoms exist."
   },
   {
     "id": "valve_train_tap",
+    "diagnostic_priority": 7,
+    "match_type": ["noise", "tap", "top_end"],
+    "confidence_boost_if": ["tracks_rpm", "top_of_engine", "mechanical_tap"],
+    "kill_other_hypotheses": ["exhaust_heat_shield_rattle", "loose_undertray"],
+    "safety_level": "moderate",
     "actions": [
-      "Localize: top of engine vs front accessory drive.",
-      "In Park/Neutral, hold 1500 RPM—if it tracks RPM, it’s valvetrain/accessory related.",
-      "If it gets harsher or louder, inspect rocker/lifter/valve lash path."
+      "Localize the noise: top of engine versus front accessory drive.",
+      "In Park or Neutral, hold 1500 RPM. If it tracks RPM, it is valvetrain or accessory related.",
+      "If it gets harsher or louder, inspect rocker, lifter, or valve lash path."
     ],
     "stop_now_if": [
-      "Harsh mechanical tap with power loss or strong shake."
+      "Harsh mechanical tap appears with power loss or strong shake."
     ],
     "ignore_risk": "Can progress into mechanical wear and misfire if severe."
   },
   {
     "id": "valve_train_tick",
+    "diagnostic_priority": 5,
+    "match_type": ["noise", "tick", "top_end"],
+    "confidence_boost_if": ["fades_warm", "light_tick", "stable_drivability"],
+    "kill_other_hypotheses": ["rod_bearing_knock", "valvetrain_severe"],
+    "safety_level": "low_to_moderate",
     "actions": [
-      "Track heat relation: if it fades warm, it’s often minor.",
+      "Track heat relation: if it fades warm, it is often minor.",
       "Confirm correct oil spec and filter quality.",
       "If it grows over time, inspect valvetrain components."
     ],
     "stop_now_if": [
-      "Tick becomes loud with clear misfire/rough running."
+      "Tick becomes loud with clear misfire or rough running."
     ],
     "ignore_risk": "Often low risk, but long neglect can accelerate wear."
   },
   {
     "id": "valvetrain_severe",
+    "diagnostic_priority": 10,
+    "match_type": ["noise", "hammering", "grinding", "mechanical"],
+    "confidence_boost_if": ["constant_noise", "power_loss", "severe_shake"],
+    "kill_other_hypotheses": ["injector_tick_normal", "piston_slap"],
+    "safety_level": "critical",
     "actions": [
-      "Do not continue driving if it’s grinding/hammering—treat as urgent mechanical contact risk.",
+      "Do not continue driving if it’s grinding or hammering. Treat it as urgent mechanical contact risk.",
       "Check oil level immediately.",
-      "Tow for inspection (valvetrain or internal contact possible)."
+      "Tow for inspection because valvetrain or internal contact is possible."
     ],
     "stop_now_if": [
-      "Any sustained grinding/hammering noise."
+      "Any sustained grinding or hammering noise."
     ],
     "ignore_risk": "Rapid internal engine damage."
   },
   {
     "id": "exhaust_leak_tap",
+    "diagnostic_priority": 6,
+    "match_type": ["noise", "tick", "exhaust"],
+    "confidence_boost_if": ["cold_start", "sharp_tick", "near_manifold"],
+    "kill_other_hypotheses": ["hydraulic_lifter_tick"],
+    "safety_level": "low_to_moderate",
     "actions": [
-      "Cold start: sharp tick near manifold that changes as it warms fits a small leak.",
-      "Look for soot marks around manifold/joints.",
-      "Repair gasket/fasteners before it spreads."
+      "Cold start: a sharp tick near the manifold that changes as it warms fits a small leak.",
+      "Look for soot marks around manifold or joints.",
+      "Repair gasket or fasteners before it spreads."
     ],
     "stop_now_if": [],
-    "ignore_risk": "Usually noise/efficiency issue; can worsen and affect sensors over time."
+    "ignore_risk": "Usually a noise and efficiency issue. It can worsen and affect sensors over time."
   },
   {
     "id": "exhaust_manifold_leak_warm",
+    "diagnostic_priority": 6,
+    "match_type": ["noise", "tick", "exhaust"],
+    "confidence_boost_if": ["warm_only", "thermal_expansion_pattern"],
+    "kill_other_hypotheses": ["timing_chain_tensioner_rattle"],
+    "safety_level": "low_to_moderate",
     "actions": [
-      "Warm-only tick suggests a crack/joint opening with thermal expansion.",
+      "Warm-only tick suggests a crack or joint opening with thermal expansion.",
       "Inspect for soot at cracks and joints.",
       "Repair before the crack grows."
     ],
     "stop_now_if": [],
-    "ignore_risk": "Can expand into larger leak and drivability/sensor issues."
+    "ignore_risk": "Can expand into a larger leak and drivability or sensor issues."
   },
   {
     "id": "exhaust_leak_tick_under_load",
+    "diagnostic_priority": 7,
+    "match_type": ["noise", "exhaust", "load_related"],
+    "confidence_boost_if": ["louder_on_accel", "quieter_on_coast"],
+    "kill_other_hypotheses": ["injector_tick_normal"],
+    "safety_level": "moderate",
     "actions": [
-      "If it’s louder on acceleration and quieter on coast, exhaust pressure leak is likely.",
-      "Inspect manifold/downpipe joints and flex section.",
+      "If it’s louder on acceleration and quieter on coast, an exhaust pressure leak is likely.",
+      "Inspect manifold, downpipe joints, and flex section.",
       "Repair to prevent expansion."
     ],
     "stop_now_if": [],
-    "ignore_risk": "Leak may grow and become louder; can impact mixture readings."
+    "ignore_risk": "Leak may grow and become louder and can affect mixture readings."
   },
   {
     "id": "exhaust_heat_shield_rattle",
+    "diagnostic_priority": 4,
+    "match_type": ["noise", "rattle", "underbody"],
+    "confidence_boost_if": ["buzzing", "light_metal_rattle", "reproduces_on_tap"],
+    "kill_other_hypotheses": ["timing_chain_guides_worn"],
+    "safety_level": "low",
     "actions": [
-      "With engine cool, lightly press/tap the shield area to reproduce the buzz.",
-      "Replace missing clips/fasteners.",
+      "With engine cool, lightly press or tap the shield area to reproduce the buzz.",
+      "Replace missing clips or fasteners.",
       "Ensure no contact with the exhaust."
     ],
     "stop_now_if": [],
-    "ignore_risk": "Mostly nuisance, can worsen and vibrate into contact."
+    "ignore_risk": "Mostly nuisance, but it can worsen and vibrate into contact."
   },
   {
     "id": "loose_exhaust_hanger",
+    "diagnostic_priority": 5,
+    "match_type": ["noise", "rattle", "underbody"],
+    "confidence_boost_if": ["bumps", "load_change", "underbody_contact"],
+    "kill_other_hypotheses": ["timing_chain_tensioner_rattle"],
+    "safety_level": "moderate",
     "actions": [
-      "If it rattles on bumps/load changes, inspect hangers and rubber mounts.",
-      "Confirm the exhaust isn’t hitting the body/subframe.",
-      "Replace worn hangers/mounts."
+      "If it rattles on bumps or load changes, inspect hangers and rubber mounts.",
+      "Confirm the exhaust isn’t hitting the body or subframe.",
+      "Replace worn hangers or mounts."
     ],
     "stop_now_if": [
       "Exhaust is dragging or striking the body hard."
     ],
-    "ignore_risk": "Can crack pipes/welds and create leaks."
+    "ignore_risk": "Can crack pipes or welds and create leaks."
   },
   {
     "id": "exhaust_resonator_rattle",
+    "diagnostic_priority": 5,
+    "match_type": ["noise", "rattle", "resonance"],
+    "confidence_boost_if": ["specific_rpm_range", "parked_reproducible"],
+    "kill_other_hypotheses": ["wheel_bearing_hum"],
+    "safety_level": "low_to_moderate",
     "actions": [
-      "Hold RPM at the noise range while parked—if it happens, it’s exhaust/body resonance.",
-      "Inspect muffler/resonator for internal baffle failure.",
-      "Replace the resonator/muffler if confirmed."
+      "Hold RPM at the noise range while parked. If it happens, it is exhaust or body resonance.",
+      "Inspect muffler or resonator for internal baffle failure.",
+      "Replace the resonator or muffler if confirmed."
     ],
     "stop_now_if": [],
-    "ignore_risk": "Usually noise; severe internal collapse can restrict flow in rare cases."
+    "ignore_risk": "Usually noise only. Severe internal collapse can restrict flow in rare cases."
   },
   {
     "id": "loose_undertray",
+    "diagnostic_priority": 6,
+    "match_type": ["rattle", "speed_related", "underbody"],
+    "confidence_boost_if": ["only_at_speed", "wind_related", "plastic_flap_noise"],
+    "kill_other_hypotheses": ["rod_bearing_knock"],
+    "safety_level": "moderate",
     "actions": [
-      "If it appears only with speed/wind, inspect undertray/fasteners immediately.",
+      "If it appears only with speed or wind, inspect undertray and fasteners immediately.",
       "Secure loose edges so they can’t flap into tires.",
-      "Replace missing clips/screws."
+      "Replace missing clips or screws."
     ],
     "stop_now_if": [
       "Panel is hanging low or contacting tires."
@@ -195,10 +280,15 @@
   },
   {
     "id": "pads_to_metal_grind",
+    "diagnostic_priority": 10,
+    "match_type": ["brake", "grinding", "safety_critical"],
+    "confidence_boost_if": ["grinding_when_braking", "metal_to_metal_sound"],
+    "kill_other_hypotheses": ["wheel_bearing_hum"],
+    "safety_level": "critical",
     "actions": [
-      "Do not keep driving—this is metal-to-rotor grinding.",
-      "Avoid repeated braking; let the brakes cool.",
-      "Replace pads immediately and likely rotors; inspect caliper condition."
+      "Do not keep driving because this is metal-to-rotor grinding.",
+      "Avoid repeated braking and let the brakes cool.",
+      "Replace pads immediately and likely rotors and inspect caliper condition."
     ],
     "stop_now_if": [
       "Any grinding during braking."
@@ -207,9 +297,14 @@
   },
   {
     "id": "wheel_bearing_hum",
+    "diagnostic_priority": 8,
+    "match_type": ["hum", "speed_related", "wheel_end"],
+    "confidence_boost_if": ["lane_change_effect", "grows_with_speed", "hub_heat_difference"],
+    "kill_other_hypotheses": ["exhaust_resonator_rattle"],
+    "safety_level": "high",
     "actions": [
-      "Perform a gentle lane-change test: noise changes with load shift = bearing likely.",
-      "After a short drive, carefully compare hub temperature side-to-side.",
+      "Perform a gentle lane-change test: if noise changes with load shift, bearing is likely.",
+      "After a short drive, carefully compare hub temperature side to side.",
       "Plan bearing replacement before it progresses."
     ],
     "stop_now_if": [
@@ -219,6 +314,11 @@
   },
   {
     "id": "loose_wheel_lug_nuts",
+    "diagnostic_priority": 10,
+    "match_type": ["wheel", "safety_critical", "looseness"],
+    "confidence_boost_if": ["clunking", "wheel_wobble", "recent_wheel_service"],
+    "kill_other_hypotheses": ["wheel_bearing_hum"],
+    "safety_level": "critical",
     "actions": [
       "Stop safely immediately.",
       "Check lug nut tightness with the proper tool.",
@@ -231,34 +331,49 @@
   },
   {
     "id": "serpentine_belt_slip",
+    "diagnostic_priority": 7,
+    "match_type": ["squeal", "belt_drive", "startup_noise"],
+    "confidence_boost_if": ["cold_start", "electrical_load_changes_sound"],
+    "kill_other_hypotheses": ["wheel_bearing_hum"],
+    "safety_level": "high",
     "actions": [
       "If squeal lasts a few seconds on cold start, inspect belt and tensioner condition.",
-      "Increase electrical load (lights/defrost): if squeal worsens, slip is likely.",
-      "Replace belt and/or tensioner as needed."
+      "Increase electrical load, such as lights or defrost. If squeal worsens, slip is likely.",
+      "Replace belt and or tensioner as needed."
     ],
     "stop_now_if": [
-      "Battery light/overheat warning appears or steering assist suddenly changes (if belt-driven)."
+      "Battery light or overheat warning appears or steering assist suddenly changes if belt-driven."
     ],
-    "ignore_risk": "Belt can fail and take down charging/cooling/assist systems depending on vehicle."
+    "ignore_risk": "Belt can fail and take down charging, cooling, or assist systems depending on vehicle."
   },
   {
     "id": "alternator_bearing",
+    "diagnostic_priority": 7,
+    "match_type": ["whine", "bearing", "electrical"],
+    "confidence_boost_if": ["electrical_load_changes_noise", "charging_warning"],
+    "kill_other_hypotheses": ["ac_compressor_bearing"],
+    "safety_level": "high",
     "actions": [
-      "Add electrical load: if whine changes, alternator involvement increases.",
+      "Add electrical load. If the whine changes, alternator involvement increases.",
       "Watch for charging warnings or voltage instability.",
-      "Inspect/replace alternator before failure."
+      "Inspect or replace alternator before failure."
     ],
     "stop_now_if": [
-      "Grinding + battery warning or severe electrical instability."
+      "Grinding with battery warning or severe electrical instability."
     ],
     "ignore_risk": "Charging failure can strand the vehicle."
   },
   {
     "id": "ac_compressor_bearing",
+    "diagnostic_priority": 7,
+    "match_type": ["bearing", "ac_related", "belt_drive"],
+    "confidence_boost_if": ["noise_changes_with_ac_toggle", "belt_side_noise"],
+    "kill_other_hypotheses": ["alternator_bearing"],
+    "safety_level": "high",
     "actions": [
-      "Toggle A/C: if noise changes, compressor/clutch path is likely.",
+      "Toggle A/C. If the noise changes, compressor or clutch path is likely.",
       "If grinding begins, avoid using A/C to reduce load until inspected.",
-      "Inspect compressor bearing/clutch before it seizes and throws the belt."
+      "Inspect compressor bearing or clutch before it seizes and throws the belt."
     ],
     "stop_now_if": [
       "Strong grinding or belt distress noises."
@@ -267,8 +382,13 @@
   },
   {
     "id": "intake_vacuum_leak",
+    "diagnostic_priority": 8,
+    "match_type": ["hiss", "lean", "air_fuel"],
+    "confidence_boost_if": ["idle_hiss", "rough_idle", "lean_codes"],
+    "kill_other_hypotheses": ["injector_tick_normal"],
+    "safety_level": "moderate",
     "actions": [
-      "If hiss at idle + rough/lean symptoms, suspect unmetered air leak.",
+      "If there is a hiss at idle with rough or lean symptoms, suspect unmetered air leak.",
       "Inspect vacuum hoses, PCV lines, and intake ducting.",
       "If lean codes exist, fix leaks first before chasing sensors."
     ],
@@ -277,9 +397,14 @@
   },
   {
     "id": "brake_booster_leak",
+    "diagnostic_priority": 9,
+    "match_type": ["brake", "hiss", "safety_critical"],
+    "confidence_boost_if": ["rpm_changes_when_braking", "hard_pedal", "assist_loss"],
+    "kill_other_hypotheses": ["intake_vacuum_leak"],
+    "safety_level": "critical",
     "actions": [
-      "At idle, press the brake pedal: if RPM changes and hiss increases, booster leak is likely.",
-      "If brake feel changes (hard pedal/weak assist), treat as urgent.",
+      "At idle, press the brake pedal. If RPM changes and hiss increases, booster leak is likely.",
+      "If brake feel changes, such as hard pedal or weak assist, treat as urgent.",
       "Inspect booster and check valve immediately."
     ],
     "stop_now_if": [
@@ -289,42 +414,62 @@
   },
   {
     "id": "detonation_ping",
+    "diagnostic_priority": 8,
+    "match_type": ["knock", "combustion", "load_related"],
+    "confidence_boost_if": ["under_load", "light_throttle_ping", "heat_related"],
+    "kill_other_hypotheses": ["rod_bearing_knock"],
+    "safety_level": "high",
     "actions": [
-      "Reduce throttle immediately—do not load the engine while pinging.",
-      "If available, test one tank of higher octane only as a diagnostic hint (not a permanent fix).",
-      "Investigate root causes: heat, lean condition, ignition, VVT, carbon buildup."
+      "Reduce throttle immediately. Do not load the engine while pinging.",
+      "If available, test one tank of higher octane only as a diagnostic hint, not a permanent fix.",
+      "Investigate root causes: heat, lean condition, ignition, VVT, or carbon buildup."
     ],
     "stop_now_if": [
       "Knock becomes harsh with power loss even at light throttle."
     ],
-    "ignore_risk": "Severe knock can damage pistons/valves over time, rapidly if intense."
+    "ignore_risk": "Severe knock can damage pistons or valves over time, rapidly if intense."
   },
   {
     "id": "rod_bearing_knock",
+    "diagnostic_priority": 10,
+    "match_type": ["knock", "bottom_end", "safety_critical"],
+    "confidence_boost_if": ["deep_knock", "worse_with_throttle", "oil_risk"],
+    "kill_other_hypotheses": ["injector_tick_normal", "piston_slap"],
+    "safety_level": "critical",
     "actions": [
-      "Do not drive—deep knock under load suggests bottom-end damage risk.",
+      "Do not drive. Deep knock under load suggests bottom-end damage risk.",
       "Check oil level immediately.",
       "Tow for oil pressure verification and bearing inspection."
     ],
     "stop_now_if": [
       "Any deep knock that worsens with throttle."
     ],
-    "ignore_risk": "Catastrophic engine failure (thrown rod) is possible."
+    "ignore_risk": "Catastrophic engine failure such as a thrown rod is possible."
   },
   {
     "id": "piston_slap",
+    "diagnostic_priority": 5,
+    "match_type": ["knock", "cold_only", "engine_noise"],
+    "confidence_boost_if": ["cold_only", "fades_warm", "light_knock"],
+    "kill_other_hypotheses": ["rod_bearing_knock"],
+    "safety_level": "moderate",
     "actions": [
       "If it’s cold-only and disappears warm, keep revs low until warmed up.",
       "Avoid hard acceleration when cold.",
       "If it starts occurring when warm, reassess diagnosis."
     ],
     "stop_now_if": [],
-    "ignore_risk": "Often moderate; persistent warm knock needs re-evaluation."
+    "ignore_risk": "Often moderate, but persistent warm knock needs re-evaluation."
   },
   {
     "id": "needs_more_info",
+    "diagnostic_priority": 2,
+    "match_type": ["unclear_case"],
+    "confidence_boost_if": [],
+    "kill_other_hypotheses": [],
+    "safety_level": "unknown",
     "actions": [
-      "Do the two isolation checks: rev in Park/Neutral (RPM relation) and steady-speed test (speed relation).",
+      "Do the two isolation checks: rev in Park or Neutral for RPM relation and steady-speed test for speed relation.",
       "Report whether it is cold-only or warm-only.",
       "Report whether it is worse under load or on coast."
     ],
@@ -333,16 +478,26 @@
   },
   {
     "id": "needs_relation_data",
+    "diagnostic_priority": 2,
+    "match_type": ["unclear_case", "needs_testing"],
+    "confidence_boost_if": [],
+    "kill_other_hypotheses": [],
+    "safety_level": "unknown",
     "actions": [
-      "Record 10s at idle and 10s at ~1500 RPM near the source.",
-      "Confirm: does it follow RPM while parked or only road speed?",
-      "Confirm: cold-only, warm-only, or both?"
+      "Record 10 seconds at idle and 10 seconds at about 1500 RPM near the source.",
+      "Confirm whether it follows RPM while parked or only road speed.",
+      "Confirm whether it is cold-only, warm-only, or both."
     ],
     "stop_now_if": [],
     "ignore_risk": "Overlapping causes without relation tests."
   },
   {
     "id": "needs_isolation_test",
+    "diagnostic_priority": 3,
+    "match_type": ["unclear_case", "isolation_needed"],
+    "confidence_boost_if": [],
+    "kill_other_hypotheses": [],
+    "safety_level": "unknown",
     "actions": [
       "Engine test: does the same sound appear while stationary when you raise RPM?",
       "Wheel test: does the sound change during a gentle lane shift at the same speed?",
