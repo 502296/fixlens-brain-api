@@ -664,7 +664,6 @@ function normalizeText(value = "") {
     .replace(/\s+/g, " ")
     .trim();
 }
-
 function hasUsableLocation(location, text = "") {
   if (!location && !text) return false;
 
