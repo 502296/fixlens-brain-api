@@ -1,7 +1,8 @@
-// search.js — FixLens v5.0.0
+// search.js — FixLens v6.0.0
 // Global + data-first + stable fields
 // Goals:
 // - Search internal KB first using manifest-selected files
+// - Match decision-grade action records from failure_actions.json
 // - Use Google Places only when local-help intent is clear and allowed
 // - Return stable, rich fields for service.js
 // - Prefer internal diagnosis intelligence before external lookups
@@ -12,6 +13,7 @@ import path from "path";
 
 const DATA_DIR = path.join(process.cwd(), "data");
 const MANIFEST_PATH = path.join(DATA_DIR, "kb_manifest.json");
+const FAILURE_ACTIONS_PATH = path.join(DATA_DIR, "failure_actions.json");
 
 /* =========================================================
    FETCH SAFE
@@ -38,6 +40,7 @@ const GEO_TIMEOUT_MS = Number(process.env.GEO_TIMEOUT_MS || 5000);
 const PLACES_MAX_RESULTS = Number(process.env.PLACES_MAX_RESULTS || 5);
 const DEFAULT_RADIUS_METERS = Number(process.env.PLACES_RADIUS_METERS || 25000);
 const DEFAULT_KB_RESULTS = Number(process.env.KB_DEFAULT_RESULTS || 4);
+const DEFAULT_ACTION_RESULTS = Number(process.env.KB_ACTION_RESULTS || 3);
 
 /* =========================================================
    JSON / FILE HELPERS
@@ -98,10 +101,7 @@ function normalizeText(value = "") {
   return String(value || "")
     .toLowerCase()
     .replace(/[\u2010-\u2015]/g, "-")
-    .replace(
-      /[^\p{L}\p{N}\s\-\.\,]/gu,
-      " "
-    )
+    .replace(/[^\p{L}\p{N}\s\-\.\,]/gu, " ")
     .replace(/\s+/g, " ")
     .trim();
 }
@@ -164,8 +164,10 @@ function buildSearchSignals(query = "") {
       "engine", "misfire", "knock", "noise", "overheat", "coolant", "battery",
       "alternator", "brake", "steering", "abs", "traction", "stability",
       "transmission", "suspension", "leak", "smoke", "rough idle",
+      "tick", "ticking", "rattle", "grinding", "squeal", "hum", "vibration",
       "محرك", "تقطيع", "خبط", "حرارة", "فرامل", "دركسون", "بطارية", "دينمو",
-      "تعليق", "تهريب", "دخان", "رجفة", "ثبات", "مانع الانغلاق"
+      "تعليق", "تهريب", "دخان", "رجفة", "ثبات", "مانع الانغلاق",
+      "صوت", "طقطقة", "تك تك", "خشخشة", "صرير", "اهتزاز", "ضعف سحب"
     ]),
     hasPlacesWords: hasAny(q, [
       "near me", "nearby", "closest", "shop", "mechanic", "garage", "repair",
@@ -380,6 +382,202 @@ function getKBForDomains(domains = []) {
 }
 
 /* =========================================================
+   FAILURE ACTIONS LOADING + MATCHING
+========================================================= */
+let FAILURE_ACTIONS_CACHE = null;
+
+function loadFailureActions() {
+  if (FAILURE_ACTIONS_CACHE) return FAILURE_ACTIONS_CACHE;
+
+  const parsed = safeReadJson(FAILURE_ACTIONS_PATH, []);
+  FAILURE_ACTIONS_CACHE = Array.isArray(parsed) ? parsed : [];
+  return FAILURE_ACTIONS_CACHE;
+}
+
+function normalizeActionText(action = {}) {
+  return normalizeText(
+    [
+      action.id,
+      action.match_type,
+      action.confidence_boost_if,
+      action.kill_other_hypotheses,
+      action.actions,
+      action.stop_now_if,
+      action.ignore_risk,
+      action.safety_level,
+    ]
+      .flat()
+      .filter(Boolean)
+      .join(" ")
+  );
+}
+
+function buildActionSignals(query = "") {
+  const q = normalizeText(query);
+
+  return {
+    normalized: q,
+    tokens: tokenize(q),
+    codes: extractFaultCodes(query),
+    coldStart: hasAny(q, [
+      "cold start", "startup", "when cold", "cold engine",
+      "بارد", "عند التشغيل", "تشغيل بارد"
+    ]),
+    warmOnly: hasAny(q, [
+      "when warm", "when hot", "after warm up",
+      "حار", "بعد ما تحمى", "وهي حارة"
+    ]),
+    idleOnly: hasAny(q, [
+      "at idle", "idle", "rough idle",
+      "على الايدل", "على السلانسيه", "واقف"
+    ]),
+    underLoad: hasAny(q, [
+      "under load", "when accelerating", "with throttle", "load",
+      "مع الدعس", "وقت الدعس", "تحت الحمل"
+    ]),
+    decel: hasAny(q, [
+      "decel", "lift off", "coast",
+      "رفع الدعس", "على الساحبة", "يبطل لما ارفع رجلي"
+    ]),
+    braking: hasAny(q, [
+      "brake", "braking", "pedal",
+      "فرامل", "دعسة الفرامل", "بدعس فرامل"
+    ]),
+    speedRelated: hasAny(q, [
+      "at speed", "highway", "road speed", "lane change", "wheel",
+      "على السرعة", "على الخط", "تزيد مع السرعة", "عجلة"
+    ]),
+    noiseWords: hasAny(q, [
+      "tick", "ticking", "rattle", "knock", "grind", "grinding",
+      "squeal", "hum", "whine", "buzz",
+      "طقطقة", "تك تك", "خشخشة", "خبط", "صرير", "ونة", "أزيز", "حك"
+    ]),
+    misfire: hasAny(q, [
+      "misfire", "rough idle", "shake", "shaking", "hesitation",
+      "تقطيع", "تفتفة", "تنتيع", "رجفة", "اهتزاز", "يختنق"
+    ]),
+    overheating: hasAny(q, [
+      "overheat", "overheating", "coolant", "radiator",
+      "حرارة", "سخونة", "ماء الرديتر", "رديتر"
+    ]),
+    batteryOrVoltage: hasAny(q, [
+      "battery", "alternator", "voltage", "charging",
+      "بطارية", "دينمو", "شحن", "فولتية"
+    ]),
+    safetyWords: hasAny(q, [
+      "safe to drive", "dangerous", "stop now", "can i drive",
+      "هل امشي بيها", "خطر", "اوقفها", "أكدر أمشي"
+    ]),
+    purchaseWords: hasAny(q, [
+      "should i buy", "worth buying", "pre purchase",
+      "اشتريها", "تنصحني اشتري", "قبل لا اشتري"
+    ]),
+  };
+}
+
+function scoreFailureAction(query, action) {
+  const signals = buildActionSignals(query);
+  const text = normalizeActionText(action);
+  const matchTypes = Array.isArray(action?.match_type) ? action.match_type : [];
+  const boosts = Array.isArray(action?.confidence_boost_if)
+    ? action.confidence_boost_if
+    : [];
+
+  let score = 0;
+
+  if (action?.id && signals.normalized.includes(normalizeText(action.id))) {
+    score += 20;
+  }
+
+  for (const token of signals.tokens) {
+    if (token.length < 2) continue;
+    if (text.includes(token)) score += token.length >= 4 ? 2 : 1;
+  }
+
+  if (signals.noiseWords && matchTypes.some((m) =>
+    ["noise", "tick", "rattle", "hum", "whine", "grinding", "squeal", "top_end", "bottom_end", "engine_noise", "belt_drive", "underbody", "wheel_end"].includes(String(m))
+  )) {
+    score += 8;
+  }
+
+  if (signals.misfire && matchTypes.some((m) =>
+    ["misfire", "air_fuel", "combustion", "drivability"].includes(String(m))
+  )) {
+    score += 8;
+  }
+
+  if (signals.braking && matchTypes.some((m) =>
+    ["brake", "safety_critical"].includes(String(m))
+  )) {
+    score += 10;
+  }
+
+  if (signals.speedRelated && matchTypes.some((m) =>
+    ["speed_related", "wheel_end", "underbody"].includes(String(m))
+  )) {
+    score += 7;
+  }
+
+  if (signals.underLoad && boosts.includes("under_load")) score += 6;
+  if (signals.coldStart && boosts.includes("cold_start")) score += 6;
+  if (signals.warmOnly && boosts.includes("warm_only")) score += 5;
+  if (signals.idleOnly && boosts.includes("idle_only")) score += 5;
+  if (signals.decel && boosts.includes("decel_noise")) score += 5;
+
+  if (signals.overheating && text.includes("overheat")) score += 8;
+  if (signals.batteryOrVoltage && text.includes("battery")) score += 8;
+
+  if (signals.safetyWords && String(action?.safety_level || "").toLowerCase() === "critical") {
+    score += 5;
+  }
+
+  if (signals.purchaseWords && String(action?.safety_level || "").toLowerCase() !== "low") {
+    score += 3;
+  }
+
+  score += Number(action?.diagnostic_priority || 0);
+
+  return score;
+}
+
+function matchFailureActions(query = "", maxResults = DEFAULT_ACTION_RESULTS) {
+  const actions = loadFailureActions();
+  if (!query || !Array.isArray(actions) || actions.length === 0) return [];
+
+  const limit = clamp(Number(maxResults || DEFAULT_ACTION_RESULTS), 1, 6);
+
+  const matched = actions
+    .map((action) => ({
+      ...action,
+      match_score: scoreFailureAction(query, action),
+    }))
+    .filter((action) => action.match_score > 0)
+    .sort((a, b) => {
+      if (b.match_score !== a.match_score) return b.match_score - a.match_score;
+      return Number(b.diagnostic_priority || 0) - Number(a.diagnostic_priority || 0);
+    })
+    .slice(0, limit);
+
+  return matched.map((action) => ({
+    id: action.id || "",
+    match_score: action.match_score,
+    diagnostic_priority: action.diagnostic_priority || 0,
+    match_type: Array.isArray(action.match_type) ? action.match_type : [],
+    confidence_boost_if: Array.isArray(action.confidence_boost_if)
+      ? action.confidence_boost_if
+      : [],
+    kill_other_hypotheses: Array.isArray(action.kill_other_hypotheses)
+      ? action.kill_other_hypotheses
+      : [],
+    safety_level: action.safety_level || "",
+    actions: Array.isArray(action.actions) ? action.actions : [],
+    stop_now_if: Array.isArray(action.stop_now_if) ? action.stop_now_if : [],
+    ignore_risk: action.ignore_risk || "",
+    source: "failure_actions.json",
+  }));
+}
+
+/* =========================================================
    LOCAL KB SEARCH
 ========================================================= */
 function recordToText(record) {
@@ -520,9 +718,7 @@ function searchLocalKB(query, maxResults = DEFAULT_KB_RESULTS) {
   return uniqBy(
     mapped.slice(0, limit),
     (item) =>
-      `${String(item.title).toLowerCase()}::${item.source}::${
-        (item.codes || []).join(",")
-      }`
+      `${String(item.title).toLowerCase()}::${item.source}::${(item.codes || []).join(",")}`
   );
 }
 
@@ -1040,6 +1236,7 @@ function deriveSearchMeta({
   query = "",
   verified_data = [],
   verified_workshops = [],
+  verified_actions = [],
 }) {
   const signals = buildSearchSignals(query);
 
@@ -1048,6 +1245,7 @@ function deriveSearchMeta({
     detected_fault_codes: signals.codes,
     used_internal_kb: Array.isArray(verified_data) && verified_data.length > 0,
     used_places: Array.isArray(verified_workshops) && verified_workshops.length > 0,
+    used_failure_actions: Array.isArray(verified_actions) && verified_actions.length > 0,
     diagnosis_signal: signals.hasDiagnosisWords,
     places_signal: signals.hasPlacesWords,
     purchase_signal: signals.hasPurchaseWords,
@@ -1075,6 +1273,11 @@ export async function performSearch(userQuery, userLocation, opts = {}) {
       ? searchLocalKB(query, maxResults)
       : [];
 
+  const verified_actions =
+    query.length >= 2
+      ? matchFailureActions(query, DEFAULT_ACTION_RESULTS)
+      : [];
+
   let verified_workshops = [];
 
   if (
@@ -1095,10 +1298,12 @@ export async function performSearch(userQuery, userLocation, opts = {}) {
 
   return {
     verified_data,
+    verified_actions,
     verified_workshops,
     search_meta: deriveSearchMeta({
       query,
       verified_data,
+      verified_actions,
       verified_workshops,
     }),
   };
