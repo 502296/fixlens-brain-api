@@ -1,5 +1,5 @@
 // audioProcessor.js
-// FixLens Audio Processor v2.0
+// FixLens Audio Processor v3.0
 // Purpose:
 // - Transcribe user speech reliably
 // - Prepare for future vehicle-sound workflows
@@ -41,16 +41,22 @@ function buildTempAudioPath(ext = "m4a") {
   return path.join(os.tmpdir(), `fixlens-audio-${id}.${ext}`);
 }
 
-function detectLikelyExtension(audioKind = "", mimeType = "") {
-  const value = `${String(audioKind || "").toLowerCase()} ${String(mimeType || "").toLowerCase()}`;
+function detectLikelyExtension(audioKind = "", mimeType = "", fileName = "") {
+  const value = `${String(audioKind || "").toLowerCase()} ${String(mimeType || "").toLowerCase()} ${String(fileName || "").toLowerCase()}`;
 
-  if (value.includes("wav")) return "wav";
-  if (value.includes("mp3") || value.includes("mpeg")) return "mp3";
-  if (value.includes("webm")) return "webm";
-  if (value.includes("ogg")) return "ogg";
-  if (value.includes("mp4")) return "mp4";
-  if (value.includes("aac")) return "aac";
+  if (value.includes(".wav") || value.includes("audio/wav") || value.includes("wav")) return "wav";
+  if (value.includes(".mp3") || value.includes("audio/mpeg") || value.includes("mpeg") || value.includes("mp3")) return "mp3";
+  if (value.includes(".webm") || value.includes("audio/webm") || value.includes("webm")) return "webm";
+  if (value.includes(".ogg") || value.includes("audio/ogg") || value.includes("ogg")) return "ogg";
+  if (value.includes(".mp4") || value.includes("audio/mp4") || value.includes("mp4")) return "mp4";
+  if (value.includes(".aac") || value.includes("audio/aac") || value.includes("aac")) return "aac";
+  if (value.includes(".m4a") || value.includes("audio/m4a") || value.includes("m4a")) return "m4a";
+
   return "m4a";
+}
+
+function stripDataUrlPrefix(base64 = "") {
+  return String(base64 || "").replace(/^data:audio\/[a-zA-Z0-9.+-]+;base64,/, "");
 }
 
 function extractAudioPayload(input) {
@@ -60,6 +66,7 @@ function extractAudioPayload(input) {
       locale: "auto",
       audioKind: "unknown",
       mimeType: "",
+      fileName: "",
     };
   }
 
@@ -69,6 +76,7 @@ function extractAudioPayload(input) {
       locale: "auto",
       audioKind: "unknown",
       mimeType: "",
+      fileName: "",
     };
   }
 
@@ -90,11 +98,16 @@ function extractAudioPayload(input) {
         input.audioType ||
         input.audio_type ||
         "unknown",
-     mimeType:
-input.mimeType ||
-input.mime_type ||
-input.audio_mime ||
-"",
+      mimeType:
+        input.mimeType ||
+        input.mime_type ||
+        input.audio_mime ||
+        "",
+      fileName:
+        input.fileName ||
+        input.filename ||
+        input.audio_filename ||
+        "",
     };
   }
 
@@ -103,6 +116,7 @@ input.audio_mime ||
     locale: "auto",
     audioKind: "unknown",
     mimeType: "",
+    fileName: "",
   };
 }
 
@@ -121,6 +135,7 @@ function inferAudioNature({ transcript = "", audioKind = "unknown" }) {
     kind.includes("vehicle") ||
     kind.includes("noise") ||
     kind.includes("engine") ||
+    kind.includes("car_sound") ||
     t.includes("knock") ||
     t.includes("tick") ||
     t.includes("rattle") ||
@@ -137,7 +152,7 @@ function inferAudioNature({ transcript = "", audioKind = "unknown" }) {
 }
 
 export async function processAudio(input = {}) {
-  const { audioBase64, locale, audioKind, mimeType } = extractAudioPayload(input);
+  const { audioBase64, locale, audioKind, mimeType, fileName } = extractAudioPayload(input);
 
   if (!audioBase64 || typeof audioBase64 !== "string") {
     return {
@@ -150,11 +165,12 @@ export async function processAudio(input = {}) {
     };
   }
 
-  const extension = detectLikelyExtension(audioKind, mimeType);
+  const cleanBase64 = stripDataUrlPrefix(audioBase64);
+  const extension = detectLikelyExtension(audioKind, mimeType || "audio/m4a", fileName);
   const tempPath = buildTempAudioPath(extension);
 
   try {
-    fs.writeFileSync(tempPath, Buffer.from(audioBase64, "base64"));
+    fs.writeFileSync(tempPath, Buffer.from(cleanBase64, "base64"));
 
     const requestPayload = {
       file: fs.createReadStream(tempPath),
@@ -166,9 +182,16 @@ export async function processAudio(input = {}) {
       requestPayload.language = languageHint;
     }
 
-    const result = await client.audio.transcriptions.create(requestPayload);
+    console.log("[AUDIO] base64_length:", cleanBase64.length);
+    console.log("[AUDIO] mimeType:", mimeType || "");
+    console.log("[AUDIO] fileName:", fileName || "");
+    console.log("[AUDIO] detected_extension:", extension);
+    console.log("[AUDIO] language_hint:", languageHint || "");
 
+    const result = await client.audio.transcriptions.create(requestPayload);
     const text = cleanTranscript(result?.text || "");
+
+    console.log("[AUDIO] transcript:", text || "(empty)");
 
     return {
       ok: true,
