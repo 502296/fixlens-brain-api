@@ -60,7 +60,12 @@ export async function handleFixLensRequest(req) {
     ------------------------- */
     if (audio) {
       try {
-        const audioResult = await processAudio(audio);
+        const audioResult = await processAudio({
+  audio_base64: audio,
+  locale,
+  audio_kind: body.audio_kind || body.audio_type || "unknown",
+  audio_mime: body.audio_mime || "",
+});
 
         if (typeof audioResult === "string" && audioResult.trim()) {
           audioTranscript = audioResult.trim();
