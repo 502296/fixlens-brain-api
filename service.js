@@ -60,12 +60,23 @@ export async function handleFixLensRequest(req) {
     ------------------------- */
     if (audio) {
       try {
+        console.log("[AUDIO DEBUG]", {
+          bodyKeys: Object.keys(body || {}),
+          hasAudioField: Boolean(audio),
+          audioType: typeof audio,
+          audioLength: typeof audio === "string" ? audio.length : null,
+          audioKind: body.audio_kind || body.audio_type || null,
+          audioMime: body.audio_mime || null,
+          audioFilename: body.audio_filename || null,
+        });
+
         const audioResult = await processAudio({
-  audio_base64: audio,
-  locale,
-  audio_kind: body.audio_kind || body.audio_type || "unknown",
-  audio_mime: body.audio_mime || "",
-});
+          audio_base64: audio,
+          locale,
+          audio_kind: body.audio_kind || body.audio_type || "unknown",
+          audio_mime: body.audio_mime || "",
+          audio_filename: body.audio_filename || "",
+        });
 
         if (typeof audioResult === "string" && audioResult.trim()) {
           audioTranscript = audioResult.trim();
@@ -669,6 +680,7 @@ function normalizeText(value = "") {
     .replace(/\s+/g, " ")
     .trim();
 }
+
 function hasUsableLocation(location, text = "") {
   if (!location && !text) return false;
 
@@ -950,7 +962,7 @@ function buildLocationPrompt({
 }) {
   const key = `${String(language).toLowerCase()}|${String(dialect).toLowerCase()}|${String(primaryIntent).toLowerCase()}`;
 
-  if (/[اأإآء-ي]/.test(key) || key.includes("arab")) {
+  if (/[\u0600-\u06FF]/.test(key) || key.includes("arab")) {
     if (routedIntent?.localSearchType === "towing") {
       return "أرسل لي موقعك أو اسم المدينة أو الرمز البريدي حتى أقدر أبحث لك عن سطحة أو خدمة سحب قريبة مناسبة.";
     }
