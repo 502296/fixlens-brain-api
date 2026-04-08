@@ -1,12 +1,14 @@
-// server.js — FixLens Brain API v3.0.0
-// Clean server:
+// server.js — FixLens Brain API v4.0.0
+// Global + stable server
 // - Stable API routes
-// - Modern request handling
+// - Cleaner request normalization
+// - Better debug snapshots
 // - CORS allowlist support
 // - Health check
 // - Optional Places debug endpoint
 // - Timeout guard
 // - Clean shutdown
+// - Safer global error handling
 
 import "dotenv/config";
 import express from "express";
@@ -79,6 +81,49 @@ function extractUserText(body) {
   return "";
 }
 
+function normalizeLocaleInput(body = {}) {
+  return (
+    String(
+      safePick(body, ["locale", "lang", "language"]) || "en"
+    )
+      .trim() || "en"
+  );
+}
+
+function normalizeHistory(body = {}) {
+  if (Array.isArray(body?.history)) return body.history;
+  if (Array.isArray(body?.messages)) return body.messages;
+  return [];
+}
+
+function normalizeUserLocation(body = {}) {
+  return safePick(body, [
+    "user_location",
+    "location",
+    "gps",
+    "latlng",
+    "coordinates",
+  ]);
+}
+
+function normalizeMediaFlags(body = {}) {
+  return {
+    has_image: Boolean(
+      body?.image_base_64 ||
+        body?.image_base64 ||
+        body?.image ||
+        body?.image_url
+    ),
+    has_audio: Boolean(
+      body?.audio_base_64 ||
+        body?.audio_base64 ||
+        body?.audio ||
+        body?.audio_url
+    ),
+    audio_kind: body?.audio_kind || body?.audio_type || null,
+  };
+}
+
 function getDebugFlag(req) {
   return (
     Boolean(req.body?.debug) ||
@@ -89,21 +134,43 @@ function getDebugFlag(req) {
 
 function buildRequestDebugSnapshot(req, routeName) {
   const body = req.body || {};
-  const userLocation = safePick(body, ["user_location", "location", "gps", "latlng"]);
-  const locale = safePick(body, ["locale", "lang", "language"]);
-  const text = safePick(body, ["text", "message", "prompt", "input", "query"]);
+  const userLocation = normalizeUserLocation(body);
+  const locale = normalizeLocaleInput(body);
+  const text = extractUserText(body);
+  const history = normalizeHistory(body);
+  const media = normalizeMediaFlags(body);
 
   return {
     route: routeName,
+    method: req.method,
     origin: req.headers.origin || null,
+    ip:
+      req.headers["x-forwarded-for"] ||
+      req.ip ||
+      null,
     locale: locale || null,
     user_location_type: userLocation == null ? null : typeof userLocation,
     user_location: userLocation || null,
-    text_preview: typeof text === "string" ? text.slice(0, 160) : null,
-    has_image: Boolean(body?.image_base_64 || body?.image_base64 || body?.image),
-    has_audio: Boolean(body?.audio_base_64 || body?.audio_base64 || body?.audio),
-    audio_kind: body?.audio_kind || null,
-    history_len: Array.isArray(body?.history) ? body.history.length : 0,
+    text_preview: typeof text === "string" ? text.slice(0, 220) : null,
+    text_length: typeof text === "string" ? text.length : 0,
+    has_image: media.has_image,
+    has_audio: media.has_audio,
+    audio_kind: media.audio_kind,
+    history_len: Array.isArray(history) ? history.length : 0,
+    message_count: Array.isArray(body?.messages) ? body.messages.length : 0,
+  };
+}
+
+function requestSummaryForLogs(req, routeName) {
+  const body = req.body || {};
+  return {
+    route: routeName,
+    locale: normalizeLocaleInput(body),
+    has_text: hasAnyText(extractUserText(body)),
+    has_location: Boolean(normalizeUserLocation(body)),
+    has_image: normalizeMediaFlags(body).has_image,
+    has_audio: normalizeMediaFlags(body).has_audio,
+    history_len: normalizeHistory(body).length,
   };
 }
 
@@ -151,7 +218,7 @@ async function googlePlacesSearchText(textQuery, languageCode = "en") {
       "Content-Type": "application/json",
       "X-Goog-Api-Key": GOOGLE_PLACES_API_KEY,
       "X-Goog-FieldMask":
-        "places.displayName,places.formattedAddress,places.rating,places.userRatingCount,places.googleMapsUri",
+        "places.displayName,places.formattedAddress,places.rating,places.userRatingCount,places.googleMapsUri,places.nationalPhoneNumber,places.websiteUri,places.businessStatus",
     },
     body: JSON.stringify(body),
   });
@@ -174,6 +241,9 @@ async function googlePlacesSearchText(textQuery, languageCode = "en") {
     rating: typeof p?.rating === "number" ? p.rating : null,
     ratingsCount: typeof p?.userRatingCount === "number" ? p.userRatingCount : null,
     mapsUrl: p?.googleMapsUri || "",
+    phone: p?.nationalPhoneNumber || "",
+    website: p?.websiteUri || "",
+    businessStatus: p?.businessStatus || "",
   }));
 }
 
@@ -184,6 +254,7 @@ app.get("/", (req, res) => {
   res.status(200).json({
     ok: true,
     service: "fixlens-brain-api",
+    version: "4.0.0",
     endpoints: {
       health: "GET /health",
       fixlens: "POST /api/fixlens",
@@ -197,10 +268,14 @@ app.get("/health", (req, res) => {
   res.status(200).json({
     ok: true,
     service: "fixlens-brain-api",
+    version: "4.0.0",
     time: new Date().toISOString(),
+    uptime_seconds: Math.round(process.uptime()),
     has_google_places_key: Boolean(GOOGLE_PLACES_API_KEY),
     has_openai_key: Boolean(OPENAI_API_KEY),
     allowed_origins_count: allowedOrigins.length,
+    json_limit: JSON_LIMIT,
+    api_timeout_ms: API_TIMEOUT_MS,
   });
 });
 
@@ -208,7 +283,7 @@ app.post("/api/places", async (req, res) => {
   try {
     const userText = extractUserText(req.body);
     const query = hasAnyText(userText) ? userText : "auto repair shop";
-    const lang = String(req.body?.language || req.body?.locale || "en").trim() || "en";
+    const lang = normalizeLocaleInput(req.body);
 
     const results = await googlePlacesSearchText(query, lang);
 
@@ -235,6 +310,8 @@ async function apiHandler(req, res, routeName) {
 
   if (debugFlag) {
     console.log("[FixLens][REQ_DEBUG]", buildRequestDebugSnapshot(req, routeName));
+  } else {
+    console.log("[FixLens][REQ]", requestSummaryForLogs(req, routeName));
   }
 
   try {
@@ -249,15 +326,31 @@ async function apiHandler(req, res, routeName) {
       ),
     ]);
 
+    if (debugFlag && output && typeof output === "object") {
+      return res.status(200).json({
+        ...output,
+        _server_debug: {
+          route: routeName,
+          handled_at: new Date().toISOString(),
+        },
+      });
+    }
+
     return res.status(200).json(output);
   } catch (err) {
     const status = Number(err?.status || err?.statusCode || 500);
     const message = err?.message || `Unexpected error in ${routeName}`;
-    console.error(`${routeName} error:`, { status, message });
+    console.error(`${routeName} error:`, {
+      status,
+      message,
+      debug: debugFlag,
+    });
+
     return res.status(status).json({
       ok: false,
       error: message,
       status,
+      route: routeName,
     });
   }
 }
@@ -281,7 +374,12 @@ app.use((err, req, res, next) => {
   const message = err?.message || "INTERNAL_ERROR";
   const status = message === "CORS_NOT_ALLOWED" ? 403 : 500;
 
-  console.error("Unhandled error:", { status, message });
+  console.error("Unhandled error:", {
+    status,
+    message,
+    path: req?.path || null,
+    method: req?.method || null,
+  });
 
   return res.status(status).json({
     ok: false,
