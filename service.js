@@ -723,7 +723,7 @@ function normalizeTextLoose(value = "") {
     .toLowerCase()
     .normalize("NFKC")
     .replace(/[\u2010-\u2015]/g, "-")
-    .replace(/[^\p{L}\p{N}\s\-\.\,]/gu, " ")
+    .replace(/[^\p{L}\p{N}\s.,-]/gu, " ")
     .replace(/\s+/g, " ")
     .trim();
 }
