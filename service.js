@@ -1,6 +1,6 @@
-// service.js — FixLens Brain v10
-// Unified global diagnostic orchestrator
-// English-only code, one brain, multilingual output
+// service.js — FixLens Brain v11
+// Data-first diagnostic orchestrator
+// English-first brain, English/Spanish output priority
 
 import OpenAI from "openai";
 
@@ -13,6 +13,7 @@ import { resolveIntent } from "./intentRouter.js";
 
 import { processAudio } from "./audioProcessor.js";
 import { performSearch } from "./search.js";
+import { runDiagnosticEngine } from "./diagnosticEngine.js";
 
 const client = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -102,7 +103,7 @@ export async function handleFixLensRequest(req) {
 
           if (!hasMeaningfulText(userText)) {
             userText = audioTranscript;
-          } else if (!normalizeText(userText).includes(normalizeText(audioTranscript))) {
+          } else if (!normalizeTextLoose(userText).includes(normalizeTextLoose(audioTranscript))) {
             userText = `${userText}\n\n[Audio transcript]\n${audioTranscript}`;
           }
         }
@@ -120,8 +121,8 @@ export async function handleFixLensRequest(req) {
         reply:
           "Please describe what the vehicle is doing, when it happens, and what car or truck you have.",
         intent: "general",
-        language: "same-as-user",
-        dialect: "natural-user-style",
+        language: "english",
+        dialect: "us",
         searched: false,
       };
     }
@@ -203,7 +204,7 @@ export async function handleFixLensRequest(req) {
 
     /* -------------------------
        MODEL INTENT BRIDGE
-       Language-agnostic classification
+       English + Spanish focused
     ------------------------- */
     const modelIntent = await classifyIntentWithModel({
       text: userText,
@@ -222,12 +223,17 @@ export async function handleFixLensRequest(req) {
       (routedIntent.isPlaces ? "places" : "diagnosis");
 
     const detectedLanguage =
-      modelIntent.userLanguage ||
-      "same-as-user";
+      normalizeSupportedLanguage(
+        modelIntent.userLanguage ||
+        detectPreferredLanguageFromText(userText) ||
+        "english"
+      );
 
     const detectedDialect =
-      modelIntent.userDialect ||
-      "natural-user-style";
+      normalizeSupportedDialect(
+        modelIntent.userDialect ||
+        (detectedLanguage === "spanish" ? "latin-american-spanish" : "us-english")
+      );
 
     const searchNeededByIntent =
       Boolean(modelIntent.needsSearch) ||
@@ -284,6 +290,44 @@ export async function handleFixLensRequest(req) {
       enginePack = buildEnginePack(enrichedText);
     } catch (error) {
       console.log("Engine intel failed:", error?.message || error);
+    }
+
+    /* -------------------------
+       DIAGNOSTIC ENGINE v1
+       Data-first decision layer
+    ------------------------- */
+    let diagnosticEngine = {
+      scope: "engine",
+      normalizedText: "",
+      engineHints: [],
+      matchedSignals: [],
+      topIssue: null,
+      topEngine: null,
+      confidence: 0.18,
+      riskLevel: "low",
+      matchedKeywords: [],
+      firstChecks: [],
+      mechanism: "",
+      symptomNotes: [],
+      commonMisreads: [],
+      doNotConfuseWith: [],
+      rankedFindings: [],
+    };
+
+    try {
+      const memoryVehicle = memory?.current_case_summary?.vehicle || {};
+      const enrichedForDiagnostic = enrichTextWithVehicle(userText, {
+        year: enginePack?.year || memoryVehicle?.year || null,
+        make: enginePack?.make || memoryVehicle?.make || null,
+        model: enginePack?.model || memoryVehicle?.model || null,
+        engine: enginePack?.detected_engine || memoryVehicle?.engine || null,
+      });
+
+      diagnosticEngine = runDiagnosticEngine({
+        userText: enrichedForDiagnostic,
+      });
+    } catch (error) {
+      console.log("Diagnostic engine failed:", error?.message || error);
     }
 
     /* -------------------------
@@ -373,7 +417,9 @@ export async function handleFixLensRequest(req) {
         diagnosticMemory: memory,
         verifiedData,
         verifiedWorkshops,
-        internalIntelStrong: Number(enginePack?.intel_score || 0) >= 8,
+        internalIntelStrong:
+          Number(enginePack?.intel_score || 0) >= 8 ||
+          Number((diagnosticEngine?.confidence || 0) * 10) >= 7,
       });
     } catch (error) {
       console.log("Response planner failed:", error?.message || error);
@@ -426,6 +472,7 @@ export async function handleFixLensRequest(req) {
       audioContext,
       memory,
       enginePack,
+      diagnosticEngine,
       responsePlan,
       verifiedData,
       verifiedActions,
@@ -448,7 +495,7 @@ export async function handleFixLensRequest(req) {
     ------------------------- */
     const completion = await client.chat.completions.create({
       model: MODEL,
-      temperature: 0.25,
+      temperature: 0.2,
       messages,
     });
 
@@ -472,6 +519,12 @@ export async function handleFixLensRequest(req) {
             diagnosis_mode: ruleIntent?.diagnosisMode || null,
             engine_identity: enginePack?.vehicle_identity || null,
             strongest_hypothesis: responsePlan?.strongest_hypothesis || null,
+            diagnostic_top_issue: diagnosticEngine?.topIssue || null,
+            diagnostic_top_engine: diagnosticEngine?.topEngine || null,
+            diagnostic_confidence: diagnosticEngine?.confidence || null,
+            diagnostic_risk: diagnosticEngine?.riskLevel || null,
+            diagnostic_signals: diagnosticEngine?.matchedSignals || [],
+            diagnostic_keywords: diagnosticEngine?.matchedKeywords || [],
             local_search_type: routedIntent?.localSearchType || null,
             codes: responsePlan?.codes || [],
             matched_action_ids: verifiedActions.map((x) => x?.id).filter(Boolean),
@@ -485,8 +538,8 @@ export async function handleFixLensRequest(req) {
       ok: false,
       reply: "FixLens hit an internal error while analyzing this case.",
       intent: "error",
-      language: "same-as-user",
-      dialect: "natural-user-style",
+      language: "english",
+      dialect: "us-english",
     };
   }
 }
@@ -519,8 +572,8 @@ async function classifyIntentWithModel({
 
     const classifierPrompt = `
 You classify the user's latest vehicle-related request.
-Use the same logic regardless of language, dialect, or script.
-Do not create separate Arabic, English, or regional policies.
+The product currently supports English and Spanish output only.
+If the user writes in another language, choose whichever of English or Spanish is closer, but prefer English by default.
 
 Return JSON only.
 
@@ -528,29 +581,22 @@ Required keys:
 - primaryIntent: one of "diagnosis", "places", "hybrid", "general"
 - needsSearch: boolean
 - askForLocation: boolean
-- userLanguage: short human-readable label
-- userDialect: short human-readable label
+- userLanguage: must be "english" or "spanish"
+- userDialect: short label such as "us-english", "latin-american-spanish", "neutral-spanish"
 
 Rules:
-- "diagnosis" = the user mainly wants diagnosis, fault analysis, next checks, code analysis, image dashboard reading, audio/noise interpretation, safety judgment, or pre-purchase technical judgment
-- "places" = the user mainly wants nearby shops, addresses, maps, towing, parts stores, or local help
-- "hybrid" = the user wants both diagnosis and local help
-- "general" = greeting, vague opener, or unclear request
+- "diagnosis" = diagnosis, fault analysis, next checks, code analysis, image/dashboard reading, audio/noise interpretation, safety judgment, or pre-purchase technical judgment
+- "places" = nearby shops, addresses, maps, towing, parts stores, or local help
+- "hybrid" = both diagnosis and local help
+- "general" = greeting or unclear request
 
 needsSearch:
 - true when nearby help, workshop lookup, parts store lookup, towing, or local action is needed
-- false for pure diagnosis unless local help is clearly part of the request
+- false for pure diagnosis unless local help is clearly requested
 
 askForLocation:
 - true only when local help is needed but there is no usable city / zip / GPS / location in the request or provided location field
 - false otherwise
-
-userLanguage:
-- identify the user's current language
-
-userDialect:
-- identify the nearest natural dialect or style if clear
-- otherwise keep it broad
 `.trim();
 
     const classifierInput = `
@@ -600,19 +646,19 @@ ${JSON.stringify(routedIntent)}
     const parsed = safeParseJson(raw);
 
     if (!parsed || typeof parsed !== "object") {
-      return fallbackIntent(ruleIntent, routedIntent);
+      return fallbackIntent(ruleIntent, routedIntent, text);
     }
 
     return {
       primaryIntent: normalizePrimaryIntent(parsed.primaryIntent, routedIntent),
       needsSearch: Boolean(parsed.needsSearch),
       askForLocation: Boolean(parsed.askForLocation),
-      userLanguage: cleanShortText(parsed.userLanguage, "same-as-user"),
-      userDialect: cleanShortText(parsed.userDialect, "natural-user-style"),
+      userLanguage: normalizeSupportedLanguage(parsed.userLanguage || detectPreferredLanguageFromText(text)),
+      userDialect: normalizeSupportedDialect(parsed.userDialect),
     };
   } catch (error) {
     console.log("Model intent bridge failed:", error?.message || error);
-    return fallbackIntent(ruleIntent, routedIntent);
+    return fallbackIntent(ruleIntent, routedIntent, text);
   }
 }
 
@@ -672,11 +718,12 @@ function hasMeaningfulText(value = "") {
   return typeof value === "string" && value.trim().length > 0;
 }
 
-function normalizeText(value = "") {
+function normalizeTextLoose(value = "") {
   return String(value || "")
     .toLowerCase()
+    .normalize("NFKC")
     .replace(/[\u2010-\u2015]/g, "-")
-    .replace(/[^a-zA-Z0-9\s\-\.\,]/g, " ")
+    .replace(/[^\p{L}\p{N}\s\-\.\,]/gu, " ")
     .replace(/\s+/g, " ")
     .trim();
 }
@@ -728,11 +775,60 @@ function normalizePrimaryIntent(value, routedIntent = {}) {
   return "diagnosis";
 }
 
-function cleanShortText(value, fallback) {
-  if (typeof value !== "string") return fallback;
-  const trimmed = value.trim();
-  if (!trimmed) return fallback;
-  return trimmed.slice(0, 60);
+function normalizeSupportedLanguage(value = "") {
+  const v = String(value || "").toLowerCase().trim();
+
+  if (
+    v.includes("spanish") ||
+    v.includes("españ") ||
+    v === "es" ||
+    v === "spa"
+  ) {
+    return "spanish";
+  }
+
+  return "english";
+}
+
+function normalizeSupportedDialect(value = "") {
+  const v = String(value || "").toLowerCase().trim();
+
+  if (!v) return "us-english";
+
+  if (v.includes("spanish") || v.includes("lat") || v.includes("mex") || v.includes("neutral")) {
+    return "latin-american-spanish";
+  }
+
+  return "us-english";
+}
+
+function detectPreferredLanguageFromText(text = "") {
+  const t = String(text || "");
+
+  if (/[áéíóúñü¿¡]/i.test(t)) return "spanish";
+
+  const spanishHints = [
+    "carro",
+    "coche",
+    "mecánico",
+    "mecanico",
+    "ruido",
+    "motor",
+    "vibra",
+    "tiembla",
+    "enciende",
+    "taller",
+    "dirección",
+    "direccion",
+    "por favor",
+  ];
+
+  const lower = t.toLowerCase();
+  if (spanishHints.some((w) => lower.includes(w))) {
+    return "spanish";
+  }
+
+  return "english";
 }
 
 function safeParseJson(raw) {
@@ -758,7 +854,7 @@ function safeParseJson(raw) {
   }
 }
 
-function fallbackIntent(ruleIntent = {}, routedIntent = {}) {
+function fallbackIntent(ruleIntent = {}, routedIntent = {}, text = "") {
   return {
     primaryIntent: normalizePrimaryIntent(
       ruleIntent.primaryIntent,
@@ -769,8 +865,11 @@ function fallbackIntent(ruleIntent = {}, routedIntent = {}) {
     askForLocation:
       Boolean(ruleIntent.askForLocation) ||
       (Boolean(routedIntent.isPlaces) && !Boolean(routedIntent.locationProvided)),
-    userLanguage: "same-as-user",
-    userDialect: "natural-user-style",
+    userLanguage: normalizeSupportedLanguage(detectPreferredLanguageFromText(text)),
+    userDialect:
+      normalizeSupportedLanguage(detectPreferredLanguageFromText(text)) === "spanish"
+        ? "latin-american-spanish"
+        : "us-english",
   };
 }
 
@@ -825,6 +924,23 @@ function formatVerifiedActionsForContext(items = [], maxItems = 4) {
     }));
 }
 
+function formatDiagnosticEngineForContext(diagnosticEngine = {}) {
+  return {
+    top_issue: diagnosticEngine?.topIssue || null,
+    top_engine: diagnosticEngine?.topEngine || null,
+    confidence: diagnosticEngine?.confidence ?? null,
+    risk_level: diagnosticEngine?.riskLevel || null,
+    matched_signals: diagnosticEngine?.matchedSignals || [],
+    matched_keywords: diagnosticEngine?.matchedKeywords || [],
+    first_checks: diagnosticEngine?.firstChecks || [],
+    mechanism: diagnosticEngine?.mechanism || "",
+    symptom_notes: diagnosticEngine?.symptomNotes || [],
+    common_misreads: diagnosticEngine?.commonMisreads || [],
+    do_not_confuse_with: diagnosticEngine?.doNotConfuseWith || [],
+    ranked_findings: diagnosticEngine?.rankedFindings || [],
+  };
+}
+
 function buildUnifiedContextBlock({
   locale,
   detectedLanguage,
@@ -839,6 +955,7 @@ function buildUnifiedContextBlock({
   audioContext,
   memory,
   enginePack,
+  diagnosticEngine,
   responsePlan,
   verifiedData,
   verifiedActions,
@@ -848,8 +965,8 @@ function buildUnifiedContextBlock({
   return `
 FIXLENS_CASE_CONTEXT:
 LOCALE=${JSON.stringify(locale || "auto")}
-DETECTED_USER_LANGUAGE=${JSON.stringify(detectedLanguage || "same-as-user")}
-DETECTED_USER_DIALECT=${JSON.stringify(detectedDialect || "natural-user-style")}
+DETECTED_USER_LANGUAGE=${JSON.stringify(detectedLanguage || "english")}
+DETECTED_USER_DIALECT=${JSON.stringify(detectedDialect || "us-english")}
 PRIMARY_INTENT=${JSON.stringify(primaryIntent || "diagnosis")}
 ROUTER_MODE=${JSON.stringify(routedIntent?.mode || "unknown")}
 RULE_INTENT=${JSON.stringify(ruleIntent || {})}
@@ -867,6 +984,9 @@ ${memory?.memory_text || "none"}
 ENGINE_PACK:
 ${JSON.stringify(enginePack || {}, null, 2)}
 
+DIAGNOSTIC_ENGINE:
+${JSON.stringify(formatDiagnosticEngineForContext(diagnosticEngine), null, 2)}
+
 RESPONSE_PLAN:
 ${responsePlan?.planner_text || "none"}
 
@@ -883,9 +1003,14 @@ VERIFIED_LOCAL_RESULTS:
 ${JSON.stringify(formatSearchDataForContext(verifiedWorkshops, 5), null, 2)}
 
 FINAL_ORCHESTRATION_RULES:
-- Reply in the user's current language naturally and keep that language locked unless the user switches.
+- The product currently supports output in English or Spanish only.
+- Reply in English or Spanish depending on the detected user language. Default to English if unclear.
+- Keep language locked unless the user clearly switches.
 - Think as one senior mechanic, not as separate modules.
-- If multiple codes or clues point to one subsystem, lead with the central fault path.
+- DIAGNOSTIC_ENGINE is the primary diagnosis layer. Treat it as the strongest internal evidence when confidence is solid.
+- If DIAGNOSTIC_ENGINE.top_issue is present with confidence >= 0.64, lead with that diagnosis unless stronger verified evidence contradicts it.
+- Use DIAGNOSTIC_ENGINE.first_checks before inventing generic steps.
+- Use DIAGNOSTIC_ENGINE.common_misreads and do_not_confuse_with to avoid wrong fault paths.
 - Use MEMORY_TEXT to avoid restarting the case.
 - Use ENGINE_PACK to improve vehicle-specific reasoning.
 - Use RESPONSE_PLAN to structure diagnosis, severity, next tests, safety, and purchase judgment.
@@ -897,6 +1022,7 @@ FINAL_ORCHESTRATION_RULES:
 - If this is a pre-purchase case, protect the user financially.
 - If the case could be unsafe to drive, say so calmly and directly.
 - Do not answer like a code dictionary unless the user clearly asked for code meaning only.
+- Do not over-explain. Be sharp, confident, and mechanically specific.
 `.trim();
 }
 
@@ -955,19 +1081,23 @@ function buildOpenAIMessages({
 }
 
 function buildLocationPrompt({
-  language = "same-as-user",
-  dialect = "natural-user-style",
+  language = "english",
+  dialect = "us-english",
   primaryIntent = "places",
   routedIntent = {},
 }) {
-  const key = `${String(language).toLowerCase()}|${String(dialect).toLowerCase()}|${String(primaryIntent).toLowerCase()}`;
+  const lang = normalizeSupportedLanguage(language);
 
-  if (/[\u0600-\u06FF]/.test(key) || key.includes("arab")) {
+  if (lang === "spanish") {
     if (routedIntent?.localSearchType === "towing") {
-      return "أرسل لي موقعك أو اسم المدينة أو الرمز البريدي حتى أقدر أبحث لك عن سطحة أو خدمة سحب قريبة مناسبة.";
+      return "Envíame tu ubicación, ciudad o código postal para buscar una grúa o servicio de remolque cercano.";
     }
 
-    return "أرسل لي موقعك أو اسم المدينة أو الرمز البريدي حتى أقدر أبحث لك عن أقرب ورشة أو محل مناسب للحالة.";
+    return "Envíame tu ubicación, ciudad o código postal para buscar un taller o mecánico cercano para este caso.";
+  }
+
+  if (routedIntent?.localSearchType === "towing") {
+    return "Send me your GPS location, city, or ZIP code so I can find a nearby towing service.";
   }
 
   return "Send me your GPS location, city, or ZIP code so I can find the right nearby shop for this case.";
