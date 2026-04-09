@@ -409,18 +409,19 @@ export async function handleFixLensRequest(req) {
     };
 
     try {
-      responsePlan = buildResponsePlan({
-        locale,
-        text: userText,
-        placesIntent: Boolean(routedIntent.isPlaces),
-        enginePack,
-        diagnosticMemory: memory,
-        verifiedData,
-        verifiedWorkshops,
-        internalIntelStrong:
-          Number(enginePack?.intel_score || 0) >= 8 ||
-          Number((diagnosticEngine?.confidence || 0) * 10) >= 7,
-      });
+     responsePlan = buildResponsePlan({
+  locale,
+  text: userText,
+  placesIntent: Boolean(routedIntent.isPlaces),
+  enginePack,
+  diagnosticEngine,
+  diagnosticMemory: memory,
+  verifiedData,
+  verifiedWorkshops,
+  internalIntelStrong:
+    Number(enginePack?.intel_score || 0) >= 8 ||
+    Number((diagnosticEngine?.confidence || 0) * 10) >= 7,
+});
     } catch (error) {
       console.log("Response planner failed:", error?.message || error);
     }
