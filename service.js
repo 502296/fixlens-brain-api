@@ -930,6 +930,7 @@ function formatDiagnosticEngineForContext(diagnosticEngine = {}) {
     top_engine: diagnosticEngine?.topEngine || null,
     confidence: diagnosticEngine?.confidence ?? null,
     risk_level: diagnosticEngine?.riskLevel || null,
+    detected_codes: diagnosticEngine?.detectedCodes || [],
     matched_signals: diagnosticEngine?.matchedSignals || [],
     matched_keywords: diagnosticEngine?.matchedKeywords || [],
     first_checks: diagnosticEngine?.firstChecks || [],
@@ -937,10 +938,10 @@ function formatDiagnosticEngineForContext(diagnosticEngine = {}) {
     symptom_notes: diagnosticEngine?.symptomNotes || [],
     common_misreads: diagnosticEngine?.commonMisreads || [],
     do_not_confuse_with: diagnosticEngine?.doNotConfuseWith || [],
+    caution_flags: diagnosticEngine?.cautionFlags || [],
     ranked_findings: diagnosticEngine?.rankedFindings || [],
   };
 }
-
 function buildUnifiedContextBlock({
   locale,
   detectedLanguage,
