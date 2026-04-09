@@ -1,11 +1,13 @@
 // responsePlanner.js
-// FixLens Response Planner v2.0
+// FixLens Response Planner v3.0
+// Conversation-first planner
+// Built to support mechanic-style answers, not article-style output
 
 function normalizeToken(value = "") {
   return String(value || "")
     .toLowerCase()
     .replace(/[\u2010-\u2015]/g, "-")
-    .replace(/[^\p{L}\p{N}\-\s\.]/gu, " ")
+    .replace(/[^\p{L}\p{N}\s.-]/gu, " ")
     .replace(/\s+/g, " ")
     .trim();
 }
@@ -47,9 +49,7 @@ function uniqueCodesFromMemory(memorySummary = {}, text = "") {
     rawCodes.push(...memorySummary.codes);
   }
 
-  const textMatches = String(text || "").match(
-    /\b([pcub][0-9]{3,4}|[a-z][0-9]{4})\b/gi
-  );
+  const textMatches = String(text || "").match(/\b([PCUB][0-9]{4}|[A-Z][0-9]{4})\b/gi);
   if (textMatches?.length) rawCodes.push(...textMatches);
 
   return dedupe(rawCodes.map((x) => String(x || "").toUpperCase()));
@@ -67,30 +67,22 @@ function detectUserIntent(text = "", memorySummary = {}) {
     combined.includes("before i buy") ||
     combined.includes("pre purchase") ||
     combined.includes("pre-purchase") ||
-    combined.includes("اشتريها") ||
-    combined.includes("اشتري") ||
-    combined.includes("تنصحني اشتري") ||
-    combined.includes("افحصها قبل الشراء");
+    combined.includes("inspection before buying");
 
   const safetyIntent =
     combined.includes("safe to drive") ||
     combined.includes("can i drive") ||
     combined.includes("is it safe") ||
-    combined.includes("drive it") ||
-    combined.includes("أقدر أمشي") ||
-    combined.includes("آمنة") ||
-    combined.includes("هل أسوقها") ||
-    combined.includes("هل امشي بيها");
+    combined.includes("should i keep driving") ||
+    combined.includes("drive it like this");
 
   const priceRiskIntent =
     combined.includes("expensive") ||
     combined.includes("costly") ||
     combined.includes("repair cost") ||
     combined.includes("big repair") ||
-    combined.includes("غالي") ||
-    combined.includes("مكلف") ||
-    combined.includes("سعر التصليح") ||
-    combined.includes("تكلفة");
+    combined.includes("how much") ||
+    combined.includes("worth fixing");
 
   return {
     purchaseIntent,
@@ -123,7 +115,7 @@ function classifyCodeClusters(codes = [], text = "", memorySummary = {}) {
     addCluster(
       "abs_brake_stability",
       10,
-      "multiple brake / ABS / stability clues point to one shared subsystem"
+      "multiple brake or ABS clues point toward one shared subsystem"
     );
   }
 
@@ -136,7 +128,7 @@ function classifyCodeClusters(codes = [], text = "", memorySummary = {}) {
     addCluster(
       "misfire_combustion",
       9,
-      "misfire / rough-idle / combustion pattern"
+      "misfire and combustion clues line up around one central engine fault path"
     );
   }
 
@@ -150,21 +142,19 @@ function classifyCodeClusters(codes = [], text = "", memorySummary = {}) {
     addCluster(
       "air_fuel_metering",
       8,
-      "air-fuel metering pattern"
+      "air-fuel metering clues suggest one fueling or airflow path"
     );
   }
 
   if (
     combined.includes("coolant") ||
     combined.includes("overheating") ||
-    combined.includes("running hot") ||
-    combined.includes("حرارة") ||
-    combined.includes("نقص ماء")
+    combined.includes("running hot")
   ) {
     addCluster(
       "cooling_system",
       9,
-      "cooling-system pattern"
+      "cooling-system behavior points toward one temperature-control path"
     );
   }
 
@@ -172,14 +162,12 @@ function classifyCodeClusters(codes = [], text = "", memorySummary = {}) {
     combined.includes("battery") ||
     combined.includes("alternator") ||
     combined.includes("voltage") ||
-    combined.includes("charging") ||
-    combined.includes("بطارية") ||
-    combined.includes("دينمو")
+    combined.includes("charging")
   ) {
     addCluster(
       "charging_voltage",
       8,
-      "charging / voltage behavior"
+      "charging and voltage behavior can create a shared electrical fault path"
     );
   }
 
@@ -187,13 +175,12 @@ function classifyCodeClusters(codes = [], text = "", memorySummary = {}) {
     combined.includes("air suspension") ||
     combined.includes("ride height") ||
     combined.includes("suspension") ||
-    combined.includes("تعليق") ||
     upperCodes.some((c) => c.startsWith("C17") || c.startsWith("C18"))
   ) {
     addCluster(
       "suspension_height_control",
       7,
-      "suspension / height-control pattern"
+      "height-control and suspension clues may belong to one control path"
     );
   }
 
@@ -205,7 +192,7 @@ function classifyCodeClusters(codes = [], text = "", memorySummary = {}) {
     addCluster(
       "network_communication",
       8,
-      "module communication pattern"
+      "network faults often come from one shared power, wiring, or module issue"
     );
   }
 
@@ -226,83 +213,79 @@ function getClusterHypotheses(clusterKey = "", codes = [], combinedText = "") {
 
   if (clusterKey === "abs_brake_stability") {
     push(
-      "central ABS / brake control fault path, not just one random sensor",
+      "central ABS or brake control fault path",
       10,
-      "the code cluster points to one shared brake / ABS subsystem"
+      "the cluster looks more central than a single random sensor failure"
     );
     push(
-      "ABS actuator, hydraulic pressure unit, or ABS module issue",
+      "ABS actuator, hydraulic unit, or module-side issue",
       9,
-      "multiple brake-control codes often fit a module / actuator / hydraulic path better than separate parts"
+      "multiple brake-control clues often fit the central ABS side better than separate parts"
     );
     push(
-      "shared wiring, connector, ground, or power supply issue affecting the ABS system",
+      "shared wiring, connector, ground, or power issue affecting the ABS system",
       8,
-      "shared electrical path can trigger several related chassis codes"
-    );
-    push(
-      "wheel-speed sensor or sensor circuit problem, but lower priority if multiple central ABS clues exist",
-      6,
-      "sensor faults remain possible but may be downstream rather than root cause"
+      "one shared electrical path can trigger several related chassis faults"
     );
 
     if (upperCodes.includes("C1252") || upperCodes.includes("C1256")) {
       push(
-        "hydraulic or actuator-side ABS fault is especially plausible here",
+        "hydraulic or actuator-side ABS issue is especially plausible here",
         9,
-        "C1252 / C1256 strengthen the ABS actuator / hydraulic direction"
+        "those codes strengthen the actuator or hydraulic path"
       );
     }
 
     if (upperCodes.includes("C1210")) {
       push(
-        "stability / brake control is reacting to a deeper ABS-side fault",
+        "stability control may be reacting to a deeper ABS-side fault",
         7,
-        "C1210 can appear as part of a wider ABS / stability chain"
+        "that code often fits into a wider brake-control chain"
       );
     }
   }
 
   if (clusterKey === "misfire_combustion") {
     push(
-      "ignition weakness such as coil, plug, or coil driver path",
+      "ignition-side weakness such as coil, plug, or related ignition path",
       9,
-      "misfire pattern most commonly fits ignition weakness first"
+      "misfire behavior usually points to ignition first unless the pattern says otherwise"
     );
     push(
-      "vacuum leak or unmetered air problem",
+      "vacuum leak or unmetered air issue",
       8,
-      "misfire / rough idle / hesitation often fit an air leak path"
+      "misfire with rough idle or hesitation often fits an air-leak path"
     );
     push(
       "injector or fuel-delivery imbalance",
       7,
-      "fuel-side imbalance can mimic ignition misfire"
+      "fuel-side imbalance can mimic ignition weakness"
     );
-    if (text.includes("flashing") || text.includes("يهتز بقوة")) {
+
+    if (text.includes("flashing")) {
       push(
-        "active severe misfire that can damage the catalytic converter",
+        "active severe misfire with possible catalyst risk",
         10,
-        "strong shake or flashing warning light raises severity"
+        "flashing warning behavior raises the urgency"
       );
     }
   }
 
   if (clusterKey === "air_fuel_metering") {
     push(
-      "vacuum leak or intake leak ahead of accurate fuel control",
+      "vacuum leak or intake leak",
       9,
       "air-fuel imbalance often starts with unmetered air"
     );
     push(
-      "MAF / MAP signal issue or contaminated measurement path",
+      "MAF or MAP measurement issue",
       7,
-      "sensor reading problems can distort fueling"
+      "bad airflow reading can distort fueling"
     );
     push(
       "fuel-pressure or injector imbalance",
       7,
-      "fuel side remains a realistic path"
+      "fuel-side problems remain realistic here"
     );
   }
 
@@ -310,61 +293,61 @@ function getClusterHypotheses(clusterKey = "", codes = [], combinedText = "") {
     push(
       "cooling system pressure loss or circulation problem",
       9,
-      "heat / coolant behavior fits cooling-system root cause first"
+      "the heat behavior fits cooling-system logic first"
     );
     push(
-      "thermostat, trapped air, or water-pump weakness",
+      "thermostat, trapped air, or weak water-pump path",
       8,
-      "common cooling-system branch"
+      "that is a common cooling branch"
     );
     push(
-      "fan control issue if overheating is strongest at idle or traffic",
+      "fan control issue if it worsens at idle or traffic",
       7,
-      "idle-heavy overheating often shifts toward fan control"
+      "idle-heavy overheating shifts suspicion toward fan behavior"
     );
   }
 
   if (clusterKey === "charging_voltage") {
     push(
-      "charging-system weakness from battery, alternator, or poor connections",
+      "charging-system weakness from battery, alternator, or bad connections",
       9,
-      "voltage-related behavior fits charging path"
+      "voltage-related symptoms often start there"
     );
     push(
-      "ground or terminal connection problem",
+      "ground or terminal issue",
       8,
-      "shared voltage instability often comes from poor connections"
+      "one poor connection can create unstable electrical behavior"
     );
   }
 
   if (clusterKey === "suspension_height_control") {
     push(
-      "air-suspension compressor, valve block, or ride-height control fault",
+      "air-suspension compressor, valve block, or height-control fault",
       8,
-      "ride-height problems often point to a central suspension control path"
+      "ride-height behavior often points to one central path"
     );
     push(
-      "height sensor or wiring issue",
+      "height sensor or related wiring issue",
       7,
-      "sensor-side issue remains possible"
+      "sensor-side fault remains possible"
     );
     push(
-      "air leak in a bag, line, or suspension circuit",
+      "air leak in a bag, line, or circuit",
       8,
-      "loss of height often fits air loss"
+      "air loss is a common reason for height drop"
     );
   }
 
   if (clusterKey === "network_communication") {
     push(
-      "module communication fault caused by voltage, wiring, or failing control module",
+      "module communication fault caused by voltage, wiring, or one failing control unit",
       8,
-      "network codes often come from shared power, ground, or module issues"
+      "network faults usually come from a shared root cause"
     );
     push(
-      "battery / charging instability creating misleading communication faults",
+      "battery or charging instability creating misleading communication faults",
       7,
-      "low voltage can cascade into network faults"
+      "low voltage can cascade into network errors"
     );
   }
 
@@ -374,6 +357,7 @@ function getClusterHypotheses(clusterKey = "", codes = [], combinedText = "") {
 function rankLikelyCauses({
   memorySummary = {},
   enginePack = {},
+  diagnosticEngine = {},
   text = "",
   verifiedData = [],
 }) {
@@ -384,10 +368,28 @@ function rankLikelyCauses({
   const clusters = classifyCodeClusters(codes, text, memorySummary);
 
   const causes = [];
-
   const pushCause = (label, score, why) => {
     causes.push({ label, score, why });
   };
+
+  if (diagnosticEngine?.topIssue) {
+    pushCause(
+      String(diagnosticEngine.topIssue),
+      diagnosticEngine?.confidence >= 0.8 ? 11 : diagnosticEngine?.confidence >= 0.64 ? 9 : 7,
+      "matched strongly by the internal diagnostic engine"
+    );
+  }
+
+  if (diagnosticEngine?.rankedFindings?.length) {
+    for (const item of diagnosticEngine.rankedFindings.slice(0, 3)) {
+      if (!item?.issueName) continue;
+      pushCause(
+        String(item.issueName),
+        Number(item?.score || 0),
+        "supported by ranked internal diagnostic findings"
+      );
+    }
+  }
 
   if (clusters.length > 0) {
     for (const cluster of clusters.slice(0, 2)) {
@@ -405,89 +407,79 @@ function rankLikelyCauses({
     combined.includes("check engine")
   ) {
     pushCause(
-      "ignition misfire from coil, plug, or related ignition weakness",
+      "ignition-side misfire",
       8,
-      "rough idle / misfire / hesitation pattern"
+      "rough idle, hesitation, or misfire behavior fits ignition or combustion weakness"
     );
     pushCause(
       "vacuum leak or unmetered air issue",
       7,
-      "idle-related shake with air-fuel behavior"
+      "idle-sensitive shake often overlaps with airflow imbalance"
     );
     pushCause(
-      "fuel delivery imbalance such as injector issue",
+      "fuel delivery imbalance",
       6,
-      "misfire-like behavior without enough proof for ignition only"
+      "fuel-side imbalance remains possible when ignition is not fully confirmed"
     );
   }
 
   if (
     combined.includes("overheating") ||
     combined.includes("coolant") ||
-    combined.includes("running hot") ||
-    combined.includes("نقص ماء") ||
-    combined.includes("حرارة")
+    combined.includes("running hot")
   ) {
     pushCause(
-      "cooling system pressure loss or coolant circulation problem",
+      "cooling-system pressure loss or circulation problem",
       8,
-      "temperature and coolant behavior"
+      "the heat pattern points toward a cooling path"
     );
     pushCause(
-      "thermostat, air pocket, or weak water pump path",
+      "thermostat, trapped air, or weak water-pump path",
       7,
-      "common cooling-system pattern"
+      "common cooling-system branch"
     );
   }
 
-  if (
-    combined.includes("knock") ||
-    combined.includes("خبط") ||
-    combined.includes("دق")
-  ) {
+  if (combined.includes("knock")) {
     pushCause(
       "true engine knock or heavy mechanical knock",
       8,
-      "deep knock wording"
+      "knock wording raises mechanical concern"
     );
     pushCause(
-      "spark knock / detonation under load",
+      "spark knock or detonation under load",
       6,
-      "knock-related wording without confirmed internal damage"
+      "lighter knock language can still fit combustion knock"
     );
   }
 
   if (
     combined.includes("tick") ||
-    combined.includes("ticking") ||
-    combined.includes("طقطقة") ||
-    combined.includes("تك تك")
+    combined.includes("ticking")
   ) {
     pushCause(
       "top-end ticking, injector tick, or valvetrain-side noise",
       7,
-      "light repetitive ticking pattern"
+      "repetitive ticking language supports that path"
     );
   }
 
-  if (combined.includes("squeal") || combined.includes("صرير")) {
+  if (combined.includes("squeal")) {
     pushCause(
       "belt, pulley, or bearing noise",
       7,
-      "squeal pattern"
+      "squeal pattern usually fits the accessory side first"
     );
   }
 
   if (
     combined.includes("battery") ||
-    combined.includes("alternator") ||
-    combined.includes("دينمو") ||
-    combined.includes("بطارية")
+    combined.includes("alternator")
   ) {
     pushCause(
       "charging-system weakness from battery, alternator, or connection issue",
       7,
-      "charging-related wording"
+      "charging-related wording supports that path"
     );
   }
 
@@ -508,9 +500,9 @@ function rankLikelyCauses({
 
   if (Array.isArray(verifiedData) && verifiedData.length > 0) {
     pushCause(
-      "verified external data supports narrowing the diagnosis",
+      "verified external data supports narrowing this case",
       4,
-      "search-supported refinement"
+      "search-supported refinement exists"
     );
   }
 
@@ -525,6 +517,7 @@ function rankLikelyCauses({
 
 function buildTests({
   memorySummary = {},
+  diagnosticEngine = {},
   topCause = "",
   domain = "general",
   clusterKey = "",
@@ -537,56 +530,59 @@ function buildTests({
     if (value) tests.push(value);
   };
 
+  if (Array.isArray(diagnosticEngine?.firstChecks) && diagnosticEngine.firstChecks.length > 0) {
+    for (const check of diagnosticEngine.firstChecks.slice(0, 4)) {
+      pushTest(check);
+    }
+  }
+
   if (
     clusterKey === "abs_brake_stability" ||
     domain === "brakes" ||
-    topCause.includes("ABS") ||
-    topCause.includes("brake")
+    topCause.toLowerCase().includes("abs") ||
+    topCause.toLowerCase().includes("brake")
   ) {
-    pushTest("scan and confirm whether the ABS / brake codes return immediately after clearing");
-    pushTest("inspect ABS module, actuator, hydraulic unit, and main connector before replacing random sensors");
-    pushTest("check shared power, fuse, ground, and connector condition for the ABS system");
-    pushTest("inspect wheel-speed sensor live data only after ruling out the central ABS path");
+    pushTest("confirm whether the ABS or brake codes return immediately after clearing");
+    pushTest("inspect the ABS module, actuator, hydraulic unit, and main connector before blaming random sensors");
+    pushTest("check shared power, fuse, ground, and connector condition for the ABS side");
   }
 
   if (
-    topCause.includes("ignition") ||
+    topCause.toLowerCase().includes("ignition") ||
     symptomsText.includes("misfire") ||
     symptomsText.includes("rough idle")
   ) {
-    pushTest("scan fault codes if available");
-    pushTest("inspect ignition coils and spark plugs first");
+    pushTest("scan for fault codes if available");
+    pushTest("inspect coils and spark plugs first");
     pushTest("check for intake or vacuum leak around hoses and manifold");
-    pushTest("listen for idle change if a vacuum leak is present");
   }
 
   if (
-    topCause.includes("cooling") ||
+    topCause.toLowerCase().includes("cooling") ||
     symptomsText.includes("overheating") ||
     symptomsText.includes("coolant")
   ) {
     pushTest("check coolant level cold and inspect for pressure loss");
     pushTest("look for visible leak, dried coolant marks, or trapped air");
-    pushTest("confirm radiator fan behavior and thermostat path");
+    pushTest("confirm radiator fan and thermostat behavior");
   }
 
-  if (topCause.includes("knock")) {
-    pushTest("do not keep driving hard until the knock direction is clearer");
+  if (topCause.toLowerCase().includes("knock")) {
     pushTest("check oil level and warning lights immediately");
-    pushTest("compare whether the sound is light tick or deep load-sensitive knock");
+    pushTest("compare whether the sound is a light tick or a deep load-sensitive knock");
   }
 
   if (
-    topCause.includes("belt") ||
-    topCause.includes("pulley") ||
-    topCause.includes("bearing")
+    topCause.toLowerCase().includes("belt") ||
+    topCause.toLowerCase().includes("pulley") ||
+    topCause.toLowerCase().includes("bearing")
   ) {
     pushTest("inspect belt condition and pulley alignment");
-    pushTest("listen at the belt path and accessory side");
+    pushTest("listen around the accessory side");
   }
 
   if (
-    topCause.includes("charging-system") ||
+    topCause.toLowerCase().includes("charging") ||
     symptomsText.includes("battery issue") ||
     symptomsText.includes("alternator issue")
   ) {
@@ -596,20 +592,21 @@ function buildTests({
   }
 
   if (clusterKey === "suspension_height_control") {
-    pushTest("inspect ride height on all corners and check whether one side drops more than the others");
+    pushTest("check whether one corner drops more than the others");
     pushTest("check compressor operation, valve block, and visible air leaks");
     pushTest("inspect height-sensor linkage and wiring");
   }
 
-  if (repairs.includes("spark plugs") && topCause.includes("ignition")) {
-    pushTest("since plugs were already replaced, focus more on coils, install quality, and related air leak path");
+  if (repairs.includes("spark plugs") && topCause.toLowerCase().includes("ignition")) {
+    pushTest("since plugs were already replaced, lean more toward coils, install quality, or air-leak path");
   }
 
-  return dedupe(tests).slice(0, 6);
+  return dedupe(tests).slice(0, 5);
 }
 
 function buildQuestions({
   memorySummary = {},
+  diagnosticEngine = {},
   topCause = "",
   clusterKey = "",
   userIntent = {},
@@ -625,39 +622,43 @@ function buildQuestions({
     if (q) questions.push(q);
   };
 
-  if (
-    clusterKey === "abs_brake_stability" ||
-    topCause.includes("ABS") ||
-    topCause.includes("brake")
-  ) {
-    pushQuestion("Is the ABS light or brake warning light on now, and does the pedal feel normal or weak?");
+  if (Array.isArray(diagnosticEngine?.cautionFlags) && diagnosticEngine.cautionFlags.includes("timing-risk")) {
+    pushQuestion("Is the noise still only a few seconds on cold start, or is it starting to last longer?");
   }
 
-  if (codes.length === 0 && topCause.includes("ignition")) {
-    pushQuestion("Are there any check-engine codes right now, or is the light just on without a scan?");
+  if (
+    clusterKey === "abs_brake_stability" ||
+    topCause.toLowerCase().includes("abs") ||
+    topCause.toLowerCase().includes("brake")
+  ) {
+    pushQuestion("Is the ABS or brake warning light on now, and does the pedal feel normal or weak?");
+  }
+
+  if (codes.length === 0 && topCause.toLowerCase().includes("ignition")) {
+    pushQuestion("Do you have any check-engine codes now, or is the light on without a scan?");
   }
 
   if (
     symptomsText.includes("rough idle") ||
     symptomsText.includes("misfire")
   ) {
-    pushQuestion("Is the shake strongest at idle and does it smooth out when you give it throttle?");
+    pushQuestion("Is the shake strongest at idle, and does it smooth out when you give it throttle?");
   }
 
-  if (topCause.includes("knock")) {
-    pushQuestion("Is the sound a light fast tick, or a deeper knock that gets heavier under load?");
+  if (topCause.toLowerCase().includes("knock")) {
+    pushQuestion("Does it sound like a light fast tick, or a deeper knock that gets heavier under load?");
   }
 
-  if (topCause.includes("cooling")) {
+  if (topCause.toLowerCase().includes("cooling")) {
     pushQuestion("Does the temperature rise mainly while driving, at idle, or both?");
   }
 
   if (userIntent.purchaseIntent) {
-    pushQuestion("Before buying it, do you know whether these faults are current and active, or were they old stored codes?");
+    pushQuestion("Before buying it, do you know whether these faults are current or just old stored codes?");
   }
 
   if (unresolved.includes("fault_codes_unknown")) {
-    pushQuestion("If you do not have a scanner yet, tell me whether the check-engine light is steady or flashing.");
+    pushQuestion("If you do not have a scanner yet, is the check-engine light steady or flashing?");
   }
 
   return dedupe(questions).slice(0, 2);
@@ -665,10 +666,14 @@ function buildQuestions({
 
 function detectSeverity({
   memorySummary = {},
+  diagnosticEngine = {},
   topCause = "",
   text = "",
   clusterKey = "",
 }) {
+  if (diagnosticEngine?.riskLevel === "high") return "urgent";
+  if (diagnosticEngine?.riskLevel === "medium") return "high";
+
   const combined = `${lowerJoined(memorySummary?.symptoms || [])} | ${String(
     text || ""
   ).toLowerCase()} | ${String(topCause || "").toLowerCase()}`;
@@ -684,7 +689,7 @@ function detectSeverity({
     combined.includes("flashing check engine") ||
     combined.includes("loss of braking") ||
     combined.includes("loss of steering") ||
-    topCause.includes("true engine knock")
+    topCause.toLowerCase().includes("true engine knock")
   ) {
     return "urgent";
   }
@@ -712,10 +717,12 @@ function detectSeverity({
   return "low";
 }
 
-function detectDomain(topCause = "", text = "", clusterKey = "") {
+function detectDomain(topCause = "", text = "", clusterKey = "", diagnosticEngine = {}) {
   const value = `${String(topCause || "").toLowerCase()} | ${String(
     text || ""
-  ).toLowerCase()} | ${String(clusterKey || "").toLowerCase()}`;
+  ).toLowerCase()} | ${String(clusterKey || "").toLowerCase()} | ${String(
+    diagnosticEngine?.topIssue || ""
+  ).toLowerCase()}`;
 
   if (
     value.includes("ignition") ||
@@ -723,7 +730,10 @@ function detectDomain(topCause = "", text = "", clusterKey = "") {
     value.includes("vacuum") ||
     value.includes("injector") ||
     value.includes("knock") ||
-    value.includes("tick")
+    value.includes("tick") ||
+    value.includes("timing") ||
+    value.includes("chain") ||
+    value.includes("phaser")
   ) return "engine";
 
   if (
@@ -766,19 +776,13 @@ function deriveMediaHints({ memorySummary = {}, text = "" }) {
     combined.includes("image") ||
     combined.includes("picture") ||
     combined.includes("dashboard") ||
-    combined.includes("scanner screen") ||
-    combined.includes("صورة") ||
-    combined.includes("عداد") ||
-    combined.includes("لوحة") ||
-    combined.includes("قراءة من الصورة");
+    combined.includes("scanner screen");
 
   const audioSignals =
     combined.includes("sound") ||
     combined.includes("noise") ||
     combined.includes("audio") ||
-    combined.includes("recording") ||
-    combined.includes("صوت") ||
-    combined.includes("تسجيل");
+    combined.includes("recording");
 
   const gpsSignals =
     combined.includes("near me") ||
@@ -786,10 +790,6 @@ function deriveMediaHints({ memorySummary = {}, text = "" }) {
     combined.includes("closest shop") ||
     combined.includes("workshop near") ||
     combined.includes("mechanic near") ||
-    combined.includes("اقرب") ||
-    combined.includes("بالقرب") ||
-    combined.includes("مكاني") ||
-    combined.includes("موقعي") ||
     combined.includes("gps") ||
     combined.includes("zip");
 
@@ -886,24 +886,33 @@ function buildSafetyAdvice({
   clusterKey = "",
   topCause = "",
   userIntent = {},
+  diagnosticEngine = {},
 }) {
+  const cautionFlags = safeArray(diagnosticEngine?.cautionFlags || []);
+
   if (
     severity === "urgent" ||
     clusterKey === "abs_brake_stability" ||
-    topCause.includes("true engine knock")
+    topCause.toLowerCase().includes("true engine knock") ||
+    cautionFlags.includes("overheat-risk")
   ) {
     return "driving may be unsafe or should be limited until the core fault is checked";
   }
 
-  if (severity === "high") {
-    return "the car may still move, but it should not be ignored and should be checked soon";
+  if (
+    severity === "high" ||
+    cautionFlags.includes("timing-risk") ||
+    cautionFlags.includes("mechanical-valvetrain-risk") ||
+    cautionFlags.includes("misfire-cluster")
+  ) {
+    return "the vehicle may still move, but it should not be ignored and should be checked soon";
   }
 
   if (userIntent?.safetyIntent) {
-    return "it does not look like the kind of issue to ignore for long, even if the car still drives";
+    return "it does not look like the kind of issue to ignore for long, even if it still drives";
   }
 
-  return "no immediate severe danger is proven yet, but the fault path still needs confirmation";
+  return "no severe danger is proven yet, but the fault path still needs confirmation";
 }
 
 function buildPurchaseJudgment({
@@ -920,27 +929,32 @@ function buildPurchaseJudgment({
   if (
     severity === "urgent" ||
     clusterKey === "abs_brake_stability" ||
-    topCause.includes("module") ||
+    topCause.toLowerCase().includes("module") ||
     count >= 3
   ) {
     return "this is not a clean pre-purchase picture; it looks more like a negotiation-risk or possible walk-away case unless priced accordingly and properly diagnosed first";
   }
 
   if (severity === "high") {
-    return "this looks like a negotiable issue, but not something to ignore before buying";
+    return "this looks negotiable, but not something to ignore before buying";
   }
 
-  return "this may still be a manageable used-car issue, but it should be verified before purchase";
+  return "this may still be manageable, but it should be verified before purchase";
 }
 
 function buildEvidenceSummary({
   memorySummary = {},
+  diagnosticEngine = {},
   text = "",
   codes = [],
   clusterKey = "",
   mediaHints = {},
 }) {
   const summary = [];
+
+  if (diagnosticEngine?.topIssue) {
+    summary.push(`internal diagnosis: ${diagnosticEngine.topIssue}`);
+  }
 
   if (codes.length > 0) {
     summary.push(`fault codes detected: ${codes.join(", ")}`);
@@ -955,7 +969,7 @@ function buildEvidenceSummary({
   }
 
   if (mediaHints?.audioSignals) {
-    summary.push("audio/noise evidence may be present");
+    summary.push("audio or noise evidence may be present");
   }
 
   const symptoms = safeArray(memorySummary?.symptoms).slice(0, 3);
@@ -979,6 +993,7 @@ export function buildResponsePlan({
   text = "",
   placesIntent = false,
   enginePack = {},
+  diagnosticEngine = {},
   diagnosticMemory = {},
   verifiedData = [],
   verifiedWorkshops = [],
@@ -994,24 +1009,29 @@ export function buildResponsePlan({
   const ranked = rankLikelyCauses({
     memorySummary,
     enginePack,
+    diagnosticEngine,
     text,
     verifiedData,
   });
 
   const topCause =
-    ranked[0]?.label || "general mechanical fault path still needs narrowing";
+    diagnosticEngine?.topIssue ||
+    ranked[0]?.label ||
+    "general mechanical fault path still needs narrowing";
 
   const severity = detectSeverity({
     memorySummary,
+    diagnosticEngine,
     topCause,
     text,
     clusterKey: primaryCluster,
   });
 
-  const domain = detectDomain(topCause, text, primaryCluster);
+  const domain = detectDomain(topCause, text, primaryCluster, diagnosticEngine);
 
   const tests = buildTests({
     memorySummary,
+    diagnosticEngine,
     topCause,
     domain,
     clusterKey: primaryCluster,
@@ -1019,6 +1039,7 @@ export function buildResponsePlan({
 
   const questions = buildQuestions({
     memorySummary,
+    diagnosticEngine,
     topCause,
     clusterKey: primaryCluster,
     userIntent,
@@ -1060,6 +1081,7 @@ export function buildResponsePlan({
     clusterKey: primaryCluster,
     topCause,
     userIntent,
+    diagnosticEngine,
   });
 
   const purchaseJudgment = buildPurchaseJudgment({
@@ -1072,6 +1094,7 @@ export function buildResponsePlan({
 
   const evidenceSummary = buildEvidenceSummary({
     memorySummary,
+    diagnosticEngine,
     text,
     codes,
     clusterKey: primaryCluster,
@@ -1114,6 +1137,7 @@ export function buildResponsePlan({
       userIntent,
       query,
       workshopQuery,
+      diagnosticEngine,
     }),
   };
 }
@@ -1136,6 +1160,7 @@ export function buildPlannerText({
   userIntent = {},
   query = "",
   workshopQuery = "",
+  diagnosticEngine = {},
 }) {
   return `
 RESPONSE_PLANNER:
@@ -1147,8 +1172,8 @@ STRONGEST_HYPOTHESIS=${JSON.stringify(topCause)}
 CODES=${JSON.stringify(codes || [])}
 LIKELY_CAUSES=${JSON.stringify((ranked || []).map((x) => x.label))}
 LIKELY_CAUSE_REASONS=${JSON.stringify((ranked || []).map((x) => x.why))}
-RECOMMENDED_TESTS=${JSON.stringify(tests || [])}
-MUST_ASK=${JSON.stringify(questions || [])}
+BEST_NEXT_CHECKS=${JSON.stringify(tests || [])}
+HIGH_VALUE_FOLLOWUPS=${JSON.stringify(questions || [])}
 SAFETY_ADVICE=${JSON.stringify(safetyAdvice || "")}
 PURCHASE_JUDGMENT=${JSON.stringify(purchaseJudgment || "")}
 EVIDENCE_SUMMARY=${JSON.stringify(evidenceSummary || [])}
@@ -1157,22 +1182,29 @@ USER_INTENT=${JSON.stringify(userIntent || {})}
 SEARCH_QUERY=${JSON.stringify(query || "")}
 WORKSHOP_QUERY=${JSON.stringify(workshopQuery || "")}
 MEMORY_SUMMARY=${JSON.stringify(memorySummary || {})}
+DIAGNOSTIC_ENGINE_TOP=${JSON.stringify({
+    topIssue: diagnosticEngine?.topIssue || null,
+    topEngine: diagnosticEngine?.topEngine || null,
+    confidence: diagnosticEngine?.confidence ?? null,
+    riskLevel: diagnosticEngine?.riskLevel || null,
+    cautionFlags: diagnosticEngine?.cautionFlags || [],
+  })}
 
 PLANNER_RULES:
 - Lead with STRONGEST_HYPOTHESIS first.
-- If PRIMARY_CLUSTER exists, treat the case as a unified subsystem diagnosis, not isolated code explanations.
+- If DIAGNOSTIC_ENGINE_TOP.confidence is meaningful, trust that path strongly.
+- If PRIMARY_CLUSTER exists, treat the case as a unified subsystem diagnosis, not isolated code definitions.
 - Do not present all causes as equal.
-- Explain why the clues point toward one central fault if that pattern exists.
-- Use RECOMMENDED_TESTS to guide the next practical step.
-- Use MUST_ASK only if those questions materially improve the next move.
-- If CODES contains several related chassis / ABS / module clues, do not answer like a code dictionary.
-- If MEDIA_HINTS.imageSignals is true, treat the image as real diagnostic evidence.
-- If MEDIA_HINTS.audioSignals is true, treat sound/noise as diagnostic evidence and reference rhythm / load / speed relation when useful.
-- If SEARCH_QUERY is present, external search may be used to refine diagnosis or buying risk.
-- If WORKSHOP_QUERY is present, GPS / local shop search may be used to find the right nearby specialist.
-- If USER_INTENT.purchaseIntent is true, protect the user like a pre-purchase inspector.
-- If SAFETY_ADVICE exists, state it briefly and clearly.
-- Sound like a real diagnostician, not a generic assistant.
-- Prefer the shortest and highest-yield path first.
+- Do not answer like a code glossary.
+- Explain the case as one mechanic speaking naturally, not as a structured guide.
+- Use BEST_NEXT_CHECKS to shape the next move, but do not turn them into headings or bullet lists unless absolutely necessary.
+- Use HIGH_VALUE_FOLLOWUPS only if those questions materially change the diagnosis.
+- Keep the answer conversational, decisive, and workshop-realistic.
+- Avoid headings like "Why it fits", "Next steps", "Safety note", or similar.
+- Avoid bullet points unless the situation truly requires them.
+- If SAFETY_ADVICE exists, state it briefly and naturally inside the response flow.
+- If PURCHASE_JUDGMENT exists, state it clearly and directly.
+- If WORKSHOP_QUERY exists and nearby help is requested, local search may be used to find the right specialist.
+- Prefer the shortest, sharpest, highest-yield answer first.
 `.trim();
 }
