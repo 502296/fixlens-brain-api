@@ -1,7 +1,5 @@
-// service.js — FixLens Brain v12
-// Data-first diagnostic orchestrator
-// English-first brain, English/Spanish output priority
-// Added structured visual diagnostic payload for UI cards
+// service.js — FixLens Brain v13
+// Clean, data-first, cost-aware diagnostic orchestrator
 
 import OpenAI from "openai";
 
@@ -20,13 +18,8 @@ const client = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-const MODEL =
-  process.env.FIXLENS_MODEL ||
-  "gpt-4o";
+const MODEL = process.env.FIXLENS_MODEL || "gpt-4o";
 
-/* =========================================================
-   MAIN
-========================================================= */
 export async function handleFixLensRequest(req) {
   try {
     const body = req?.body || {};
@@ -35,6 +28,7 @@ export async function handleFixLensRequest(req) {
     const history = normalizeHistory(body);
     const image = extractImage(body);
     const audio = extractAudio(body);
+    const locale = String(body.locale || body.lang || body.language || "auto").trim();
 
     const location =
       body.user_location ||
@@ -46,32 +40,11 @@ export async function handleFixLensRequest(req) {
       body.zip ||
       null;
 
-    const locale =
-      String(body.locale || body.lang || body.language || "auto").trim() || "auto";
-
     let userText = rawText;
     let audioTranscript = "";
-    let audioContext = {
-      used_audio: false,
-      transcript_used: false,
-      audio_kind: body.audio_kind || body.audio_type || "unknown",
-    };
 
-    /* -------------------------
-       AUDIO PROCESSING
-    ------------------------- */
     if (audio) {
       try {
-        console.log("[AUDIO DEBUG]", {
-          bodyKeys: Object.keys(body || {}),
-          hasAudioField: Boolean(audio),
-          audioType: typeof audio,
-          audioLength: typeof audio === "string" ? audio.length : null,
-          audioKind: body.audio_kind || body.audio_type || null,
-          audioMime: body.audio_mime || null,
-          audioFilename: body.audio_filename || null,
-        });
-
         const audioResult = await processAudio({
           audio_base64: audio,
           locale,
@@ -80,147 +53,50 @@ export async function handleFixLensRequest(req) {
           audio_filename: body.audio_filename || "",
         });
 
-        if (typeof audioResult === "string" && audioResult.trim()) {
-          audioTranscript = audioResult.trim();
-        } else if (
-          audioResult &&
-          typeof audioResult === "object" &&
-          typeof audioResult.text === "string" &&
-          audioResult.text.trim()
-        ) {
-          audioTranscript = audioResult.text.trim();
-        }
+        audioTranscript =
+          typeof audioResult === "string"
+            ? audioResult.trim()
+            : String(audioResult?.text || "").trim();
 
         if (audioTranscript) {
-          audioContext = {
-            used_audio: true,
-            transcript_used: true,
-            audio_kind:
-              body.audio_kind ||
-              body.audio_type ||
-              audioResult?.audio_kind ||
-              "speech_or_vehicle_audio",
-          };
-
-          if (!hasMeaningfulText(userText)) {
-            userText = audioTranscript;
-          } else if (!normalizeTextLoose(userText).includes(normalizeTextLoose(audioTranscript))) {
-            userText = `${userText}\n\n[Audio transcript]\n${audioTranscript}`;
-          }
+          userText = hasMeaningfulText(userText)
+            ? `${userText}\n\n[Audio transcript]\n${audioTranscript}`
+            : audioTranscript;
         }
       } catch (error) {
         console.log("Audio processing failed:", error?.message || error);
       }
     }
 
-    /* -------------------------
-       EMPTY INPUT HANDLING
-    ------------------------- */
     if (!hasMeaningfulText(userText) && !image) {
-      return {
-        ok: true,
+      return baseResponse({
         reply:
           "Please describe what the vehicle is doing, when it happens, and what car or truck you have.",
         intent: "general",
-        language: "english",
-        dialect: "us",
-        searched: false,
-        diagnostic_card: null,
-        symptom_signals: [],
-        action_steps: [],
-        warning_flag: null,
-        visual_labels: buildVisualLabels("english"),
-      };
-    }
-
-    /* -------------------------
-       RULE + ROUTER INTENT
-    ------------------------- */
-    let ruleIntent = {
-      primaryIntent: "diagnosis",
-      diagnosis: true,
-      places: false,
-      purchase: false,
-      safety: false,
-      image: Boolean(image),
-      audio: Boolean(audio),
-      needsSearch: false,
-      askForLocation: false,
-      hasVehicleSymptom: true,
-      hasLocationHint: false,
-      diagnosisMode: "symptom_diagnosis",
-      detectedCodes: [],
-      languageProfile: {
-        script: "unknown",
-        mixed_script: false,
-        reply_same_language: true,
-      },
-      intentConfidence: 0.4,
-    };
-
-    try {
-      ruleIntent = detectIntent({
-        text: userText,
-        history,
-        location,
       });
-    } catch (error) {
-      console.log("Intent detector failed:", error?.message || error);
     }
 
-    let routedIntent = {
-      mode: "general_question",
-      isDiagnosis: true,
-      isFollowup: false,
-      isActionQuestion: false,
-      isPlaces: false,
-      isPurchase: false,
-      isSafety: false,
-      explicitPlaces: false,
-      explicitPlacesHandoff: false,
-      locationProvided: Boolean(location),
-      locationAskedPreviously: false,
-      hasDiagnosisContext: Boolean(ruleIntent?.diagnosis),
-      hasPlacesContext: Boolean(ruleIntent?.places),
-      hasImage: Boolean(image),
-      hasAudio: Boolean(audio),
-      imageTextHint: Boolean(ruleIntent?.image),
-      audioTextHint: Boolean(ruleIntent?.audio),
-      explanationOnly: false,
-      detectedCodes: Array.isArray(ruleIntent?.detectedCodes)
-        ? ruleIntent.detectedCodes
-        : [],
-      shouldUseGpsOrLocation: Boolean(ruleIntent?.places),
-      shouldPreserveDiagnosisState: true,
-      shouldMergeMediaIntoCase: Boolean(image || audio),
-      localSearchType: null,
-      route_confidence: 0.4,
-    };
+    const ruleIntent = safeCall(
+      () => detectIntent({ text: userText, history, location }),
+      defaultRuleIntent({ image, audio })
+    );
 
-    try {
-      routedIntent = resolveIntent({
-        text: userText,
-        history,
-        hasImage: Boolean(image),
-        hasAudio: Boolean(audio),
-      });
-    } catch (error) {
-      console.log("Intent router failed:", error?.message || error);
-    }
+    const routedIntent = safeCall(
+      () =>
+        resolveIntent({
+          text: userText,
+          history,
+          hasImage: Boolean(image),
+          hasAudio: Boolean(audio),
+        }),
+      defaultRoutedIntent({ location, image, audio })
+    );
 
-    /* -------------------------
-       MODEL INTENT BRIDGE
-       English + Spanish focused
-    ------------------------- */
-    const modelIntent = await classifyIntentWithModel({
+    const modelIntent = await classifyIntentCheap({
       text: userText,
-      history,
       location,
-      locale,
       ruleIntent,
       routedIntent,
-      hasImage: Boolean(image),
-      hasAudio: Boolean(audio),
     });
 
     const primaryIntent =
@@ -228,117 +104,70 @@ export async function handleFixLensRequest(req) {
       ruleIntent.primaryIntent ||
       (routedIntent.isPlaces ? "places" : "diagnosis");
 
-    const detectedLanguage =
-      normalizeSupportedLanguage(
-        modelIntent.userLanguage ||
-        detectPreferredLanguageFromText(userText) ||
-        "english"
-      );
+    const language = normalizeSupportedLanguage(
+      modelIntent.userLanguage || detectPreferredLanguageFromText(userText)
+    );
 
-    const detectedDialect =
-      normalizeSupportedDialect(
-        modelIntent.userDialect ||
-        (detectedLanguage === "spanish" ? "latin-american-spanish" : "us-english")
-      );
+    const dialect =
+      language === "spanish" ? "latin-american-spanish" : "us-english";
 
-    const searchNeededByIntent =
-      Boolean(modelIntent.needsSearch) ||
-      Boolean(ruleIntent.needsSearch) ||
-      Boolean(routedIntent.isPlaces) ||
-      Boolean(routedIntent.mode === "places_handoff_from_diagnosis");
+    const wantsPlaces =
+      primaryIntent === "places" ||
+      primaryIntent === "hybrid" ||
+      Boolean(ruleIntent.places) ||
+      Boolean(routedIntent.isPlaces);
 
-    const askForLocation =
-      Boolean(modelIntent.askForLocation) ||
-      (Boolean(routedIntent.shouldUseGpsOrLocation) &&
-        !Boolean(routedIntent.locationProvided) &&
-        !Boolean(ruleIntent.hasLocationHint) &&
-        !hasUsableLocation(location, userText));
+    const needsLocation =
+      wantsPlaces && !hasUsableLocation(location, userText);
 
-    /* -------------------------
-       MEMORY ENGINE
-    ------------------------- */
-    let memory = {
-      current_case_summary: {},
-      case_direction: "general_diagnosis",
-      memory_text: "none",
-    };
-
-    try {
-      memory = buildDiagnosticMemory({
-        text: userText,
-        history,
-        voiceText: audioTranscript,
-        audioType: audioContext.used_audio ? audioContext.audio_kind : "none",
+    if (needsLocation) {
+      return baseResponse({
+        reply: buildLocationPrompt({ language, routedIntent }),
+        intent: primaryIntent,
+        language,
+        dialect,
+        needs_location: true,
       });
-    } catch (error) {
-      console.log("Memory engine failed:", error?.message || error);
     }
 
-    /* -------------------------
-       ENGINE INTELLIGENCE
-    ------------------------- */
-    let enginePack = {
+    const memory = safeCall(
+      () =>
+        buildDiagnosticMemory({
+          text: userText,
+          history,
+          voiceText: audioTranscript,
+          audioType: audio ? "speech_or_vehicle_audio" : "none",
+        }),
+      {
+        current_case_summary: {},
+        memory_text: "none",
+      }
+    );
+
+    const memoryVehicle = memory?.current_case_summary?.vehicle || {};
+    const enrichedText = enrichTextWithVehicle(userText, memoryVehicle);
+
+    const enginePack = safeCall(() => buildEnginePack(enrichedText), {
       make: null,
       model: null,
       year: null,
       detected_engine: null,
-      detected_fault_codes: [],
-      simple_engine_issue_matches: [],
-      intel_best_pattern: null,
-      prepurchase_risk: "low",
       vehicle_identity: null,
       intel_score: 0,
-    };
+    });
 
-    try {
-      const memoryVehicle = memory?.current_case_summary?.vehicle || {};
-      const enrichedText = enrichTextWithVehicle(userText, memoryVehicle);
-      enginePack = buildEnginePack(enrichedText);
-    } catch (error) {
-      console.log("Engine intel failed:", error?.message || error);
-    }
+    const diagnosticText = enrichTextWithVehicle(userText, {
+      year: enginePack?.year || memoryVehicle?.year || null,
+      make: enginePack?.make || memoryVehicle?.make || null,
+      model: enginePack?.model || memoryVehicle?.model || null,
+      engine: enginePack?.detected_engine || memoryVehicle?.engine || null,
+    });
 
-    /* -------------------------
-       DIAGNOSTIC ENGINE v1
-       Data-first decision layer
-    ------------------------- */
-    let diagnosticEngine = {
-      scope: "engine",
-      normalizedText: "",
-      engineHints: [],
-      matchedSignals: [],
-      topIssue: null,
-      topEngine: null,
-      confidence: 0.18,
-      riskLevel: "low",
-      matchedKeywords: [],
-      firstChecks: [],
-      mechanism: "",
-      symptomNotes: [],
-      commonMisreads: [],
-      doNotConfuseWith: [],
-      rankedFindings: [],
-    };
+    const diagnosticEngine = safeCall(
+      () => runDiagnosticEngine({ userText: diagnosticText }),
+      defaultDiagnosticEngine()
+    );
 
-    try {
-      const memoryVehicle = memory?.current_case_summary?.vehicle || {};
-      const enrichedForDiagnostic = enrichTextWithVehicle(userText, {
-        year: enginePack?.year || memoryVehicle?.year || null,
-        make: enginePack?.make || memoryVehicle?.make || null,
-        model: enginePack?.model || memoryVehicle?.model || null,
-        engine: enginePack?.detected_engine || memoryVehicle?.engine || null,
-      });
-
-      diagnosticEngine = runDiagnosticEngine({
-        userText: enrichedForDiagnostic,
-      });
-    } catch (error) {
-      console.log("Diagnostic engine failed:", error?.message || error);
-    }
-
-    /* -------------------------
-       SEARCH
-    ------------------------- */
     let search = {
       verified_data: [],
       verified_actions: [],
@@ -346,196 +175,104 @@ export async function handleFixLensRequest(req) {
       search_meta: {},
     };
 
-    try {
-      if (searchNeededByIntent) {
-        search = await performSearch(userText, location, {
-          locale,
-          allowPlaces: Boolean(
-            routedIntent.isPlaces ||
-            primaryIntent === "places" ||
-            primaryIntent === "hybrid"
-          ),
-          forcePlaces: Boolean(
-            routedIntent.isPlaces ||
-            routedIntent.mode === "places_handoff_from_diagnosis"
-          ),
-          maxResults: 4,
-        });
-      } else {
-        search = await performSearch(userText, location, {
-          locale,
-          allowPlaces: false,
-          forcePlaces: false,
-          maxResults: 4,
-        });
-      }
-    } catch (error) {
-      console.log("Search failed:", error?.message || error);
+    if (wantsPlaces) {
+      search = await safeAsyncCall(
+        () =>
+          performSearch(userText, location, {
+            locale,
+            allowPlaces: true,
+            forcePlaces: true,
+            maxResults: 4,
+          }),
+        search
+      );
+    } else {
+      search = await safeAsyncCall(
+        () =>
+          performSearch(userText, null, {
+            locale,
+            allowPlaces: false,
+            forcePlaces: false,
+            maxResults: 3,
+          }),
+        search
+      );
     }
 
     const verifiedData = Array.isArray(search?.verified_data)
       ? search.verified_data
       : [];
-
     const verifiedActions = Array.isArray(search?.verified_actions)
       ? search.verified_actions
       : [];
-
     const verifiedWorkshops = Array.isArray(search?.verified_workshops)
       ? search.verified_workshops
       : [];
 
-    const searchMeta =
-      search?.search_meta && typeof search.search_meta === "object"
-        ? search.search_meta
-        : {};
+    const responsePlan = safeCall(
+      () =>
+        buildResponsePlan({
+          locale,
+          text: userText,
+          placesIntent: wantsPlaces,
+          enginePack,
+          diagnosticEngine,
+          diagnosticMemory: memory,
+          verifiedData,
+          verifiedWorkshops,
+          internalIntelStrong:
+            Number(enginePack?.intel_score || 0) >= 8 ||
+            Number((diagnosticEngine?.confidence || 0) * 10) >= 7,
+        }),
+      {
+        severity: "medium",
+        strongest_hypothesis: "mechanical fault path needs confirmation",
+        tests: [],
+        evidence_summary: [],
+        safety_advice: "",
+        planner_text: "none",
+      }
+    );
 
-    /* -------------------------
-       RESPONSE PLAN
-    ------------------------- */
-    let responsePlan = {
-      severity: "medium",
-      domain: "general",
-      cluster: "",
-      strongest_hypothesis: "general mechanical fault path still needs narrowing",
-      likely_causes: [],
-      likely_cause_reasons: [],
-      tests: [],
-      must_ask: [],
-      needs_search: false,
-      query: "",
-      workshop_query: "",
-      safety_advice: "",
-      purchase_judgment: "",
-      codes: [],
-      evidence_summary: [],
-      media_hints: {},
-      user_intent: {},
-      planner_text: "none",
-    };
+    const shouldUseAI =
+      Boolean(image) ||
+      Number(diagnosticEngine?.confidence || 0) < 0.55 ||
+      !diagnosticEngine?.topIssue;
 
-    try {
-      responsePlan = buildResponsePlan({
+    let aiReply = "";
+
+    if (shouldUseAI) {
+      aiReply = await buildAIReply({
+        history,
+        image,
         locale,
-        text: userText,
-        placesIntent: Boolean(routedIntent.isPlaces),
+        language,
+        dialect,
+        primaryIntent,
+        userText,
+        audioTranscript,
+        memory,
         enginePack,
         diagnosticEngine,
-        diagnosticMemory: memory,
+        responsePlan,
         verifiedData,
+        verifiedActions,
         verifiedWorkshops,
-        internalIntelStrong:
-          Number(enginePack?.intel_score || 0) >= 8 ||
-          Number((diagnosticEngine?.confidence || 0) * 10) >= 7,
       });
-    } catch (error) {
-      console.log("Response planner failed:", error?.message || error);
     }
 
-    /* -------------------------
-       LOCATION GATE
-    ------------------------- */
-    if (
-      askForLocation &&
-      !hasUsableLocation(location, userText)
-    ) {
-      const locationPrompt = buildLocationPrompt({
-        language: detectedLanguage,
-        dialect: detectedDialect,
-        primaryIntent,
-        routedIntent,
-      });
-
-      return {
-        ok: true,
-        reply: locationPrompt,
-        intent: primaryIntent,
-        language: detectedLanguage,
-        dialect: detectedDialect,
-        searched: false,
-        needs_location: true,
-        diagnostic_card: null,
-        symptom_signals: [],
-        action_steps: [],
-        warning_flag: null,
-        visual_labels: buildVisualLabels(detectedLanguage),
-      };
-    }
-
-    /* -------------------------
-       SYSTEM PROMPT
-    ------------------------- */
-    const systemPrompt = buildDoctorSystemPrompt();
-
-    /* -------------------------
-       CONTEXT BLOCK
-    ------------------------- */
-    const contextBlock = buildUnifiedContextBlock({
-      locale,
-      detectedLanguage,
-      detectedDialect,
-      primaryIntent,
-      ruleIntent,
-      routedIntent,
-      location,
-      userText,
-      rawText,
-      audioTranscript,
-      audioContext,
-      memory,
-      enginePack,
+    const reply = buildDoctorFinalResponse({
+      aiReply,
+      language,
       diagnosticEngine,
       responsePlan,
-      verifiedData,
-      verifiedActions,
+      enginePack,
+      wantsPlaces,
       verifiedWorkshops,
-      searchMeta,
     });
-
-    /* -------------------------
-       MESSAGES
-    ------------------------- */
-    const messages = buildOpenAIMessages({
-      systemPrompt,
-      history,
-      contextBlock,
-      image,
-    });
-
-    /* -------------------------
-       OPENAI RESPONSE
-    ------------------------- */
-  let aiReply = "";
-
-// 🔥 Data-first: لا تستخدم GPT إلا إذا الثقة ضعيفة
-const shouldUseAI =
-  (diagnosticEngine?.confidence || 0) < 0.55;
-
-if (shouldUseAI) {
-  try {
-    const completion = await client.chat.completions.create({
-      model: MODEL,
-      temperature: 0.2,
-      messages,
-    });
-
-    aiReply =
-      completion?.choices?.[0]?.message?.content?.trim() || "";
-  } catch (err) {
-    console.log("AI fallback failed:", err?.message || err);
-  }
-}
-
-// 🩺 الرد النهائي (Doctor Mode)
-const reply = buildDoctorFinalResponse({
-  aiReply,
-  diagnosticEngine,
-  responsePlan,
-  enginePack,
-});
 
     const uiPayload = buildVisualDiagnosticPayload({
-      language: detectedLanguage,
+      language,
       diagnosticEngine,
       responsePlan,
       enginePack,
@@ -549,8 +286,8 @@ const reply = buildDoctorFinalResponse({
       ok: true,
       reply,
       intent: primaryIntent,
-      language: detectedLanguage,
-      dialect: detectedDialect,
+      language,
+      dialect,
       searched:
         verifiedData.length > 0 ||
         verifiedActions.length > 0 ||
@@ -559,168 +296,430 @@ const reply = buildDoctorFinalResponse({
       symptom_signals: uiPayload.symptom_signals,
       action_steps: uiPayload.action_steps,
       warning_flag: uiPayload.warning_flag,
-      visual_labels: uiPayload.visual_labels,
+      visual_labels: buildVisualLabels(language),
       debug: body?.debug
         ? {
-            route_mode: routedIntent.mode,
-            diagnosis_mode: ruleIntent?.diagnosisMode || null,
-            engine_identity: enginePack?.vehicle_identity || null,
-            strongest_hypothesis: responsePlan?.strongest_hypothesis || null,
+            route_mode: routedIntent?.mode || null,
             diagnostic_top_issue: diagnosticEngine?.topIssue || null,
-            diagnostic_top_engine: diagnosticEngine?.topEngine || null,
             diagnostic_confidence: diagnosticEngine?.confidence || null,
             diagnostic_risk: diagnosticEngine?.riskLevel || null,
-            diagnostic_signals: diagnosticEngine?.matchedSignals || [],
-            diagnostic_keywords: diagnosticEngine?.matchedKeywords || [],
-            local_search_type: routedIntent?.localSearchType || null,
-            codes: responsePlan?.codes || [],
-            matched_action_ids: verifiedActions.map((x) => x?.id).filter(Boolean),
-            ui_payload: uiPayload,
+            used_ai: shouldUseAI,
           }
         : undefined,
     };
   } catch (error) {
     console.error("FixLens service error:", error);
-
-    return {
+    return baseResponse({
       ok: false,
       reply: "FixLens hit an internal error while analyzing this case.",
       intent: "error",
-      language: "english",
-      dialect: "us-english",
-      diagnostic_card: null,
-      symptom_signals: [],
-      action_steps: [],
-      warning_flag: null,
-      visual_labels: buildVisualLabels("english"),
-    };
+    });
   }
 }
 
 /* =========================================================
-   MODEL INTENT BRIDGE
+   AI FALLBACK
 ========================================================= */
-async function classifyIntentWithModel({
-  text,
+async function buildAIReply({
   history = [],
-  location = null,
-  locale = "auto",
-  ruleIntent = {},
-  routedIntent = {},
-  hasImage = false,
-  hasAudio = false,
+  image,
+  locale,
+  language,
+  dialect,
+  primaryIntent,
+  userText,
+  audioTranscript,
+  memory,
+  enginePack,
+  diagnosticEngine,
+  responsePlan,
+  verifiedData,
+  verifiedActions,
+  verifiedWorkshops,
 }) {
   try {
-    const condensedHistory = (Array.isArray(history) ? history : [])
-      .slice(-6)
-      .map((item) => {
-        const role = item?.role || "unknown";
-        const content =
-          typeof item?.content === "string"
-            ? item.content
-            : JSON.stringify(item?.content || "");
-        return `${role}: ${content}`;
-      })
-      .join("\n");
+    const systemPrompt = `${buildDoctorSystemPrompt()}
 
-    const classifierPrompt = `
-You classify the user's latest vehicle-related request.
-The product currently supports English and Spanish output only.
-If the user writes in another language, choose whichever of English or Spanish is closer, but prefer English by default.
+FixLens Doctor rules:
+- Be calm, precise, and mechanic-like.
+- Do not mention GPS, nearby shops, Yelp, maps, or location unless the user clearly asked.
+- Do not over-explain.
+- Use the internal diagnostic data first.
+- Give likely cause, why it fits, checks, and risk.
+- Never claim certainty. Use probability language.
+- Output only in ${language === "spanish" ? "Spanish" : "English"}.`;
 
-Return JSON only.
+    const contextBlock = `
+FIXLENS_CONTEXT:
+locale=${locale}
+language=${language}
+dialect=${dialect}
+intent=${primaryIntent}
 
-Required keys:
-- primaryIntent: one of "diagnosis", "places", "hybrid", "general"
-- needsSearch: boolean
-- askForLocation: boolean
-- userLanguage: must be "english" or "spanish"
-- userDialect: short label such as "us-english", "latin-american-spanish", "neutral-spanish"
+USER_TEXT:
+${userText || ""}
 
-Rules:
-- "diagnosis" = diagnosis, fault analysis, next checks, code analysis, image/dashboard reading, audio/noise interpretation, safety judgment, or pre-purchase technical judgment
-- "places" = nearby shops, addresses, maps, towing, parts stores, or local help
-- "hybrid" = both diagnosis and local help
-- "general" = greeting or unclear request
+AUDIO_TRANSCRIPT:
+${audioTranscript || "none"}
 
-needsSearch:
-- true when nearby help, workshop lookup, parts store lookup, towing, or local action is needed
-- false for pure diagnosis unless local help is clearly requested
+MEMORY:
+${memory?.memory_text || "none"}
 
-askForLocation:
-- true only when local help is needed but there is no usable city / zip / GPS / location in the request or provided location field
-- false otherwise
+ENGINE_PACK:
+${JSON.stringify(enginePack || {}, null, 2)}
+
+DIAGNOSTIC_ENGINE:
+${JSON.stringify(formatDiagnosticEngineForContext(diagnosticEngine), null, 2)}
+
+RESPONSE_PLAN:
+${responsePlan?.planner_text || JSON.stringify(responsePlan || {}, null, 2)}
+
+VERIFIED_DATA:
+${JSON.stringify(formatSearchDataForContext(verifiedData, 3), null, 2)}
+
+VERIFIED_ACTIONS:
+${JSON.stringify(formatVerifiedActionsForContext(verifiedActions, 3), null, 2)}
+
+VERIFIED_WORKSHOPS:
+${JSON.stringify(formatSearchDataForContext(verifiedWorkshops, 3), null, 2)}
 `.trim();
 
-    const classifierInput = `
-Latest user text:
-${text}
-
-Provided location field:
-${location ? JSON.stringify(location) : "none"}
-
-Locale field:
-${locale}
-
-Has image:
-${String(Boolean(hasImage))}
-
-Has audio:
-${String(Boolean(hasAudio))}
-
-Recent history:
-${condensedHistory || "none"}
-
-Rule intent:
-${JSON.stringify(ruleIntent)}
-
-Router intent:
-${JSON.stringify(routedIntent)}
-`.trim();
-
-    const result = await client.chat.completions.create({
-      model: MODEL,
-      temperature: 0,
-      messages: [
-        {
-          role: "system",
-          content: classifierPrompt,
-        },
-        {
-          role: "user",
-          content: classifierInput,
-        },
-      ],
+    const messages = buildOpenAIMessages({
+      systemPrompt,
+      history,
+      contextBlock,
+      image,
     });
 
-    const raw =
-      result?.choices?.[0]?.message?.content?.trim() || "";
+    const completion = await client.chat.completions.create({
+      model: MODEL,
+      temperature: 0.15,
+      messages,
+    });
 
-    const parsed = safeParseJson(raw);
-
-    if (!parsed || typeof parsed !== "object") {
-      return fallbackIntent(ruleIntent, routedIntent, text);
-    }
-
-    return {
-      primaryIntent: normalizePrimaryIntent(parsed.primaryIntent, routedIntent),
-      needsSearch: Boolean(parsed.needsSearch),
-      askForLocation: Boolean(parsed.askForLocation),
-      userLanguage: normalizeSupportedLanguage(parsed.userLanguage || detectPreferredLanguageFromText(text)),
-      userDialect: normalizeSupportedDialect(parsed.userDialect),
-    };
+    return completion?.choices?.[0]?.message?.content?.trim() || "";
   } catch (error) {
-    console.log("Model intent bridge failed:", error?.message || error);
-    return fallbackIntent(ruleIntent, routedIntent, text);
+    console.log("AI fallback failed:", error?.message || error);
+    return "";
   }
+}
+
+/* =========================================================
+   DOCTOR RESPONSE
+========================================================= */
+function buildDoctorFinalResponse({
+  aiReply = "",
+  language = "english",
+  diagnosticEngine = {},
+  responsePlan = {},
+  enginePack = {},
+  wantsPlaces = false,
+  verifiedWorkshops = [],
+}) {
+  const lang = normalizeSupportedLanguage(language);
+  const issue = cleanIssueTitle(
+    diagnosticEngine?.topIssue ||
+      responsePlan?.strongest_hypothesis ||
+      firstRankedFindingTitle(diagnosticEngine?.rankedFindings) ||
+      "Mechanical issue needs confirmation"
+  );
+
+  const confidence = Math.round(clamp01(Number(diagnosticEngine?.confidence || 0.3)) * 100);
+  const risk = normalizeRiskLevel(diagnosticEngine?.riskLevel || responsePlan?.severity || "medium");
+
+  const signals = uniqueStrings([
+    ...(Array.isArray(diagnosticEngine?.matchedSignals) ? diagnosticEngine.matchedSignals : []),
+    ...(Array.isArray(diagnosticEngine?.symptomNotes) ? diagnosticEngine.symptomNotes : []),
+    ...(Array.isArray(responsePlan?.evidence_summary) ? responsePlan.evidence_summary : []),
+  ]).slice(0, 3);
+
+  const checks = uniqueStrings([
+    ...(Array.isArray(diagnosticEngine?.firstChecks) ? diagnosticEngine.firstChecks : []),
+    ...(Array.isArray(responsePlan?.tests) ? responsePlan.tests : []),
+  ]).slice(0, 4);
+
+  if (lang === "spanish") {
+    return `
+Resumen del diagnóstico:
+Causa más probable: ${issue} (${confidence}% de confianza)
+
+Por qué encaja:
+${formatBullets(signals, ["El síntoma coincide con este patrón de falla."])}
+
+Qué revisar ahora:
+${formatNumbered(checks, ["Revisa el sistema relacionado con el síntoma."])}
+
+Nivel de riesgo:
+${risk === "high" ? "No lo conduzcas hasta revisarlo." : "Puedes conducir con cuidado, pero revísalo pronto."}
+`.trim();
+  }
+
+  if (wantsPlaces && verifiedWorkshops.length > 0) {
+    const shops = verifiedWorkshops
+      .slice(0, 3)
+      .map((x, i) => `${i + 1}. ${x?.name || x?.title || "Nearby shop"}${x?.rating ? ` — ${x.rating}★` : ""}${x?.address ? ` — ${x.address}` : ""}`)
+      .join("\n");
+
+    return `
+Diagnosis Summary:
+Most likely cause: ${issue} (${confidence}% confidence)
+
+Why this fits:
+${formatBullets(signals, ["The symptoms match this fault pattern."])}
+
+What to check now:
+${formatNumbered(checks, ["Inspect the system related to the symptom."])}
+
+Nearby options:
+${shops}
+
+Risk level:
+${risk === "high" ? "Do not drive until checked." : "Safe for short driving, but inspect soon."}
+`.trim();
+  }
+
+  if (aiReply && confidence < 55) {
+    return trimLongReply(aiReply);
+  }
+
+  return `
+Diagnosis Summary:
+Most likely cause: ${issue} (${confidence}% confidence)
+
+Why this fits:
+${formatBullets(signals, ["The symptoms match this fault pattern."])}
+
+What to check now:
+${formatNumbered(checks, ["Inspect the system related to the symptom."])}
+
+Risk level:
+${risk === "high" ? "Do not drive until checked." : "Safe for short driving, but inspect soon."}
+`.trim();
+}
+
+/* =========================================================
+   VISUAL PAYLOAD
+========================================================= */
+function buildVisualDiagnosticPayload({
+  language = "english",
+  diagnosticEngine = {},
+  responsePlan = {},
+  enginePack = {},
+  verifiedActions = [],
+  verifiedWorkshops = [],
+  reply = "",
+  primaryIntent = "diagnosis",
+}) {
+  const visualLabels = buildVisualLabels(language);
+
+  if (primaryIntent === "places" && !diagnosticEngine?.topIssue) {
+    return emptyVisualPayload(visualLabels);
+  }
+
+  const issueTitle = pickLikelyIssue({
+    diagnosticEngine,
+    responsePlan,
+    enginePack,
+    language,
+  });
+
+  const riskLevel = normalizeRiskLevel(
+    diagnosticEngine?.riskLevel || responsePlan?.severity || "medium"
+  );
+
+  const diagnostic_card = issueTitle
+    ? {
+        title: issueTitle,
+        severity: riskLevel,
+        severity_label: formatSeverityLabel(riskLevel, language),
+        confidence: clamp01(Number(diagnosticEngine?.confidence ?? 0)),
+        confidence_label: formatConfidenceLabel(
+          clamp01(Number(diagnosticEngine?.confidence ?? 0)),
+          language
+        ),
+        summary: buildDiagnosticSummary({
+          language,
+          issueTitle,
+          diagnosticEngine,
+          responsePlan,
+        }),
+        vehicle_identity: enginePack?.vehicle_identity || null,
+        top_engine: diagnosticEngine?.topEngine || null,
+        ui_variant: mapRiskToVariant(riskLevel),
+      }
+    : null;
+
+  return {
+    diagnostic_card,
+    symptom_signals: buildSymptomSignals({ language, diagnosticEngine, responsePlan }),
+    action_steps: buildActionSteps({
+      language,
+      diagnosticEngine,
+      responsePlan,
+      verifiedActions,
+      verifiedWorkshops,
+    }),
+    warning_flag: buildWarningFlag({
+      language,
+      riskLevel,
+      diagnosticEngine,
+      responsePlan,
+      reply,
+    }),
+    visual_labels: visualLabels,
+  };
+}
+
+function buildVisualLabels(language = "english") {
+  if (normalizeSupportedLanguage(language) === "spanish") {
+    return {
+      likely_issue: "Posible problema",
+      what_fixlens_sees: "Lo que FixLens detecta",
+      recommended_actions: "Acciones recomendadas",
+      caution: "Precaución",
+    };
+  }
+
+  return {
+    likely_issue: "Likely Issue",
+    what_fixlens_sees: "What FixLens Sees",
+    recommended_actions: "Recommended Actions",
+    caution: "Caution",
+  };
+}
+
+function emptyVisualPayload(visualLabels) {
+  return {
+    diagnostic_card: null,
+    symptom_signals: [],
+    action_steps: [],
+    warning_flag: null,
+    visual_labels: visualLabels,
+  };
+}
+
+function buildSymptomSignals({ language = "english", diagnosticEngine = {}, responsePlan = {} }) {
+  const raw = [
+    ...(Array.isArray(diagnosticEngine?.matchedSignals) ? diagnosticEngine.matchedSignals : []),
+    ...(Array.isArray(diagnosticEngine?.symptomNotes) ? diagnosticEngine.symptomNotes : []),
+    ...(Array.isArray(responsePlan?.evidence_summary) ? responsePlan.evidence_summary : []),
+  ];
+
+  return uniqueStrings(raw.map(cleanBulletText).filter(Boolean))
+    .slice(0, 4)
+    .map((text) => ({
+      text,
+      icon: inferSignalIcon(text),
+      tone: inferSignalTone(text),
+      language: normalizeSupportedLanguage(language),
+    }));
+}
+
+function buildActionSteps({
+  language = "english",
+  diagnosticEngine = {},
+  responsePlan = {},
+  verifiedActions = [],
+  verifiedWorkshops = [],
+}) {
+  const lang = normalizeSupportedLanguage(language);
+
+  let steps = uniqueStrings([
+    ...(Array.isArray(diagnosticEngine?.firstChecks) ? diagnosticEngine.firstChecks : []),
+    ...(Array.isArray(responsePlan?.tests) ? responsePlan.tests : []),
+    ...flattenVerifiedActionSteps(verifiedActions),
+  ].map(cleanBulletText).filter(Boolean)).slice(0, 4);
+
+  if (steps.length === 0 && verifiedWorkshops.length > 0) {
+    steps = [
+      lang === "spanish"
+        ? "Buscar un taller confiable cercano para una inspección confirmatoria."
+        : "Find a trusted nearby shop for a confirmatory inspection.",
+    ];
+  }
+
+  if (steps.length === 0) {
+    steps = [
+      lang === "spanish"
+        ? "Revisar el sistema relacionado con el síntoma."
+        : "Inspect the system related to the symptom.",
+    ];
+  }
+
+  return steps.map((text, index) => ({
+    step: index + 1,
+    text,
+    image: mapStepToImage(text),
+    done: false,
+  }));
+}
+
+function buildWarningFlag({
+  language = "english",
+  riskLevel = "medium",
+  diagnosticEngine = {},
+  responsePlan = {},
+  reply = "",
+}) {
+  const lang = normalizeSupportedLanguage(language);
+  const safetyAdvice = String(responsePlan?.safety_advice || "").trim();
+  const cautionFlags = Array.isArray(diagnosticEngine?.cautionFlags)
+    ? diagnosticEngine.cautionFlags.filter(Boolean)
+    : [];
+
+  const mustWarn =
+    riskLevel === "high" ||
+    /do not drive|don't drive|avoid driving|stop driving|unsafe to drive|tow/i.test(reply) ||
+    /no conduzcas|evita conducir|grúa|remolque/i.test(reply) ||
+    cautionFlags.length > 0 ||
+    Boolean(safetyAdvice);
+
+  if (!mustWarn) return null;
+
+  const message =
+    safetyAdvice ||
+    cautionFlags[0] ||
+    (lang === "spanish"
+      ? riskLevel === "high"
+        ? "Evita conducirlo hasta revisar esta falla."
+        : "Conduce con cuidado y revisa esta falla pronto."
+      : riskLevel === "high"
+        ? "Avoid driving it until this fault is checked."
+        : "Drive carefully and have this fault checked soon.");
+
+  return {
+    show: true,
+    level: riskLevel,
+    message: cleanBulletText(message),
+    ui_variant: mapRiskToVariant(riskLevel),
+  };
+}
+
+/* =========================================================
+   INTENT
+========================================================= */
+async function classifyIntentCheap({ text = "", location = null, ruleIntent = {}, routedIntent = {} }) {
+  const lower = String(text || "").toLowerCase();
+
+  const localWords =
+    /\b(near me|nearby|shop|mechanic|garage|tow|towing|address|maps|location|parts store|repair shop)\b/i;
+  const spanishLocal =
+    /\b(taller|mecánico|mecanico|cerca|grúa|grua|remolque|ubicación|ubicacion)\b/i;
+
+  const wantsPlaces = localWords.test(lower) || spanishLocal.test(lower) || Boolean(ruleIntent?.places) || Boolean(routedIntent?.isPlaces);
+
+  return {
+    primaryIntent: wantsPlaces ? "hybrid" : "diagnosis",
+    needsSearch: wantsPlaces,
+    askForLocation: wantsPlaces && !hasUsableLocation(location, text),
+    userLanguage: detectPreferredLanguageFromText(text),
+  };
 }
 
 /* =========================================================
    HELPERS
 ========================================================= */
 function extractUserText(body = {}) {
-  if (!body) return "";
-
   if (typeof body.text === "string") return body.text;
   if (typeof body.message === "string") return body.message;
   if (typeof body.prompt === "string") return body.prompt;
@@ -729,12 +728,9 @@ function extractUserText(body = {}) {
 
   if (Array.isArray(body.messages) && body.messages.length > 0) {
     const last = body.messages[body.messages.length - 1];
-
     if (typeof last?.content === "string") return last.content;
-
     if (Array.isArray(last?.content)) {
-      const textPart = last.content.find((c) => c?.type === "text")?.text;
-      if (typeof textPart === "string") return textPart;
+      return last.content.find((c) => c?.type === "text")?.text || "";
     }
   }
 
@@ -742,21 +738,11 @@ function extractUserText(body = {}) {
 }
 
 function extractImage(body = {}) {
-  return (
-    body.image_base64 ||
-    body.image_base_64 ||
-    body.image ||
-    ""
-  );
+  return body.image_base64 || body.image_base_64 || body.image || "";
 }
 
 function extractAudio(body = {}) {
-  return (
-    body.audio_base64 ||
-    body.audio_base_64 ||
-    body.audio ||
-    ""
-  );
+  return body.audio_base64 || body.audio_base_64 || body.audio || "";
 }
 
 function normalizeHistory(body = {}) {
@@ -782,8 +768,6 @@ function normalizeTextLoose(value = "") {
 }
 
 function hasUsableLocation(location, text = "") {
-  if (!location && !text) return false;
-
   if (location) {
     if (typeof location === "string" && location.trim().length >= 3) return true;
 
@@ -800,130 +784,28 @@ function hasUsableLocation(location, text = "") {
         location.region ||
         location.state ||
         location.country;
+
       if (typeof city === "string" && city.trim().length >= 2) return true;
     }
   }
 
   const t = String(text || "").trim();
-  if (!t) return false;
-
-  if (/\b\d{5}(?:-\d{4})?\b/.test(t)) return true;
-  if (/(-?\d+(\.\d+)?)\s*,\s*(-?\d+(\.\d+)?)/.test(t)) return true;
-
-  return false;
-}
-
-function normalizePrimaryIntent(value, routedIntent = {}) {
-  const allowed = new Set(["diagnosis", "places", "hybrid", "general"]);
-
-  if (typeof value === "string") {
-    const normalized = value.trim().toLowerCase();
-    if (allowed.has(normalized)) return normalized;
-  }
-
-  if (routedIntent?.isPlaces && routedIntent?.isDiagnosis) return "hybrid";
-  if (routedIntent?.isPlaces) return "places";
-  if (routedIntent?.isDiagnosis) return "diagnosis";
-
-  return "diagnosis";
+  return /\b\d{5}(?:-\d{4})?\b/.test(t) || /(-?\d+(\.\d+)?)\s*,\s*(-?\d+(\.\d+)?)/.test(t);
 }
 
 function normalizeSupportedLanguage(value = "") {
-  const v = String(value || "").toLowerCase().trim();
-
-  if (
-    v.includes("spanish") ||
-    v.includes("españ") ||
-    v === "es" ||
-    v === "spa"
-  ) {
-    return "spanish";
-  }
-
+  const v = String(value || "").toLowerCase();
+  if (v.includes("spanish") || v.includes("españ") || v === "es" || v === "spa") return "spanish";
   return "english";
-}
-
-function normalizeSupportedDialect(value = "") {
-  const v = String(value || "").toLowerCase().trim();
-
-  if (!v) return "us-english";
-
-  if (v.includes("spanish") || v.includes("lat") || v.includes("mex") || v.includes("neutral")) {
-    return "latin-american-spanish";
-  }
-
-  return "us-english";
 }
 
 function detectPreferredLanguageFromText(text = "") {
   const t = String(text || "");
-
   if (/[áéíóúñü¿¡]/i.test(t)) return "spanish";
 
-  const spanishHints = [
-    "carro",
-    "coche",
-    "mecánico",
-    "mecanico",
-    "ruido",
-    "motor",
-    "vibra",
-    "tiembla",
-    "enciende",
-    "taller",
-    "dirección",
-    "direccion",
-    "por favor",
-  ];
-
   const lower = t.toLowerCase();
-  if (spanishHints.some((w) => lower.includes(w))) {
-    return "spanish";
-  }
-
-  return "english";
-}
-
-function safeParseJson(raw) {
-  if (!raw || typeof raw !== "string") return null;
-
-  try {
-    return JSON.parse(raw);
-  } catch {
-    const firstBrace = raw.indexOf("{");
-    const lastBrace = raw.lastIndexOf("}");
-
-    if (firstBrace === -1 || lastBrace === -1 || lastBrace <= firstBrace) {
-      return null;
-    }
-
-    const sliced = raw.slice(firstBrace, lastBrace + 1);
-
-    try {
-      return JSON.parse(sliced);
-    } catch {
-      return null;
-    }
-  }
-}
-
-function fallbackIntent(ruleIntent = {}, routedIntent = {}, text = "") {
-  return {
-    primaryIntent: normalizePrimaryIntent(
-      ruleIntent.primaryIntent,
-      routedIntent
-    ),
-    needsSearch:
-      Boolean(ruleIntent.needsSearch) || Boolean(routedIntent.isPlaces),
-    askForLocation:
-      Boolean(ruleIntent.askForLocation) ||
-      (Boolean(routedIntent.isPlaces) && !Boolean(routedIntent.locationProvided)),
-    userLanguage: normalizeSupportedLanguage(detectPreferredLanguageFromText(text)),
-    userDialect:
-      normalizeSupportedLanguage(detectPreferredLanguageFromText(text)) === "spanish"
-        ? "latin-american-spanish"
-        : "us-english",
-  };
+  const hints = ["carro", "coche", "mecánico", "mecanico", "ruido", "vibra", "tiembla", "taller", "dirección", "direccion"];
+  return hints.some((w) => lower.includes(w)) ? "spanish" : "english";
 }
 
 function enrichTextWithVehicle(text = "", vehicle = {}) {
@@ -932,49 +814,158 @@ function enrichTextWithVehicle(text = "", vehicle = {}) {
     .join(" ")
     .trim();
 
-  if (!prefix) return text || "";
-  return `${prefix}\n${text || ""}`.trim();
+  return prefix ? `${prefix}\n${text || ""}`.trim() : text || "";
+}
+
+function buildOpenAIMessages({ systemPrompt, history = [], contextBlock, image }) {
+  let messages = [{ role: "system", content: systemPrompt }];
+
+  const sanitized = (Array.isArray(history) ? history : [])
+    .filter((item) => item?.role === "user" || item?.role === "assistant")
+    .slice(-8)
+    .map((item) => ({
+      role: item.role,
+      content:
+        typeof item.content === "string"
+          ? item.content
+          : JSON.stringify(item.content || ""),
+    }));
+
+  messages = messages.concat(sanitized);
+
+  if (image) {
+    messages.push({
+      role: "user",
+      content: [
+        { type: "text", text: contextBlock },
+        { type: "image_url", image_url: { url: `data:image/jpeg;base64,${image}` } },
+      ],
+    });
+  } else {
+    messages.push({ role: "user", content: contextBlock });
+  }
+
+  return messages;
+}
+
+function defaultRuleIntent({ image, audio }) {
+  return {
+    primaryIntent: "diagnosis",
+    diagnosis: true,
+    places: false,
+    image: Boolean(image),
+    audio: Boolean(audio),
+    needsSearch: false,
+    askForLocation: false,
+    detectedCodes: [],
+  };
+}
+
+function defaultRoutedIntent({ location, image, audio }) {
+  return {
+    mode: "diagnosis",
+    isDiagnosis: true,
+    isPlaces: false,
+    locationProvided: Boolean(location),
+    hasImage: Boolean(image),
+    hasAudio: Boolean(audio),
+  };
+}
+
+function defaultDiagnosticEngine() {
+  return {
+    scope: "general",
+    topIssue: null,
+    topEngine: null,
+    confidence: 0.18,
+    riskLevel: "low",
+    matchedSignals: [],
+    matchedKeywords: [],
+    firstChecks: [],
+    mechanism: "",
+    symptomNotes: [],
+    commonMisreads: [],
+    doNotConfuseWith: [],
+    rankedFindings: [],
+    cautionFlags: [],
+  };
+}
+
+function baseResponse({
+  ok = true,
+  reply,
+  intent = "general",
+  language = "english",
+  dialect = "us-english",
+  needs_location = false,
+}) {
+  return {
+    ok,
+    reply,
+    intent,
+    language,
+    dialect,
+    searched: false,
+    needs_location,
+    diagnostic_card: null,
+    symptom_signals: [],
+    action_steps: [],
+    warning_flag: null,
+    visual_labels: buildVisualLabels(language),
+  };
+}
+
+function safeCall(fn, fallback) {
+  try {
+    return fn();
+  } catch (error) {
+    console.log("Safe call failed:", error?.message || error);
+    return fallback;
+  }
+}
+
+async function safeAsyncCall(fn, fallback) {
+  try {
+    return await fn();
+  } catch (error) {
+    console.log("Safe async call failed:", error?.message || error);
+    return fallback;
+  }
 }
 
 function formatSearchDataForContext(items = [], maxItems = 4) {
-  return (Array.isArray(items) ? items : [])
-    .slice(0, maxItems)
-    .map((item, i) => ({
-      index: i + 1,
-      title: item?.title || item?.name || "Item",
-      score: item?.score ?? null,
-      source: item?.source || "",
-      causes: item?.causes || "",
-      checks: item?.checks || "",
-      steps: item?.steps || "",
-      tags: item?.tags || "",
-      codes: item?.codes || [],
-      address: item?.address || "",
-      rating: item?.rating ?? null,
-      phone: item?.phone || "",
-      maps_url: item?.maps_url || "",
-      primary_type: item?.primary_type || "",
-      mode: item?.mode || "",
-    }));
+  return (Array.isArray(items) ? items : []).slice(0, maxItems).map((item, i) => ({
+    index: i + 1,
+    title: item?.title || item?.name || "Item",
+    score: item?.score ?? null,
+    source: item?.source || "",
+    causes: item?.causes || "",
+    checks: item?.checks || "",
+    steps: item?.steps || "",
+    tags: item?.tags || "",
+    codes: item?.codes || [],
+    address: item?.address || "",
+    rating: item?.rating ?? null,
+    phone: item?.phone || "",
+    maps_url: item?.maps_url || "",
+    primary_type: item?.primary_type || "",
+    mode: item?.mode || "",
+  }));
 }
 
 function formatVerifiedActionsForContext(items = [], maxItems = 4) {
-  return (Array.isArray(items) ? items : [])
-    .slice(0, maxItems)
-    .map((item, i) => ({
-      index: i + 1,
-      id: item?.id || "",
-      match_score: item?.match_score ?? null,
-      diagnostic_priority: item?.diagnostic_priority ?? null,
-      safety_level: item?.safety_level || "",
-      match_type: item?.match_type || [],
-      confidence_boost_if: item?.confidence_boost_if || [],
-      kill_other_hypotheses: item?.kill_other_hypotheses || [],
-      actions: item?.actions || [],
-      stop_now_if: item?.stop_now_if || [],
-      ignore_risk: item?.ignore_risk || "",
-      source: item?.source || "",
-    }));
+  return (Array.isArray(items) ? items : []).slice(0, maxItems).map((item, i) => ({
+    index: i + 1,
+    id: item?.id || "",
+    match_score: item?.match_score ?? null,
+    diagnostic_priority: item?.diagnostic_priority ?? null,
+    safety_level: item?.safety_level || "",
+    match_type: item?.match_type || [],
+    actions: item?.actions || [],
+    stop_now_if: item?.stop_now_if || [],
+    ignore_risk: item?.ignore_risk || "",
+    source: item?.source || "",
+  }));
 }
 
 function formatDiagnosticEngineForContext(diagnosticEngine = {}) {
@@ -996,148 +987,20 @@ function formatDiagnosticEngineForContext(diagnosticEngine = {}) {
   };
 }
 
-/* =========================================================
-   VISUAL PAYLOAD HELPERS
-========================================================= */
-function buildVisualDiagnosticPayload({
-  language = "english",
-  diagnosticEngine = {},
-  responsePlan = {},
-  enginePack = {},
-  verifiedActions = [],
-  verifiedWorkshops = [],
-  reply = "",
-  primaryIntent = "diagnosis",
-}) {
-  const visualLabels = buildVisualLabels(language);
-
-  if (primaryIntent === "places" && !diagnosticEngine?.topIssue) {
-    return {
-      diagnostic_card: null,
-      symptom_signals: [],
-      action_steps: [],
-      warning_flag: null,
-      visual_labels: visualLabels,
-    };
-  }
-
-  const issueTitle = pickLikelyIssue({
-    diagnosticEngine,
-    responsePlan,
-    enginePack,
-    language,
-  });
-
-  const confidenceValue = clamp01(
-    Number(diagnosticEngine?.confidence ?? 0)
+function pickLikelyIssue({ diagnosticEngine = {}, responsePlan = {}, enginePack = {}, language = "english" }) {
+  const issue = cleanIssueTitle(
+    diagnosticEngine?.topIssue ||
+      responsePlan?.strongest_hypothesis ||
+      firstNonEmptyString(responsePlan?.likely_causes) ||
+      firstRankedFindingTitle(diagnosticEngine?.rankedFindings)
   );
 
-  const confidenceLabel = formatConfidenceLabel(confidenceValue, language);
-  const riskLevel = normalizeRiskLevel(
-    diagnosticEngine?.riskLevel || responsePlan?.severity || "medium"
-  );
+  if (issue) return issue;
 
-  const severityLabel = formatSeverityLabel(riskLevel, language);
-  const summary = buildDiagnosticSummary({
-    language,
-    issueTitle,
-    diagnosticEngine,
-    responsePlan,
-  });
-
-  const symptomSignals = buildSymptomSignals({
-    language,
-    diagnosticEngine,
-    responsePlan,
-  });
-
-  const actionSteps = buildActionSteps({
-    language,
-    diagnosticEngine,
-    responsePlan,
-    verifiedActions,
-    verifiedWorkshops,
-  });
-
-  const warningFlag = buildWarningFlag({
-    language,
-    riskLevel,
-    diagnosticEngine,
-    responsePlan,
-    reply,
-  });
-
-  const diagnosticCard =
-    issueTitle
-      ? {
-          title: issueTitle,
-          severity: riskLevel,
-          severity_label: severityLabel,
-          confidence: confidenceValue,
-          confidence_label: confidenceLabel,
-          summary,
-          vehicle_identity: enginePack?.vehicle_identity || null,
-          top_engine: diagnosticEngine?.topEngine || null,
-          ui_variant: mapRiskToVariant(riskLevel),
-        }
-      : null;
-
-  return {
-    diagnostic_card: diagnosticCard,
-    symptom_signals: symptomSignals,
-    action_steps: actionSteps,
-    warning_flag: warningFlag,
-    visual_labels: visualLabels,
-  };
-}
-
-function buildVisualLabels(language = "english") {
-  if (normalizeSupportedLanguage(language) === "spanish") {
-    return {
-      likely_issue: "Posible problema",
-      what_fixlens_sees: "Lo que FixLens detecta",
-      recommended_actions: "Acciones recomendadas",
-      caution: "Precaución",
-    };
-  }
-
-  return {
-    likely_issue: "Likely Issue",
-    what_fixlens_sees: "What FixLens Sees",
-    recommended_actions: "Recommended Actions",
-    caution: "Caution",
-  };
-}
-
-function pickLikelyIssue({
-  diagnosticEngine = {},
-  responsePlan = {},
-  enginePack = {},
-  language = "english",
-}) {
-  const candidates = [
-    diagnosticEngine?.topIssue,
-    responsePlan?.strongest_hypothesis,
-    firstNonEmptyString(responsePlan?.likely_causes),
-    firstRankedFindingTitle(diagnosticEngine?.rankedFindings),
-  ].filter((x) => typeof x === "string" && x.trim());
-
-  let issue = candidates[0] || "";
-
-  issue = cleanIssueTitle(issue);
-
-  if (!issue) {
-    const vehicle = enginePack?.vehicle_identity
-      ? `${enginePack.vehicle_identity} `
-      : "";
-
-    if (normalizeSupportedLanguage(language) === "spanish") {
-      return `${vehicle}ruta probable de falla mecánica`.trim();
-    }
-    return `${vehicle}probable mechanical fault path`.trim();
-  }
-
-  return issue;
+  const vehicle = enginePack?.vehicle_identity ? `${enginePack.vehicle_identity} ` : "";
+  return normalizeSupportedLanguage(language) === "spanish"
+    ? `${vehicle}ruta probable de falla mecánica`.trim()
+    : `${vehicle}probable mechanical fault path`.trim();
 }
 
 function cleanIssueTitle(value = "") {
@@ -1147,149 +1010,25 @@ function cleanIssueTitle(value = "") {
     .trim();
 }
 
-function buildDiagnosticSummary({
-  language = "english",
-  issueTitle = "",
-  diagnosticEngine = {},
-  responsePlan = {},
-}) {
+function buildDiagnosticSummary({ language = "english", issueTitle = "", diagnosticEngine = {}, responsePlan = {} }) {
   const lang = normalizeSupportedLanguage(language);
   const matchedSignals = Array.isArray(diagnosticEngine?.matchedSignals)
     ? diagnosticEngine.matchedSignals.filter(Boolean)
     : [];
 
-  const safetyAdvice = String(responsePlan?.safety_advice || "").trim();
-
   if (lang === "spanish") {
-    if (matchedSignals.length > 0) {
-      return `FixLens detectó señales compatibles con ${issueTitle.toLowerCase()}.`;
-    }
-    if (safetyAdvice) {
-      return "FixLens detectó una ruta de falla que requiere verificación mecánica.";
-    }
-    return "FixLens detectó un patrón que merece una revisión específica.";
+    return matchedSignals.length > 0
+      ? `FixLens detectó señales compatibles con ${issueTitle.toLowerCase()}.`
+      : "FixLens detectó un patrón que merece una revisión específica.";
   }
 
-  if (matchedSignals.length > 0) {
-    return `FixLens detected signals consistent with ${issueTitle.toLowerCase()}.`;
-  }
-  if (safetyAdvice) {
-    return "FixLens detected a fault path that deserves mechanical verification.";
-  }
-  return "FixLens detected a pattern that deserves targeted inspection.";
-}
-
-function buildSymptomSignals({
-  language = "english",
-  diagnosticEngine = {},
-  responsePlan = {},
-}) {
-  const lang = normalizeSupportedLanguage(language);
-
-  const rawSignals = [
-    ...(Array.isArray(diagnosticEngine?.matchedSignals) ? diagnosticEngine.matchedSignals : []),
-    ...(Array.isArray(diagnosticEngine?.symptomNotes) ? diagnosticEngine.symptomNotes : []),
-    ...(Array.isArray(responsePlan?.evidence_summary) ? responsePlan.evidence_summary : []),
-  ]
-    .map((x) => cleanBulletText(x))
-    .filter(Boolean);
-
-  const uniqueSignals = uniqueStrings(rawSignals).slice(0, 4);
-
-  return uniqueSignals.map((text) => ({
-    text,
-    icon: inferSignalIcon(text),
-    tone: inferSignalTone(text),
-    language: lang,
-  }));
-}
-
-function buildActionSteps({
-  language = "english",
-  diagnosticEngine = {},
-  responsePlan = {},
-  verifiedActions = [],
-  verifiedWorkshops = [],
-}) {
-  const lang = normalizeSupportedLanguage(language);
-
-  const actionPool = [
-    ...(Array.isArray(diagnosticEngine?.firstChecks) ? diagnosticEngine.firstChecks : []),
-    ...(Array.isArray(responsePlan?.tests) ? responsePlan.tests : []),
-    ...flattenVerifiedActionSteps(verifiedActions),
-  ]
-    .map((x) => cleanBulletText(x))
-    .filter(Boolean);
-
-  let steps = uniqueStrings(actionPool).slice(0, 4);
-
-  if (steps.length === 0 && verifiedWorkshops.length > 0) {
-    if (lang === "spanish") {
-      steps = ["Buscar un taller confiable cercano para una inspección confirmatoria."];
-    } else {
-      steps = ["Find a trusted nearby shop for a confirmatory inspection."];
-    }
-  }
-
- return steps.map((text, index) => ({
-  step: index + 1,
-  text,
-  image: mapStepToImage(text), // 🔥
-  done: false,
-}));
-
-function buildWarningFlag({
-  language = "english",
-  riskLevel = "medium",
-  diagnosticEngine = {},
-  responsePlan = {},
-  reply = "",
-}) {
-  const lang = normalizeSupportedLanguage(language);
-  const replyText = String(reply || "").toLowerCase();
-  const safetyAdvice = String(responsePlan?.safety_advice || "").trim();
-  const cautionFlags = Array.isArray(diagnosticEngine?.cautionFlags)
-    ? diagnosticEngine.cautionFlags.filter(Boolean)
-    : [];
-
-  const mustWarn =
-    riskLevel === "high" ||
-    /do not drive|don't drive|avoid driving|stop driving|unsafe to drive|tow/i.test(replyText) ||
-    /no conduzcas|evita conducir|no lo conduzcas|grúa|remolque/i.test(replyText) ||
-    cautionFlags.length > 0 ||
-    Boolean(safetyAdvice);
-
-  if (!mustWarn) return null;
-
-  let message = "";
-
-  if (safetyAdvice) {
-    message = cleanBulletText(safetyAdvice);
-  } else if (cautionFlags.length > 0) {
-    message = cleanBulletText(cautionFlags[0]);
-  } else if (lang === "spanish") {
-    message =
-      riskLevel === "high"
-        ? "Evita conducirlo hasta revisar esta falla."
-        : "Conduce con cuidado y revisa esta falla pronto.";
-  } else {
-    message =
-      riskLevel === "high"
-        ? "Avoid driving it until this fault is checked."
-        : "Drive carefully and have this fault checked soon.";
-  }
-
-  return {
-    show: true,
-    level: riskLevel,
-    message,
-    ui_variant: mapRiskToVariant(riskLevel),
-  };
+  return matchedSignals.length > 0
+    ? `FixLens detected signals consistent with ${issueTitle.toLowerCase()}.`
+    : "FixLens detected a pattern that deserves targeted inspection.";
 }
 
 function normalizeRiskLevel(value = "") {
   const v = String(value || "").toLowerCase().trim();
-
   if (["high", "severe", "critical", "urgent", "danger"].includes(v)) return "high";
   if (["low", "minor", "light"].includes(v)) return "low";
   return "medium";
@@ -1303,7 +1042,6 @@ function mapRiskToVariant(riskLevel = "medium") {
 
 function formatSeverityLabel(riskLevel = "medium", language = "english") {
   const lang = normalizeSupportedLanguage(language);
-
   if (lang === "spanish") {
     if (riskLevel === "high") return "Riesgo alto";
     if (riskLevel === "low") return "Riesgo bajo";
@@ -1317,7 +1055,6 @@ function formatSeverityLabel(riskLevel = "medium", language = "english") {
 
 function formatConfidenceLabel(value = 0, language = "english") {
   const lang = normalizeSupportedLanguage(language);
-
   if (lang === "spanish") {
     if (value >= 0.8) return "Confianza alta";
     if (value >= 0.55) return "Confianza moderada";
@@ -1333,10 +1070,7 @@ function firstRankedFindingTitle(rankedFindings = []) {
   if (!Array.isArray(rankedFindings) || rankedFindings.length === 0) return "";
   const first = rankedFindings[0];
   if (typeof first === "string") return first;
-  if (typeof first?.title === "string") return first.title;
-  if (typeof first?.issue === "string") return first.issue;
-  if (typeof first?.name === "string") return first.name;
-  return "";
+  return first?.title || first?.issue || first?.name || "";
 }
 
 function firstNonEmptyString(value) {
@@ -1350,7 +1084,6 @@ function firstNonEmptyString(value) {
 
 function flattenVerifiedActionSteps(items = []) {
   const out = [];
-
   for (const item of Array.isArray(items) ? items : []) {
     if (Array.isArray(item?.actions)) {
       for (const action of item.actions) {
@@ -1360,7 +1093,6 @@ function flattenVerifiedActionSteps(items = []) {
       }
     }
   }
-
   return out;
 }
 
@@ -1370,8 +1102,7 @@ function uniqueStrings(items = []) {
 
   for (const item of items) {
     const normalized = normalizeTextLoose(item);
-    if (!normalized) continue;
-    if (seen.has(normalized)) continue;
+    if (!normalized || seen.has(normalized)) continue;
     seen.add(normalized);
     out.push(String(item).trim());
   }
@@ -1388,7 +1119,6 @@ function cleanBulletText(value = "") {
 
 function inferSignalIcon(text = "") {
   const t = String(text || "").toLowerCase();
-
   if (/temperat|heat|overheat|coolant|hot/.test(t)) return "temperature";
   if (/fan|blower/.test(t)) return "fan";
   if (/misfire|shake|rough|vibration|vibrate/.test(t)) return "vibration";
@@ -1401,7 +1131,6 @@ function inferSignalIcon(text = "") {
 
 function inferSignalTone(text = "") {
   const t = String(text || "").toLowerCase();
-
   if (/overheat|smoke|burn|danger|critical|no start/.test(t)) return "high";
   if (/intermittent|sometimes|minor|light/.test(t)) return "low";
   return "medium";
@@ -1414,235 +1143,49 @@ function clamp01(value = 0) {
   return value;
 }
 
-function buildUnifiedContextBlock({
-  locale,
-  detectedLanguage,
-  detectedDialect,
-  primaryIntent,
-  ruleIntent,
-  routedIntent,
-  location,
-  userText,
-  rawText,
-  audioTranscript,
-  audioContext,
-  memory,
-  enginePack,
-  diagnosticEngine,
-  responsePlan,
-  verifiedData,
-  verifiedActions,
-  verifiedWorkshops,
-  searchMeta,
-}) {
-  return `
-FIXLENS_CASE_CONTEXT:
-LOCALE=${JSON.stringify(locale || "auto")}
-DETECTED_USER_LANGUAGE=${JSON.stringify(detectedLanguage || "english")}
-DETECTED_USER_DIALECT=${JSON.stringify(detectedDialect || "us-english")}
-PRIMARY_INTENT=${JSON.stringify(primaryIntent || "diagnosis")}
-ROUTER_MODE=${JSON.stringify(routedIntent?.mode || "unknown")}
-RULE_INTENT=${JSON.stringify(ruleIntent || {})}
-ROUTED_INTENT=${JSON.stringify(routedIntent || {})}
-KNOWN_LOCATION_INPUT=${location ? JSON.stringify(location) : "none"}
-
-RAW_USER_TEXT=${JSON.stringify(rawText || "")}
-UNIFIED_USER_TEXT=${JSON.stringify(userText || "")}
-AUDIO_TRANSCRIPT=${JSON.stringify(audioTranscript || "")}
-AUDIO_CONTEXT=${JSON.stringify(audioContext || {})}
-
-MEMORY_TEXT:
-${memory?.memory_text || "none"}
-
-ENGINE_PACK:
-${JSON.stringify(enginePack || {}, null, 2)}
-
-DIAGNOSTIC_ENGINE:
-${JSON.stringify(formatDiagnosticEngineForContext(diagnosticEngine), null, 2)}
-
-RESPONSE_PLAN:
-${responsePlan?.planner_text || "none"}
-
-SEARCH_META:
-${JSON.stringify(searchMeta || {}, null, 2)}
-
-VERIFIED_INTERNAL_DATA:
-${JSON.stringify(formatSearchDataForContext(verifiedData, 4), null, 2)}
-
-VERIFIED_ACTIONS:
-${JSON.stringify(formatVerifiedActionsForContext(verifiedActions, 4), null, 2)}
-
-VERIFIED_LOCAL_RESULTS:
-${JSON.stringify(formatSearchDataForContext(verifiedWorkshops, 5), null, 2)}
-
-FINAL_ORCHESTRATION_RULES:
-- The product currently supports output in English or Spanish only.
-- Reply in English or Spanish depending on the detected user language. Default to English if unclear.
-- Keep language locked unless the user clearly switches.
-- Think as one senior mechanic, not as separate modules.
-- DIAGNOSTIC_ENGINE is the primary diagnosis layer. Treat it as the strongest internal evidence when confidence is solid.
-- If DIAGNOSTIC_ENGINE.top_issue is present with confidence >= 0.64, lead with that diagnosis unless stronger verified evidence contradicts it.
-- Use DIAGNOSTIC_ENGINE.first_checks before inventing generic steps.
-- Use DIAGNOSTIC_ENGINE.common_misreads and do_not_confuse_with to avoid wrong fault paths.
-- Use MEMORY_TEXT to avoid restarting the case.
-- Use ENGINE_PACK to improve vehicle-specific reasoning.
-- Use RESPONSE_PLAN to structure diagnosis, severity, next tests, safety, and purchase judgment.
-- Use VERIFIED_INTERNAL_DATA to refine diagnosis when relevant.
-- Use VERIFIED_ACTIONS as execution-grade decision support when they match the case strongly.
-- If VERIFIED_ACTIONS contains a strong match, use its actions, stop_now_if, and ignore_risk intelligently.
-- Use VERIFIED_LOCAL_RESULTS only when local help is requested or clearly useful.
-- If nearby help is requested and local results are available, present the strongest ones clearly.
-- If this is a pre-purchase case, protect the user financially.
-- If the case could be unsafe to drive, say so calmly and directly.
-- Do not answer like a code dictionary unless the user clearly asked for code meaning only.
-- Do not over-explain. Be sharp, confident, and mechanically specific.
-`.trim();
+function formatBullets(items = [], fallback = []) {
+  const list = items.length > 0 ? items : fallback;
+  return list.map((x) => `- ${cleanBulletText(x)}`).join("\n");
 }
 
-function buildOpenAIMessages({
-  systemPrompt,
-  history = [],
-  contextBlock,
-  image,
-}) {
-  let messages = [
-    {
-      role: "system",
-      content: systemPrompt,
-    },
-  ];
-
-  if (Array.isArray(history) && history.length > 0) {
-    const sanitized = history
-      .filter((item) => item?.role === "user" || item?.role === "assistant")
-      .slice(-10)
-      .map((item) => ({
-        role: item.role,
-        content:
-          typeof item.content === "string"
-            ? item.content
-            : JSON.stringify(item.content || ""),
-      }));
-
-    messages = messages.concat(sanitized);
-  }
-
-  if (image) {
-    messages.push({
-      role: "user",
-      content: [
-        {
-          type: "text",
-          text: contextBlock,
-        },
-        {
-          type: "image_url",
-          image_url: {
-            url: `data:image/jpeg;base64,${image}`,
-          },
-        },
-      ],
-    });
-  } else {
-    messages.push({
-      role: "user",
-      content: contextBlock,
-    });
-  }
-
-  return messages;
-}
-function buildLocationPrompt({
-  language = "english",
-  dialect = "us-english",
-  primaryIntent = "places",
-  routedIntent = {},
-}) {
-  const lang = normalizeSupportedLanguage(language);
-
-  if (lang === "spanish") {
-    if (routedIntent?.localSearchType === "towing") {
-      return "Envíame tu ubicación, ciudad o código postal para buscar una grúa o servicio de remolque cercano.";
-    }
-
-    return "Envíame tu ubicación, ciudad o código postal para buscar un taller o mecánico cercano para este caso.";
-  }
-
-  if (routedIntent?.localSearchType === "towing") {
-    return "Send me your GPS location, city, or ZIP code so I can find a nearby towing service.";
-  }
-
-  return "Send me your GPS location, city, or ZIP code so I can find the right nearby shop for this case.";
+function formatNumbered(items = [], fallback = []) {
+  const list = items.length > 0 ? items : fallback;
+  return list.map((x, i) => `${i + 1}. ${cleanBulletText(x)}`).join("\n");
 }
 
-function buildDoctorFinalResponse({
-  aiReply = "",
-  diagnosticEngine = {},
-  responsePlan = {},
-  enginePack = {},
-}) {
-  const issue =
-    diagnosticEngine?.topIssue ||
-    responsePlan?.strongest_hypothesis ||
-    "Mechanical issue needs confirmation";
-
-  const confidence = Math.round((diagnosticEngine?.confidence || 0.3) * 100);
-  const risk = diagnosticEngine?.riskLevel || "medium";
-
-  const signals = Array.isArray(diagnosticEngine?.matchedSignals)
-    ? diagnosticEngine.matchedSignals.slice(0, 2)
-    : [];
-
-  const checks = Array.isArray(diagnosticEngine?.firstChecks)
-    ? diagnosticEngine.firstChecks.slice(0, 3)
-    : [];
-
-  if ((diagnosticEngine?.confidence || 0) >= 0.55) {
-    return `
-Diagnosis Summary:
-Most likely cause: ${issue} (${confidence}% confidence)
-
-Why this fits:
-${signals.map((s) => `- ${s}`).join("\n") || "- The symptoms match this fault pattern."}
-
-What to check now:
-${checks.map((c, i) => `${i + 1}. ${c}`).join("\n") || "1. Inspect the system related to the symptom."}
-
-Risk level:
-${
-  risk === "high"
-    ? "Do not drive until checked."
-    : "Safe for short driving, but inspect soon."
-}
-`.trim();
-  }
-
-  return `
-Diagnosis Summary:
-Most likely cause: ${issue} (${confidence}% confidence)
-
-Initial checks:
-${checks.map((c, i) => `${i + 1}. ${c}`).join("\n") || "1. Inspect the system related to the symptom."}
-
-Additional insight:
-${aiReply || "Further inspection may be required."}
-
-Risk level:
-${
-  risk === "high"
-    ? "Avoid driving."
-    : "Drive carefully and inspect soon."
-}
-`.trim();
+function trimLongReply(value = "") {
+  const text = String(value || "").trim();
+  if (text.length <= 1200) return text;
+  return text.slice(0, 1200).trim() + "...";
 }
 
 function mapStepToImage(text = "") {
   const t = String(text || "").toLowerCase();
 
-  if (t.includes("fluid")) return "power_steering_fluid.png";
+  if (t.includes("fluid") || t.includes("steering")) return "power_steering_fluid.png";
   if (t.includes("belt")) return "engine_belt.png";
-  if (t.includes("battery")) return "car_battery.png";
+  if (t.includes("battery") || t.includes("voltage")) return "car_battery.png";
   if (t.includes("brake")) return "brake_system.png";
+  if (t.includes("coolant") || t.includes("overheat")) return "cooling_system.png";
+  if (t.includes("oil")) return "engine_oil.png";
+  if (t.includes("spark") || t.includes("coil") || t.includes("misfire")) return "ignition_system.png";
 
   return "default_tool.png";
+}
+
+function buildLocationPrompt({ language = "english", routedIntent = {} }) {
+  const lang = normalizeSupportedLanguage(language);
+
+  if (lang === "spanish") {
+    if (routedIntent?.localSearchType === "towing") {
+      return "Envíame tu ciudad, código postal o ubicación para buscar una grúa cercana.";
+    }
+    return "Envíame tu ciudad, código postal o ubicación para buscar un taller cercano.";
+  }
+
+  if (routedIntent?.localSearchType === "towing") {
+    return "Send me your city, ZIP code, or GPS location so I can find a nearby towing service.";
+  }
+
+  return "Send me your city, ZIP code, or GPS location so I can find a nearby shop.";
 }
