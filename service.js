@@ -1575,10 +1575,6 @@ function buildLocationPrompt({
   return "Send me your GPS location, city, or ZIP code so I can find the right nearby shop for this case.";
 }
 
-//////////////////////////////////////////////////
-// 🩺 FIXLENS DOCTOR RESPONSE
-//////////////////////////////////////////////////
-
 function buildDoctorFinalResponse({
   aiReply = "",
   diagnosticEngine = {},
@@ -1591,7 +1587,6 @@ function buildDoctorFinalResponse({
     "Mechanical issue needs confirmation";
 
   const confidence = Math.round((diagnosticEngine?.confidence || 0.3) * 100);
-
   const risk = diagnosticEngine?.riskLevel || "medium";
 
   const signals = Array.isArray(diagnosticEngine?.matchedSignals)
@@ -1608,16 +1603,16 @@ Diagnosis Summary:
 Most likely cause: ${issue} (${confidence}% confidence)
 
 Why this fits:
-${signals.map((s) => `- ${s}`).join("\n")}
+${signals.map((s) => `- ${s}`).join("\n") || "- The symptoms match this fault pattern."}
 
 What to check now:
-${checks.map((c, i) => `${i + 1}. ${c}`).join("\n")}
+${checks.map((c, i) => `${i + 1}. ${c}`).join("\n") || "1. Inspect the system related to the symptom."}
 
 Risk level:
 ${
   risk === "high"
     ? "Do not drive until checked."
-    : "Safe for short driving but inspect soon."
+    : "Safe for short driving, but inspect soon."
 }
 `.trim();
   }
@@ -1627,7 +1622,7 @@ Diagnosis Summary:
 Most likely cause: ${issue} (${confidence}% confidence)
 
 Initial checks:
-${checks.map((c, i) => `${i + 1}. ${c}`).join("\n")}
+${checks.map((c, i) => `${i + 1}. ${c}`).join("\n") || "1. Inspect the system related to the symptom."}
 
 Additional insight:
 ${aiReply || "Further inspection may be required."}
@@ -1641,12 +1636,8 @@ ${
 `.trim();
 }
 
-//////////////////////////////////////////////////
-// 🎨 STEP IMAGE MAPPING
-//////////////////////////////////////////////////
-
 function mapStepToImage(text = "") {
-  const t = text.toLowerCase();
+  const t = String(text || "").toLowerCase();
 
   if (t.includes("fluid")) return "power_steering_fluid.png";
   if (t.includes("belt")) return "engine_belt.png";
