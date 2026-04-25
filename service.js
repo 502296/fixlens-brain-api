@@ -1552,7 +1552,6 @@ function buildOpenAIMessages({
 
   return messages;
 }
-
 function buildLocationPrompt({
   language = "english",
   dialect = "us-english",
@@ -1575,6 +1574,11 @@ function buildLocationPrompt({
 
   return "Send me your GPS location, city, or ZIP code so I can find the right nearby shop for this case.";
 }
+
+//////////////////////////////////////////////////
+// 🩺 FIXLENS DOCTOR RESPONSE
+//////////////////////////////////////////////////
+
 function buildDoctorFinalResponse({
   aiReply = "",
   diagnosticEngine = {},
@@ -1598,7 +1602,6 @@ function buildDoctorFinalResponse({
     ? diagnosticEngine.firstChecks.slice(0, 3)
     : [];
 
-  // ✨ إذا عندك بيانات قوية لا نستخدم AI
   if ((diagnosticEngine?.confidence || 0) >= 0.55) {
     return `
 Diagnosis Summary:
@@ -1619,7 +1622,6 @@ ${
 `.trim();
   }
 
-  // 🔁 fallback (AI يساعد فقط)
   return `
 Diagnosis Summary:
 Most likely cause: ${issue} (${confidence}% confidence)
@@ -1638,6 +1640,11 @@ ${
 }
 `.trim();
 }
+
+//////////////////////////////////////////////////
+// 🎨 STEP IMAGE MAPPING
+//////////////////////////////////////////////////
+
 function mapStepToImage(text = "") {
   const t = text.toLowerCase();
 
