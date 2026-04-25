@@ -505,15 +505,34 @@ export async function handleFixLensRequest(req) {
     /* -------------------------
        OPENAI RESPONSE
     ------------------------- */
+  let aiReply = "";
+
+// 🔥 Data-first: لا تستخدم GPT إلا إذا الثقة ضعيفة
+const shouldUseAI =
+  (diagnosticEngine?.confidence || 0) < 0.55;
+
+if (shouldUseAI) {
+  try {
     const completion = await client.chat.completions.create({
       model: MODEL,
       temperature: 0.2,
       messages,
     });
 
-    const reply =
-      completion?.choices?.[0]?.message?.content?.trim() ||
-      "I could not produce a reliable diagnostic answer.";
+    aiReply =
+      completion?.choices?.[0]?.message?.content?.trim() || "";
+  } catch (err) {
+    console.log("AI fallback failed:", err?.message || err);
+  }
+}
+
+// 🩺 الرد النهائي (Doctor Mode)
+const reply = buildDoctorFinalResponse({
+  aiReply,
+  diagnosticEngine,
+  responsePlan,
+  enginePack,
+});
 
     const uiPayload = buildVisualDiagnosticPayload({
       language: detectedLanguage,
@@ -1212,12 +1231,12 @@ function buildActionSteps({
     }
   }
 
-  return steps.map((text, index) => ({
-    step: index + 1,
-    text,
-    done: false,
-  }));
-}
+ return steps.map((text, index) => ({
+  step: index + 1,
+  text,
+  image: mapStepToImage(text), // 🔥
+  done: false,
+}));
 
 function buildWarningFlag({
   language = "english",
@@ -1555,4 +1574,77 @@ function buildLocationPrompt({
   }
 
   return "Send me your GPS location, city, or ZIP code so I can find the right nearby shop for this case.";
+}
+function buildDoctorFinalResponse({
+  aiReply = "",
+  diagnosticEngine = {},
+  responsePlan = {},
+  enginePack = {},
+}) {
+  const issue =
+    diagnosticEngine?.topIssue ||
+    responsePlan?.strongest_hypothesis ||
+    "Mechanical issue needs confirmation";
+
+  const confidence = Math.round((diagnosticEngine?.confidence || 0.3) * 100);
+
+  const risk = diagnosticEngine?.riskLevel || "medium";
+
+  const signals = Array.isArray(diagnosticEngine?.matchedSignals)
+    ? diagnosticEngine.matchedSignals.slice(0, 2)
+    : [];
+
+  const checks = Array.isArray(diagnosticEngine?.firstChecks)
+    ? diagnosticEngine.firstChecks.slice(0, 3)
+    : [];
+
+  // ✨ إذا عندك بيانات قوية لا نستخدم AI
+  if ((diagnosticEngine?.confidence || 0) >= 0.55) {
+    return `
+Diagnosis Summary:
+Most likely cause: ${issue} (${confidence}% confidence)
+
+Why this fits:
+${signals.map((s) => `- ${s}`).join("\n")}
+
+What to check now:
+${checks.map((c, i) => `${i + 1}. ${c}`).join("\n")}
+
+Risk level:
+${
+  risk === "high"
+    ? "Do not drive until checked."
+    : "Safe for short driving but inspect soon."
+}
+`.trim();
+  }
+
+  // 🔁 fallback (AI يساعد فقط)
+  return `
+Diagnosis Summary:
+Most likely cause: ${issue} (${confidence}% confidence)
+
+Initial checks:
+${checks.map((c, i) => `${i + 1}. ${c}`).join("\n")}
+
+Additional insight:
+${aiReply || "Further inspection may be required."}
+
+Risk level:
+${
+  risk === "high"
+    ? "Avoid driving."
+    : "Drive carefully and inspect soon."
+}
+`.trim();
+}
+function mapStepToImage(text = "") {
+  const t = text.toLowerCase();
+
+  if (t.includes("fluid")) return "power_steering_fluid.png";
+  if (t.includes("belt")) return "engine_belt.png";
+  if (t.includes("battery")) return "car_battery.png";
+  if (t.includes("brake")) return "brake_system.png";
+
+  return "default_tool.png";
 }
