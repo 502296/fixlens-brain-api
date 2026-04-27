@@ -1,9 +1,9 @@
-// service.js — FixLens Brain v13
-// Clean, data-first, cost-aware diagnostic orchestrator
+ // service.js — FixLens Brain v14
+// Doctor Brain orchestrator — calm, data-first, search/GPS-aware, premium user-facing responses
 
 import OpenAI from "openai";
 
-import { DOCTOR_PROMPT } from './doctorPrompt.js';
+import { DOCTOR_PROMPT } from "./doctorPrompt.js";
 import { buildDiagnosticMemory } from "./memoryEngine.js";
 import { buildResponsePlan } from "./responsePlanner.js";
 import { buildEnginePack } from "./engineIntel.js";
@@ -234,32 +234,25 @@ export async function handleFixLensRequest(req) {
       }
     );
 
-    const shouldUseAI =
-      Boolean(image) ||
-      Number(diagnosticEngine?.confidence || 0) < 0.55 ||
-      !diagnosticEngine?.topIssue;
-
-    let aiReply = "";
-
-    if (shouldUseAI) {
-      aiReply = await buildAIReply({
-        history,
-        image,
-        locale,
-        language,
-        dialect,
-        primaryIntent,
-        userText,
-        audioTranscript,
-        memory,
-        enginePack,
-        diagnosticEngine,
-        responsePlan,
-        verifiedData,
-        verifiedActions,
-        verifiedWorkshops,
-      });
-    }
+    const aiReply = await buildAIReply({
+      history,
+      image,
+      locale,
+      language,
+      dialect,
+      primaryIntent,
+      userText,
+      audioTranscript,
+      memory,
+      enginePack,
+      diagnosticEngine,
+      responsePlan,
+      verifiedData,
+      verifiedActions,
+      verifiedWorkshops,
+      wantsPlaces,
+      location,
+    });
 
     const reply = buildDoctorFinalResponse({
       aiReply,
@@ -303,7 +296,7 @@ export async function handleFixLensRequest(req) {
             diagnostic_top_issue: diagnosticEngine?.topIssue || null,
             diagnostic_confidence: diagnosticEngine?.confidence || null,
             diagnostic_risk: diagnosticEngine?.riskLevel || null,
-            used_ai: shouldUseAI,
+            used_ai: Boolean(aiReply),
           }
         : undefined,
     };
@@ -318,7 +311,7 @@ export async function handleFixLensRequest(req) {
 }
 
 /* =========================================================
-   AI FALLBACK
+   AI DOCTOR BRAIN
 ========================================================= */
 async function buildAIReply({
   history = [],
@@ -336,25 +329,49 @@ async function buildAIReply({
   verifiedData,
   verifiedActions,
   verifiedWorkshops,
+  wantsPlaces = false,
+  location = null,
 }) {
   try {
-    const systemPrompt = `${buildDoctorSystemPrompt()}
+    const outputLanguage = language === "spanish" ? "Spanish" : "English";
 
-FixLens Doctor rules:
-- Be calm, precise, and mechanic-like.
-- Do not mention GPS, nearby shops, Yelp, maps, or location unless the user clearly asked.
-- Do not over-explain.
-- Use the internal diagnostic data first.
-- Give likely cause, why it fits, checks, and risk.
-- Never claim certainty. Use probability language.
-- Output only in ${language === "spanish" ? "Spanish" : "English"}.`;
+    const systemPrompt = `${DOCTOR_PROMPT}
+
+FixLens execution rules for this exact response:
+- Output only in ${outputLanguage}.
+- Use the response plan and diagnostic engine as internal guidance, but never expose internal tokens.
+- Never mention confidence percentages.
+- Never write "Most likely cause".
+- Never expose words like check_engine, riskLevel, confidence, cluster, planner, engine score, or metadata.
+- Do not say "go to a shop", "nearby shop", GPS, maps, location, or Yelp unless the user clearly asked for nearby help.
+- If the user asks for nearby help and verified workshops exist, include a short "Nearby options" section.
+- Be helpful, not cheap: give enough useful diagnostic direction, but keep it calm and readable.
+- Make the answer feel like a senior automotive diagnostic engineer teaching the driver.
+- Use this structure unless the user asked for something else:
+
+Diagnosis:
+[1 calm sentence based on the symptoms. No absolute conclusion.]
+
+Possible causes:
+- [2 to 4 causes, simple/common first]
+
+What to check first:
+1. [2 to 4 practical checks]
+
+Driving condition:
+[calm safety note]
+
+Optional:
+[Ask only one follow-up question if it truly changes the next step.]`;
 
     const contextBlock = `
-FIXLENS_CONTEXT:
+FIXLENS_INTERNAL_CONTEXT:
 locale=${locale}
 language=${language}
 dialect=${dialect}
 intent=${primaryIntent}
+user_asked_nearby_help=${Boolean(wantsPlaces)}
+location_available=${Boolean(location)}
 
 USER_TEXT:
 ${userText || ""}
@@ -368,7 +385,7 @@ ${memory?.memory_text || "none"}
 ENGINE_PACK:
 ${JSON.stringify(enginePack || {}, null, 2)}
 
-DIAGNOSTIC_ENGINE:
+DIAGNOSTIC_ENGINE_INTERNAL:
 ${JSON.stringify(formatDiagnosticEngineForContext(diagnosticEngine), null, 2)}
 
 RESPONSE_PLAN:
@@ -381,7 +398,15 @@ VERIFIED_ACTIONS:
 ${JSON.stringify(formatVerifiedActionsForContext(verifiedActions, 3), null, 2)}
 
 VERIFIED_WORKSHOPS:
-${JSON.stringify(formatSearchDataForContext(verifiedWorkshops, 3), null, 2)}
+${JSON.stringify(formatSearchDataForContext(verifiedWorkshops, 4), null, 2)}
+
+FINAL_OUTPUT_FILTER:
+Before answering, silently remove:
+- confidence percentages
+- internal labels/tokens
+- "Most likely cause"
+- scary wording
+- unnecessary location/shop suggestions
 `.trim();
 
     const messages = buildOpenAIMessages({
@@ -393,19 +418,19 @@ ${JSON.stringify(formatSearchDataForContext(verifiedWorkshops, 3), null, 2)}
 
     const completion = await client.chat.completions.create({
       model: MODEL,
-      temperature: 0.15,
+      temperature: 0.18,
       messages,
     });
 
     return completion?.choices?.[0]?.message?.content?.trim() || "";
   } catch (error) {
-    console.log("AI fallback failed:", error?.message || error);
+    console.log("AI doctor reply failed:", error?.message || error);
     return "";
   }
 }
 
 /* =========================================================
-   DOCTOR RESPONSE
+   DOCTOR RESPONSE FINALIZER
 ========================================================= */
 function buildDoctorFinalResponse({
   aiReply = "",
@@ -417,84 +442,144 @@ function buildDoctorFinalResponse({
   verifiedWorkshops = [],
 }) {
   const lang = normalizeSupportedLanguage(language);
+
+  if (aiReply && aiReply.trim().length > 20) {
+    return sanitizeUserFacingReply(trimLongReply(aiReply), {
+      language: lang,
+      wantsPlaces,
+    });
+  }
+
   const issue = cleanIssueTitle(
-    diagnosticEngine?.topIssue ||
-      responsePlan?.strongest_hypothesis ||
+    responsePlan?.strongest_hypothesis ||
+      diagnosticEngine?.topIssue ||
       firstRankedFindingTitle(diagnosticEngine?.rankedFindings) ||
-      "Mechanical issue needs confirmation"
+      "a mechanical issue that needs confirmation"
   );
 
-  const confidence = Math.round(clamp01(Number(diagnosticEngine?.confidence || 0.3)) * 100);
-  const risk = normalizeRiskLevel(diagnosticEngine?.riskLevel || responsePlan?.severity || "medium");
-
-  const signals = uniqueStrings([
-    ...(Array.isArray(diagnosticEngine?.matchedSignals) ? diagnosticEngine.matchedSignals : []),
-    ...(Array.isArray(diagnosticEngine?.symptomNotes) ? diagnosticEngine.symptomNotes : []),
-    ...(Array.isArray(responsePlan?.evidence_summary) ? responsePlan.evidence_summary : []),
-  ]).slice(0, 3);
+  const causes = uniqueStrings([
+    ...(Array.isArray(responsePlan?.likely_causes) ? responsePlan.likely_causes : []),
+    issue,
+  ])
+    .map(cleanIssueTitle)
+    .filter(Boolean)
+    .slice(0, 4);
 
   const checks = uniqueStrings([
-    ...(Array.isArray(diagnosticEngine?.firstChecks) ? diagnosticEngine.firstChecks : []),
     ...(Array.isArray(responsePlan?.tests) ? responsePlan.tests : []),
-  ]).slice(0, 4);
+    ...(Array.isArray(diagnosticEngine?.firstChecks) ? diagnosticEngine.firstChecks : []),
+  ])
+    .map(cleanBulletText)
+    .filter(Boolean)
+    .slice(0, 4);
+
+  const drivingCondition =
+    responsePlan?.safety_advice ||
+    "Short, gentle driving may be okay, but it should be checked soon if the symptom continues or gets worse.";
 
   if (lang === "spanish") {
-    return `
-Resumen del diagnóstico:
-Causa más probable: ${issue} (${confidence}% de confianza)
+    return sanitizeUserFacingReply(
+      `
+Diagnóstico:
+Según lo que describes, esto parece relacionado con ${issue.toLowerCase()}.
 
-Por qué encaja:
-${formatBullets(signals, ["El síntoma coincide con este patrón de falla."])}
+Posibles causas:
+${formatBullets(causes, ["Bujías desgastadas", "Bobina de encendido débil", "Pequeña fuga de vacío"])}
 
-Qué revisar ahora:
-${formatNumbered(checks, ["Revisa el sistema relacionado con el síntoma."])}
+Qué revisaría primero:
+${formatNumbered(checks, ["Escanear códigos de falla si es posible", "Revisar bujías y bobinas", "Revisar mangueras de admisión por fuga de vacío"])}
 
-Nivel de riesgo:
-${risk === "high" ? "No lo conduzcas hasta revisarlo." : "Puedes conducir con cuidado, pero revísalo pronto."}
-`.trim();
+Condición de manejo:
+${drivingCondition}
+`.trim(),
+      { language: lang, wantsPlaces }
+    );
   }
 
   if (wantsPlaces && verifiedWorkshops.length > 0) {
     const shops = verifiedWorkshops
       .slice(0, 3)
-      .map((x, i) => `${i + 1}. ${x?.name || x?.title || "Nearby shop"}${x?.rating ? ` — ${x.rating}★` : ""}${x?.address ? ` — ${x.address}` : ""}`)
+      .map((x, i) => {
+        const name = x?.name || x?.title || "Nearby shop";
+        const rating = x?.rating ? ` — ${x.rating}★` : "";
+        const address = x?.address ? ` — ${x.address}` : "";
+        const phone = x?.phone ? ` — ${x.phone}` : "";
+        return `${i + 1}. ${name}${rating}${address}${phone}`;
+      })
       .join("\n");
 
-    return `
-Diagnosis Summary:
-Most likely cause: ${issue} (${confidence}% confidence)
+    return sanitizeUserFacingReply(
+      `
+Diagnosis:
+Based on what you described, this looks related to ${issue.toLowerCase()}.
 
-Why this fits:
-${formatBullets(signals, ["The symptoms match this fault pattern."])}
+Possible causes:
+${formatBullets(causes, ["Worn spark plugs", "Weak ignition coil", "Small vacuum leak"])}
 
-What to check now:
-${formatNumbered(checks, ["Inspect the system related to the symptom."])}
+What to check first:
+${formatNumbered(checks, ["Scan for fault codes if available", "Inspect spark plugs and ignition coils", "Check intake hoses for a vacuum leak"])}
 
 Nearby options:
 ${shops}
 
-Risk level:
-${risk === "high" ? "Do not drive until checked." : "Safe for short driving, but inspect soon."}
-`.trim();
+Driving condition:
+${drivingCondition}
+`.trim(),
+      { language: lang, wantsPlaces }
+    );
   }
 
-  if (aiReply && confidence < 55) {
-    return trimLongReply(aiReply);
+  return sanitizeUserFacingReply(
+    `
+Diagnosis:
+Based on what you described, this looks related to ${issue.toLowerCase()}.
+
+Possible causes:
+${formatBullets(causes, ["Worn spark plugs", "Weak ignition coil", "Small vacuum leak"])}
+
+What to check first:
+${formatNumbered(checks, ["Scan for fault codes if available", "Inspect spark plugs and ignition coils", "Check intake hoses for a vacuum leak"])}
+
+Driving condition:
+${drivingCondition}
+`.trim(),
+    { language: lang, wantsPlaces }
+  );
+}
+
+function sanitizeUserFacingReply(reply = "", { language = "english", wantsPlaces = false } = {}) {
+  let text = String(reply || "").trim();
+
+  text = text
+    .replace(/\bMost likely cause\s*:\s*/gi, "")
+    .replace(/\(\s*\d{1,3}%\s*confidence\s*\)/gi, "")
+    .replace(/\b\d{1,3}%\s*confidence\b/gi, "")
+    .replace(/\bconfidence\s*[:=]\s*\d+(\.\d+)?\b/gi, "")
+    .replace(/\bcheck_engine\b/gi, "check-engine light")
+    .replace(/\briskLevel\b/gi, "risk level")
+    .replace(/\bengine score\b/gi, "diagnostic pattern")
+    .replace(/\bplanner\b/gi, "FixLens")
+    .replace(/\bcluster\b/gi, "system area");
+
+  if (!wantsPlaces) {
+    text = text
+      .replace(/.*\bnearby shop\b.*\n?/gi, "")
+      .replace(/.*\bgo to a shop\b.*\n?/gi, "")
+      .replace(/.*\bcheck location\b.*\n?/gi, "")
+      .replace(/.*\bGPS\b.*\n?/g, "")
+      .replace(/.*\bYelp\b.*\n?/gi, "")
+      .replace(/.*\bmaps\b.*\n?/gi, "");
   }
 
-  return `
-Diagnosis Summary:
-Most likely cause: ${issue} (${confidence}% confidence)
+  text = text.replace(/\n{3,}/g, "\n\n").trim();
 
-Why this fits:
-${formatBullets(signals, ["The symptoms match this fault pattern."])}
+  if (!text) {
+    return language === "spanish"
+      ? "Necesito un poco más de información para orientar el diagnóstico con calma."
+      : "I need a little more detail to guide the diagnosis calmly.";
+  }
 
-What to check now:
-${formatNumbered(checks, ["Inspect the system related to the symptom."])}
-
-Risk level:
-${risk === "high" ? "Do not drive until checked." : "Safe for short driving, but inspect soon."}
-`.trim();
+  return text;
 }
 
 /* =========================================================
@@ -608,7 +693,7 @@ function buildSymptomSignals({ language = "english", diagnosticEngine = {}, resp
   return uniqueStrings(raw.map(cleanBulletText).filter(Boolean))
     .slice(0, 4)
     .map((text) => ({
-      text,
+      text: sanitizeSignalText(text),
       icon: inferSignalIcon(text),
       tone: inferSignalTone(text),
       language: normalizeSupportedLanguage(language),
@@ -625,8 +710,8 @@ function buildActionSteps({
   const lang = normalizeSupportedLanguage(language);
 
   let steps = uniqueStrings([
-    ...(Array.isArray(diagnosticEngine?.firstChecks) ? diagnosticEngine.firstChecks : []),
     ...(Array.isArray(responsePlan?.tests) ? responsePlan.tests : []),
+    ...(Array.isArray(diagnosticEngine?.firstChecks) ? diagnosticEngine.firstChecks : []),
     ...flattenVerifiedActionSteps(verifiedActions),
   ].map(cleanBulletText).filter(Boolean)).slice(0, 4);
 
@@ -648,7 +733,7 @@ function buildActionSteps({
 
   return steps.map((text, index) => ({
     step: index + 1,
-    text,
+    text: sanitizeSignalText(text),
     image: mapStepToImage(text),
     done: false,
   }));
@@ -690,7 +775,7 @@ function buildWarningFlag({
   return {
     show: true,
     level: riskLevel,
-    message: cleanBulletText(message),
+    message: sanitizeSignalText(message),
     ui_variant: mapRiskToVariant(riskLevel),
   };
 }
@@ -706,7 +791,11 @@ async function classifyIntentCheap({ text = "", location = null, ruleIntent = {}
   const spanishLocal =
     /\b(taller|mecánico|mecanico|cerca|grúa|grua|remolque|ubicación|ubicacion)\b/i;
 
-  const wantsPlaces = localWords.test(lower) || spanishLocal.test(lower) || Boolean(ruleIntent?.places) || Boolean(routedIntent?.isPlaces);
+  const wantsPlaces =
+    localWords.test(lower) ||
+    spanishLocal.test(lower) ||
+    Boolean(ruleIntent?.places) ||
+    Boolean(routedIntent?.isPlaces);
 
   return {
     primaryIntent: wantsPlaces ? "hybrid" : "diagnosis",
@@ -804,7 +893,19 @@ function detectPreferredLanguageFromText(text = "") {
   if (/[áéíóúñü¿¡]/i.test(t)) return "spanish";
 
   const lower = t.toLowerCase();
-  const hints = ["carro", "coche", "mecánico", "mecanico", "ruido", "vibra", "tiembla", "taller", "dirección", "direccion"];
+  const hints = [
+    "carro",
+    "coche",
+    "mecánico",
+    "mecanico",
+    "ruido",
+    "vibra",
+    "tiembla",
+    "taller",
+    "dirección",
+    "direccion",
+  ];
+
   return hints.some((w) => lower.includes(w)) ? "spanish" : "english";
 }
 
@@ -989,8 +1090,8 @@ function formatDiagnosticEngineForContext(diagnosticEngine = {}) {
 
 function pickLikelyIssue({ diagnosticEngine = {}, responsePlan = {}, enginePack = {}, language = "english" }) {
   const issue = cleanIssueTitle(
-    diagnosticEngine?.topIssue ||
-      responsePlan?.strongest_hypothesis ||
+    responsePlan?.strongest_hypothesis ||
+      diagnosticEngine?.topIssue ||
       firstNonEmptyString(responsePlan?.likely_causes) ||
       firstRankedFindingTitle(diagnosticEngine?.rankedFindings)
   );
@@ -1005,15 +1106,22 @@ function pickLikelyIssue({ diagnosticEngine = {}, responsePlan = {}, enginePack 
 
 function cleanIssueTitle(value = "") {
   return String(value || "")
+    .replace(/_/g, " ")
     .replace(/\s+/g, " ")
     .replace(/^[\-\–\—•\d.\)\s]+/, "")
+    .replace(/\bcheck engine\b/gi, "check-engine light")
+    .replace(/\bcheck_engine\b/gi, "check-engine light")
     .trim();
+}
+
+function sanitizeSignalText(value = "") {
+  return cleanIssueTitle(cleanBulletText(value));
 }
 
 function buildDiagnosticSummary({ language = "english", issueTitle = "", diagnosticEngine = {}, responsePlan = {} }) {
   const lang = normalizeSupportedLanguage(language);
   const matchedSignals = Array.isArray(diagnosticEngine?.matchedSignals)
-    ? diagnosticEngine.matchedSignals.filter(Boolean)
+    ? diagnosticEngine.matchedSignals.filter(Boolean).map(sanitizeSignalText)
     : [];
 
   if (lang === "spanish") {
@@ -1070,7 +1178,7 @@ function firstRankedFindingTitle(rankedFindings = []) {
   if (!Array.isArray(rankedFindings) || rankedFindings.length === 0) return "";
   const first = rankedFindings[0];
   if (typeof first === "string") return first;
-  return first?.title || first?.issue || first?.name || "";
+  return first?.title || first?.issue || first?.issueName || first?.name || "";
 }
 
 function firstNonEmptyString(value) {
@@ -1145,18 +1253,18 @@ function clamp01(value = 0) {
 
 function formatBullets(items = [], fallback = []) {
   const list = items.length > 0 ? items : fallback;
-  return list.map((x) => `- ${cleanBulletText(x)}`).join("\n");
+  return list.map((x) => `- ${cleanIssueTitle(cleanBulletText(x))}`).join("\n");
 }
 
 function formatNumbered(items = [], fallback = []) {
   const list = items.length > 0 ? items : fallback;
-  return list.map((x, i) => `${i + 1}. ${cleanBulletText(x)}`).join("\n");
+  return list.map((x, i) => `${i + 1}. ${cleanIssueTitle(cleanBulletText(x))}`).join("\n");
 }
 
 function trimLongReply(value = "") {
   const text = String(value || "").trim();
-  if (text.length <= 1200) return text;
-  return text.slice(0, 1200).trim() + "...";
+  if (text.length <= 1400) return text;
+  return text.slice(0, 1400).trim() + "...";
 }
 
 function mapStepToImage(text = "") {
