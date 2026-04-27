@@ -1,6 +1,7 @@
 // responsePlanner.js
-// FixLens Response Planner v4.0
+// FixLens Response Planner v4.1
 // Doctor Brain Planner — calm, premium, probabilistic, user-facing
+// Smart Question Engine — asks only when the question truly changes the next step
 
 function normalizeToken(value = "") {
   return String(value || "")
@@ -457,47 +458,83 @@ function buildQuestions({
   const codes = Array.isArray(memorySummary?.fault_codes) ? memorySummary.fault_codes : [];
   const unresolved = lowerJoined(memorySummary?.unresolved_points || []);
   const symptomsText = lowerJoined(memorySummary?.symptoms || []);
+  const causeText = String(topCause || "").toLowerCase();
+
   const pushQuestion = (q) => {
-    if (q) questions.push(q);
+    if (!q) return;
+    if (questions.length > 0) return;
+    questions.push(q);
   };
 
-  if (Array.isArray(diagnosticEngine?.cautionFlags) && diagnosticEngine.cautionFlags.includes("timing-risk")) {
+  const hasCheckEngineClue =
+    symptomsText.includes("check engine") ||
+    symptomsText.includes("check-engine") ||
+    symptomsText.includes("warning light") ||
+    unresolved.includes("check engine") ||
+    unresolved.includes("check-engine");
+
+  const hasMisfireClue =
+    symptomsText.includes("rough idle") ||
+    symptomsText.includes("misfire") ||
+    symptomsText.includes("shake") ||
+    symptomsText.includes("shakes") ||
+    causeText.includes("misfire") ||
+    causeText.includes("ignition");
+
+  if (
+    Array.isArray(diagnosticEngine?.cautionFlags) &&
+    diagnosticEngine.cautionFlags.includes("timing-risk")
+  ) {
     pushQuestion("Does the noise stay for only a few seconds on cold start, or is it lasting longer now?");
   }
 
   if (
-    clusterKey === "abs_brake_stability" ||
-    topCause.toLowerCase().includes("abs") ||
-    topCause.toLowerCase().includes("brake")
+    questions.length === 0 &&
+    (clusterKey === "abs_brake_stability" ||
+      causeText.includes("abs") ||
+      causeText.includes("brake"))
   ) {
     pushQuestion("Is the brake pedal feeling normal, soft, or weaker than usual?");
   }
 
-  if (codes.length === 0 && (topCause.toLowerCase().includes("ignition") || topCause.toLowerCase().includes("misfire"))) {
-    pushQuestion("Is the check-engine light steady or flashing?");
+  if (
+    questions.length === 0 &&
+    codes.length === 0 &&
+    hasMisfireClue &&
+    !hasCheckEngineClue
+  ) {
+    pushQuestion("One thing I’d want to confirm: is the check-engine light steady or flashing?");
   }
 
-  if (symptomsText.includes("rough idle") || symptomsText.includes("misfire") || symptomsText.includes("shake")) {
-    pushQuestion("Is the shaking strongest at idle, and does it smooth out when you accelerate?");
+  if (
+    questions.length === 0 &&
+    hasMisfireClue &&
+    !unresolved.includes("idle_behavior_known")
+  ) {
+    pushQuestion("Does the shaking feel strongest at idle, or does it continue while accelerating?");
   }
 
-  if (topCause.toLowerCase().includes("knock")) {
+  if (questions.length === 0 && causeText.includes("knock")) {
     pushQuestion("Is it a light fast tick, or a deeper knock that gets stronger under load?");
   }
 
-  if (topCause.toLowerCase().includes("cooling")) {
+  if (questions.length === 0 && causeText.includes("cooling")) {
     pushQuestion("Does the temperature rise mainly while driving, at idle, or both?");
   }
 
-  if (userIntent.purchaseIntent) {
+  if (questions.length === 0 && userIntent.purchaseIntent) {
     pushQuestion("Before buying it, do you know if these faults are current or only old stored codes?");
   }
 
-  if (unresolved.includes("fault_codes_unknown")) {
+  if (
+    questions.length === 0 &&
+    unresolved.includes("fault_codes_unknown") &&
+    !hasCheckEngineClue
+  ) {
     pushQuestion("If you do not have a scanner yet, is the warning light steady or flashing?");
   }
 
-  return dedupe(questions).slice(0, 2);
+  return dedupe(questions).slice(0, 1);
 }
 
 function detectSeverity({
@@ -944,7 +981,7 @@ export function buildPlannerText({
 }) {
   const cleanCauses = dedupe((ranked || []).map((x) => calmCauseLabel(x.label)).filter(Boolean)).slice(0, 4);
   const cleanTests = dedupe((tests || []).map(friendlyLabel)).slice(0, 4);
-  const cleanQuestions = dedupe(questions || []).slice(0, 2);
+  const cleanQuestions = dedupe(questions || []).slice(0, 1);
 
   return `
 FIXLENS_DOCTOR_PLAN:
@@ -977,6 +1014,7 @@ FINAL_RESPONSE_RULES:
 - Do NOT mention confidence percentages.
 - Do NOT expose internal tokens such as check_engine, cluster names, riskLevel, engine scores, planner data, or diagnostic engine metadata.
 - Do NOT say "Most likely cause".
+- Do NOT write "Optional".
 - Do NOT sound like a code glossary.
 - Do NOT say "go to a shop", "nearby shop", or "check location" unless the user explicitly asks for nearby help.
 - Do NOT over-explain.
@@ -984,8 +1022,8 @@ FINAL_RESPONSE_RULES:
 - Give 2 to 4 possible causes, ordered from simple/common to more serious.
 - Give 2 to 4 practical checks.
 - Driving condition must be calm and specific.
-- If a safety risk exists, be direct but not dramatic.
 - Ask at most 1 follow-up question only if it changes the next diagnostic step.
+- If FOLLOW_UP_QUESTIONS is empty, do not ask any question.
 - Keep the answer short, premium, and human.
 
 PREFERRED_OUTPUT_FORMAT:
@@ -1005,7 +1043,7 @@ What to check first:
 Driving condition:
 [calm safety note]
 
-Optional:
-[Only one follow-up question if truly useful.]
+If needed:
+[Only one natural follow-up question, without labeling it.]
 `.trim();
 }
