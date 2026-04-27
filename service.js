@@ -553,6 +553,7 @@ function sanitizeUserFacingReply(reply = "", { language = "english", wantsPlaces
   text = text
     .replace(/\bMost likely cause\s*:\s*/gi, "")
    .replace(/^Optional:\s*/gim, "")
+   .replace(/^If needed:\s*/gim, "")
     .replace(/\(\s*\d{1,3}%\s*confidence\s*\)/gi, "")
     .replace(/\b\d{1,3}%\s*confidence\b/gi, "")
     .replace(/\bconfidence\s*[:=]\s*\d+(\.\d+)?\b/gi, "")
