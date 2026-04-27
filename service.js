@@ -3,7 +3,7 @@
 
 import OpenAI from "openai";
 
-import { buildDoctorSystemPrompt } from "./doctorPrompt.js";
+import { DOCTOR_PROMPT } from './doctorPrompt.js';
 import { buildDiagnosticMemory } from "./memoryEngine.js";
 import { buildResponsePlan } from "./responsePlanner.js";
 import { buildEnginePack } from "./engineIntel.js";
