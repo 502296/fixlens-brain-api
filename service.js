@@ -1,5 +1,5 @@
-// service.js — FixLens Brain v15 STABLE FULL
-// Doctor Brain orchestrator — calm, data-first, search/GPS-aware, premium user-facing responses
+// service.js — FixLens Brain v16
+// Stable, search/GPS-aware, clean natural output, no raw links, no report-style replies
 
 import OpenAI from "openai";
 
@@ -108,8 +108,7 @@ export async function handleFixLensRequest(req) {
       modelIntent.userLanguage || detectPreferredLanguageFromText(userText)
     );
 
-    const dialect =
-      language === "spanish" ? "latin-american-spanish" : "us-english";
+    const dialect = language === "spanish" ? "latin-american-spanish" : "us-english";
 
     const wantsPlaces =
       primaryIntent === "places" ||
@@ -117,8 +116,7 @@ export async function handleFixLensRequest(req) {
       Boolean(ruleIntent.places) ||
       Boolean(routedIntent.isPlaces);
 
-    const needsLocation =
-      wantsPlaces && !hasUsableLocation(location, userText);
+    const needsLocation = wantsPlaces && !hasUsableLocation(location, userText);
 
     if (needsLocation) {
       return baseResponse({
@@ -199,15 +197,9 @@ export async function handleFixLensRequest(req) {
       );
     }
 
-    const verifiedData = Array.isArray(search?.verified_data)
-      ? search.verified_data
-      : [];
-    const verifiedActions = Array.isArray(search?.verified_actions)
-      ? search.verified_actions
-      : [];
-    const verifiedWorkshops = Array.isArray(search?.verified_workshops)
-      ? search.verified_workshops
-      : [];
+    const verifiedData = Array.isArray(search?.verified_data) ? search.verified_data : [];
+    const verifiedActions = Array.isArray(search?.verified_actions) ? search.verified_actions : [];
+    const verifiedWorkshops = Array.isArray(search?.verified_workshops) ? search.verified_workshops : [];
 
     const responsePlan = safeCall(
       () =>
@@ -262,6 +254,7 @@ export async function handleFixLensRequest(req) {
       enginePack,
       wantsPlaces,
       verifiedWorkshops,
+      userText,
     });
 
     const uiPayload = buildVisualDiagnosticPayload({
@@ -345,13 +338,20 @@ FixLens execution rules for this exact response:
 - Never mention confidence percentages.
 - Never write "Most likely cause".
 - Never expose words like check_engine, riskLevel, confidence, cluster, planner, engine score, or metadata.
-- Do not suggest nearby shops, GPS, maps, location, or Yelp unless the user clearly asked for nearby help.
-- If the user asks for nearby help and verified workshops exist, include a short "Nearby options" section.
 - Keep the tone calm, premium, practical, and human.
 - Do not scare the driver.
 - Do not over-ask questions.
 - Ask only one follow-up question if it truly changes the next step.
-- Use this structure unless the user asked for something else:
+
+Nearby/place response rules:
+- Only mention nearby places if the user clearly asked for nearby help.
+- If the user asks for nearby places, mechanics, shops, towing, or someone who can fix it, DO NOT return numbered lists, bullet points, markdown links, raw URLs, or Google Maps URLs.
+- Do NOT say "Here are some places you might consider."
+- Mention places naturally inside one short paragraph.
+- Include phone numbers only if useful and available.
+- Recommend the type of shop that fits the symptom.
+- If search results look unrelated to automotive repair, say the results do not look trustworthy yet and suggest searching again for a real auto repair shop.
+- Avoid handyman, appliance, IT, HVAC, plumbing, cleaning, or unrelated service businesses unless the result clearly says automotive repair.
 
 Write naturally like a real expert mechanic speaking to a driver.
 
@@ -360,9 +360,9 @@ Do NOT use bullet points or numbered lists unless absolutely necessary.
 
 Structure the answer as a smooth explanation:
 - Start with a calm understanding of the symptom
-- Explain what it likely relates to (in simple terms)
+- Explain what it likely relates to in simple terms
 - Suggest what to check in a natural flow
-- End with a calm driving advice
+- End with calm driving advice
 
 Keep it:
 - Human
@@ -414,6 +414,10 @@ Before answering, silently remove:
 - internal labels/tokens
 - "Most likely cause"
 - scary wording
+- numbered lists
+- bullet lists
+- markdown links
+- raw URLs
 - unnecessary location/shop suggestions
 `.trim();
 
@@ -449,8 +453,17 @@ function buildDoctorFinalResponse({
   enginePack = {},
   wantsPlaces = false,
   verifiedWorkshops = [],
+  userText = "",
 }) {
   const lang = normalizeSupportedLanguage(language);
+
+  if (wantsPlaces) {
+    return buildCleanNearbyResponse({
+      language: lang,
+      verifiedWorkshops,
+      userText,
+    });
+  }
 
   if (aiReply && aiReply.trim().length > 20) {
     return sanitizeUserFacingReply(trimLongReply(aiReply), {
@@ -463,95 +476,83 @@ function buildDoctorFinalResponse({
     responsePlan?.strongest_hypothesis ||
       diagnosticEngine?.topIssue ||
       firstRankedFindingTitle(diagnosticEngine?.rankedFindings) ||
-      "a mechanical issue that needs confirmation"
+      "an idle-quality issue"
   );
-
-  const causes = uniqueStrings([
-    ...(Array.isArray(responsePlan?.likely_causes) ? responsePlan.likely_causes : []),
-    issue,
-  ])
-    .map(cleanIssueTitle)
-    .filter(Boolean)
-    .slice(0, 4);
-
-  const checks = uniqueStrings([
-    ...(Array.isArray(responsePlan?.tests) ? responsePlan.tests : []),
-    ...(Array.isArray(diagnosticEngine?.firstChecks) ? diagnosticEngine.firstChecks : []),
-  ])
-    .map(cleanBulletText)
-    .filter(Boolean)
-    .slice(0, 4);
-
-  const drivingCondition =
-    responsePlan?.safety_advice ||
-    "Short, gentle driving may be okay, but it should be checked soon if the symptom continues or gets worse.";
 
   if (lang === "spanish") {
     return sanitizeUserFacingReply(
       `
-Diagnóstico:
-Según lo que describes, esto parece relacionado con ${issue.toLowerCase()}.
+Por lo que describes, esto apunta más hacia un problema de calidad de ralentí que a suspensión o frenos. Yo empezaría por el sistema de encendido, especialmente bujías o bobinas, porque pueden hacer que el motor se sienta áspero en parado antes de que aparezca una luz de advertencia.
 
-Posibles causas:
-${formatBullets(causes, ["Bujías desgastadas", "Bobina de encendido débil", "Pequeña fuga de vacío"])}
+Si eso está bien, revisaría si hay una pequeña fuga de vacío alrededor de la admisión, porque aire no medido también puede volver inestable el ralentí.
 
-Qué revisaría primero:
-${formatNumbered(checks, ["Escanear códigos de falla si es posible", "Revisar bujías y bobinas", "Revisar mangueras de admisión por fuga de vacío"])}
-
-Condición de manejo:
-${drivingCondition}
+Por ahora, manejar suave normalmente está bien, pero si la vibración empeora, pierde fuerza, o la luz de check-engine empieza a parpadear, yo reduciría el uso hasta revisarlo.
 `.trim(),
       { language: lang, wantsPlaces }
     );
   }
 
-  if (wantsPlaces && verifiedWorkshops.length > 0) {
-  const shopsText = verifiedWorkshops
-    .slice(0, 3)
-    .map((x) => {
-      const name = x?.name || x?.title || "a nearby shop";
-      const address = x?.address ? ` at ${x.address}` : "";
-      const phone = x?.phone ? `, phone ${x.phone}` : "";
-      return `${name}${address}${phone}`;
-    })
-    .join("; ");
-
   return sanitizeUserFacingReply(
     `
-From what you’re asking, you’re looking for someone nearby who can check this properly.
+From what you’re describing, this points more toward ${issue.toLowerCase()} than a suspension or brake problem. I’d start on the ignition side first — spark plugs or a weak coil can make the engine feel rough at idle before it becomes bad enough to turn on a warning light.
 
-I’d go with a well-rated general auto repair shop first, since this kind of rough idle is usually something they can diagnose quickly without guessing.
+If that checks out, I’d look for a small vacuum leak around the intake hoses, because unmetered air can make the idle unstable too.
 
-You have a few nearby options like ${shopsText}. I’d call ahead, describe the shaking at idle, and ask them to scan it and check the ignition system before replacing anything.
-
-That way you stay in control and avoid unnecessary parts.
+For now, gentle driving is usually fine, but if the shaking gets stronger, the car loses power, or the check-engine light starts flashing, I’d stop driving and get it checked.
 `.trim(),
     { language: lang, wantsPlaces }
   );
 }
 
- return sanitizeUserFacingReply(
-  `
-From what you’re describing, this points more toward ${issue.toLowerCase()}.
+function buildCleanNearbyResponse({ language = "english", verifiedWorkshops = [], userText = "" }) {
+  const lang = normalizeSupportedLanguage(language);
+  const relevant = filterAutomotiveWorkshops(verifiedWorkshops).slice(0, 3);
 
-In your case, I’d start by checking the ignition side first — things like the spark plugs or ignition coils, because they often cause rough idle before any warning light shows up.
+  if (lang === "spanish") {
+    if (relevant.length === 0) {
+      return "No confiaría todavía en esos resultados porque no parecen claramente talleres de reparación automotriz. Yo buscaría de nuevo un taller mecánico real o un taller Toyota/auto repair bien calificado y les diría que el carro tiembla en ralentí pero mejora al avanzar, para que lo escaneen y revisen encendido antes de cambiar piezas.";
+    }
 
-If that checks out, then I’d take a quick look for a small vacuum leak around the intake, since unmetered air can also make the idle unstable.
+    const shopsText = naturalWorkshopList(relevant, lang);
+    return sanitizeUserFacingReply(
+      `Sí, buscaría un taller mecánico general bien calificado, no un servicio genérico. Para este síntoma, lo importante es que puedan escanear el carro y revisar encendido, bujías, bobinas y posible fuga de vacío. Cerca de ti aparecen opciones como ${shopsText}. Yo llamaría primero y les diría que el carro tiembla en ralentí pero mejora al avanzar, y preguntaría si pueden diagnosticar eso antes de cambiar piezas.`,
+      { language: lang, wantsPlaces: true }
+    );
+  }
 
-For now, gentle driving is usually fine, but if the shaking gets worse or the car starts losing power, I’d have it checked soon.
-`.trim(),
-  { language: lang, wantsPlaces }
-);
+  if (relevant.length === 0) {
+    return "I wouldn’t trust these results yet because they don’t look clearly automotive-related. I’d search again for a real auto repair shop, Toyota specialist, or well-rated general mechanic, then tell them the car shakes at idle but smooths out when driving so they can scan it and check the ignition system before replacing parts.";
+  }
+
+  const shopsText = naturalWorkshopList(relevant, lang);
+
+  return sanitizeUserFacingReply(
+    `Yes — for this symptom, I’d look for a well-rated general auto repair shop rather than a random service listing. The right place should be able to scan the car and check the ignition side, especially plugs, coils, and a possible small vacuum leak. Nearby, I’d start with ${shopsText}. I’d call first and describe it exactly like this: the car shakes at idle but smooths out once it starts moving, and you want it diagnosed before any parts are replaced.`,
+    { language: lang, wantsPlaces: true }
+  );
 }
 
 function sanitizeUserFacingReply(reply = "", { language = "english", wantsPlaces = false } = {}) {
   let text = String(reply || "").trim();
 
   text = text
+    .replace(/\*\*/g, "")
+    .replace(/\[([^\]]+)\]\((https?:\/\/[^)]+)\)/gi, "$1")
+    .replace(/https?:\/\/\S+/gi, "")
+    .replace(/^\s*\d+\.\s*/gm, "")
+    .replace(/^\s*[-•]\s*/gm, "")
     .replace(/\bMost likely cause\s*:\s*/gi, "")
     .replace(/^Optional:\s*/gim, "")
     .replace(/^If needed:\s*/gim, "")
     .replace(/^Next question:\s*$/gim, "")
+    .replace(/^Diagnosis:\s*/gim, "")
+    .replace(/^Possible causes:\s*/gim, "")
+    .replace(/^What to check first:\s*/gim, "")
+    .replace(/^Driving condition:\s*/gim, "")
+    .replace(/^Nearby options:\s*/gim, "")
+    .replace(/^Recommendation:\s*/gim, "")
+    .replace(/^Safety:\s*/gim, "")
+    .replace(/^Conclusion:\s*/gim, "")
     .replace(/\(\s*\d{1,3}%\s*confidence\s*\)/gi, "")
     .replace(/\b\d{1,3}%\s*confidence\b/gi, "")
     .replace(/\bconfidence\s*[:=]\s*\d+(\.\d+)?\b/gi, "")
@@ -568,12 +569,14 @@ function sanitizeUserFacingReply(reply = "", { language = "english", wantsPlaces
       .replace(/.*\bcheck location\b.*\n?/gi, "")
       .replace(/.*\bGPS\b.*\n?/g, "")
       .replace(/.*\bYelp\b.*\n?/gi, "")
+      .replace(/.*\bGoogle Maps\b.*\n?/gi, "")
       .replace(/.*\bmaps\b.*\n?/gi, "");
   }
 
   text = text
     .replace(/[ \t]+\n/g, "\n")
     .replace(/\n{3,}/g, "\n\n")
+    .replace(/\s+([,.])/g, "$1")
     .trim();
 
   if (!text) {
@@ -792,7 +795,7 @@ async function classifyIntentCheap({ text = "", location = null, ruleIntent = {}
   const lower = String(text || "").toLowerCase();
 
   const localWords =
-    /\b(near me|nearby|shop|mechanic|garage|tow|towing|address|maps|location|parts store|repair shop)\b/i;
+    /\b(near me|nearby|shop|mechanic|garage|tow|towing|address|maps|location|parts store|repair shop|someone who can fix|who can fix|fix it near|auto repair)\b/i;
   const spanishLocal =
     /\b(taller|mecánico|mecanico|cerca|grúa|grua|remolque|ubicación|ubicacion)\b/i;
 
@@ -1054,7 +1057,6 @@ function formatSearchDataForContext(items = [], maxItems = 4) {
     address: item?.address || "",
     rating: item?.rating ?? null,
     phone: item?.phone || "",
-    maps_url: item?.maps_url || "",
     primary_type: item?.primary_type || "",
     mode: item?.mode || "",
   }));
@@ -1092,6 +1094,65 @@ function formatDiagnosticEngineForContext(diagnosticEngine = {}) {
     caution_flags: diagnosticEngine?.cautionFlags || [],
     ranked_findings: diagnosticEngine?.rankedFindings || [],
   };
+}
+
+function filterAutomotiveWorkshops(items = []) {
+  return (Array.isArray(items) ? items : []).filter(isAutomotiveWorkshop);
+}
+
+function isAutomotiveWorkshop(item = {}) {
+  const text = [
+    item?.name,
+    item?.title,
+    item?.primary_type,
+    item?.type,
+    item?.category,
+    item?.categories,
+    item?.tags,
+    item?.source,
+    item?.description,
+  ]
+    .flat()
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+
+  const automotive =
+    /\b(auto|automotive|mechanic|garage|repair|car repair|vehicle|toyota|tires?|brakes?|transmission|muffler|oil|engine|collision|body shop|towing|service center)\b/i;
+
+  const unrelated =
+    /\b(handyman|appliance|it\b|computer|hvac|plumbing|cleaning|electrician|roofing|lawn|landscap|pest|moving|locksmith)\b/i;
+
+  if (automotive.test(text) && !unrelated.test(text)) return true;
+  return false;
+}
+
+function naturalWorkshopList(items = [], language = "english") {
+  const clean = items
+    .slice(0, 3)
+    .map((x) => {
+      const name = x?.name || x?.title || "a nearby auto repair shop";
+      const phone = x?.phone ? ` (${x.phone})` : "";
+      const address = x?.address ? ` on ${shortAddress(x.address)}` : "";
+      return `${name}${address}${phone}`;
+    })
+    .filter(Boolean);
+
+  if (clean.length === 0) {
+    return language === "spanish" ? "un taller mecánico cercano" : "a nearby auto repair shop";
+  }
+
+  if (clean.length === 1) return clean[0];
+  if (clean.length === 2) return `${clean[0]} or ${clean[1]}`;
+  return `${clean[0]}, ${clean[1]}, or ${clean[2]}`;
+}
+
+function shortAddress(address = "") {
+  return String(address || "")
+    .replace(/\bUnited States\b/gi, "")
+    .replace(/\s*,\s*USA\b/gi, "")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function pickLikelyIssue({ diagnosticEngine = {}, responsePlan = {}, enginePack = {}, language = "english" }) {
@@ -1257,16 +1318,6 @@ function clamp01(value = 0) {
   if (value < 0) return 0;
   if (value > 1) return 1;
   return value;
-}
-
-function formatBullets(items = [], fallback = []) {
-  const list = items.length > 0 ? items : fallback;
-  return list.map((x) => `- ${cleanIssueTitle(cleanBulletText(x))}`).join("\n");
-}
-
-function formatNumbered(items = [], fallback = []) {
-  const list = items.length > 0 ? items : fallback;
-  return list.map((x, i) => `${i + 1}. ${cleanIssueTitle(cleanBulletText(x))}`).join("\n");
 }
 
 function trimLongReply(value = "") {
