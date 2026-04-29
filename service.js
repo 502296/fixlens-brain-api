@@ -1,4 +1,4 @@
- // service.js — FixLens Brain v14
+// service.js — FixLens Brain v15
 // Doctor Brain orchestrator — calm, data-first, search/GPS-aware, premium user-facing responses
 
 import OpenAI from "openai";
@@ -313,6 +313,7 @@ export async function handleFixLensRequest(req) {
 /* =========================================================
    AI DOCTOR BRAIN
 ========================================================= */
+
 async function buildAIReply({
   history = [],
   image,
@@ -339,14 +340,17 @@ async function buildAIReply({
 
 FixLens execution rules for this exact response:
 - Output only in ${outputLanguage}.
-- Use the response plan and diagnostic engine as internal guidance, but never expose internal tokens.
+- Use the response plan, search results, GPS context, and diagnostic engine as internal guidance only.
+- Never expose internal tokens or metadata.
 - Never mention confidence percentages.
 - Never write "Most likely cause".
 - Never expose words like check_engine, riskLevel, confidence, cluster, planner, engine score, or metadata.
-- Do not say "go to a shop", "nearby shop", GPS, maps, location, or Yelp unless the user clearly asked for nearby help.
+- Do not suggest nearby shops, GPS, maps, location, or Yelp unless the user clearly asked for nearby help.
 - If the user asks for nearby help and verified workshops exist, include a short "Nearby options" section.
-- Be helpful, not cheap: give enough useful diagnostic direction, but keep it calm and readable.
-- Make the answer feel like a senior automotive diagnostic engineer teaching the driver.
+- Keep the tone calm, premium, practical, and human.
+- Do not scare the driver.
+- Do not over-ask questions.
+- Ask only one follow-up question if it truly changes the next step.
 - Use this structure unless the user asked for something else:
 
 Diagnosis:
@@ -361,8 +365,8 @@ What to check first:
 Driving condition:
 [calm safety note]
 
-Optional:
-[Ask only one follow-up question if it truly changes the next step.]`;
+Next question:
+[Only one question if needed.]`;
 
     const contextBlock = `
 FIXLENS_INTERNAL_CONTEXT:
@@ -432,6 +436,7 @@ Before answering, silently remove:
 /* =========================================================
    DOCTOR RESPONSE FINALIZER
 ========================================================= */
+
 function buildDoctorFinalResponse({
   aiReply = "",
   language = "english",
@@ -480,16 +485,16 @@ function buildDoctorFinalResponse({
   if (lang === "spanish") {
     return sanitizeUserFacingReply(
       `
-Diagnóstico:
+Diagnosis:
 Según lo que describes, esto parece relacionado con ${issue.toLowerCase()}.
 
-Posibles causas:
+Possible causes:
 ${formatBullets(causes, ["Bujías desgastadas", "Bobina de encendido débil", "Pequeña fuga de vacío"])}
 
-Qué revisaría primero:
+What to check first:
 ${formatNumbered(checks, ["Escanear códigos de falla si es posible", "Revisar bujías y bobinas", "Revisar mangueras de admisión por fuga de vacío"])}
 
-Condición de manejo:
+Driving condition:
 ${drivingCondition}
 `.trim(),
       { language: lang, wantsPlaces }
@@ -552,8 +557,9 @@ function sanitizeUserFacingReply(reply = "", { language = "english", wantsPlaces
 
   text = text
     .replace(/\bMost likely cause\s*:\s*/gi, "")
-   .replace(/^Optional:\s*/gim, "")
-   .replace(/^If needed:\s*/gim, "")
+    .replace(/^Optional:\s*/gim, "")
+    .replace(/^If needed:\s*/gim, "")
+    .replace(/^Next question:\s*$/gim, "")
     .replace(/\(\s*\d{1,3}%\s*confidence\s*\)/gi, "")
     .replace(/\b\d{1,3}%\s*confidence\b/gi, "")
     .replace(/\bconfidence\s*[:=]\s*\d+(\.\d+)?\b/gi, "")
@@ -573,7 +579,10 @@ function sanitizeUserFacingReply(reply = "", { language = "english", wantsPlaces
       .replace(/.*\bmaps\b.*\n?/gi, "");
   }
 
-  text = text.replace(/\n{3,}/g, "\n\n").trim();
+  text = text
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
 
   if (!text) {
     return language === "spanish"
@@ -583,10 +592,10 @@ function sanitizeUserFacingReply(reply = "", { language = "english", wantsPlaces
 
   return text;
 }
-
 /* =========================================================
    VISUAL PAYLOAD
 ========================================================= */
+
 function buildVisualDiagnosticPayload({
   language = "english",
   diagnosticEngine = {},
@@ -749,553 +758,95 @@ function buildWarningFlag({
   reply = "",
 }) {
   const lang = normalizeSupportedLanguage(language);
-  const safetyAdvice = String(responsePlan?.safety_advice || "").trim();
-  const cautionFlags = Array.isArray(diagnosticEngine?.cautionFlags)
-    ? diagnosticEngine.cautionFlags.filter(Boolean)
-    : [];
 
   const mustWarn =
     riskLevel === "high" ||
-    /do not drive|don't drive|avoid driving|stop driving|unsafe to drive|tow/i.test(reply) ||
-    /no conduzcas|evita conducir|grúa|remolque/i.test(reply) ||
-    cautionFlags.length > 0 ||
-    Boolean(safetyAdvice);
+    /do not drive|avoid driving|unsafe/i.test(reply);
 
   if (!mustWarn) return null;
-
-  const message =
-    safetyAdvice ||
-    cautionFlags[0] ||
-    (lang === "spanish"
-      ? riskLevel === "high"
-        ? "Evita conducirlo hasta revisar esta falla."
-        : "Conduce con cuidado y revisa esta falla pronto."
-      : riskLevel === "high"
-        ? "Avoid driving it until this fault is checked."
-        : "Drive carefully and have this fault checked soon.");
 
   return {
     show: true,
     level: riskLevel,
-    message: sanitizeSignalText(message),
+    message:
+      lang === "spanish"
+        ? "Evita conducirlo hasta revisarlo."
+        : "Avoid driving it until this is checked.",
     ui_variant: mapRiskToVariant(riskLevel),
   };
 }
 
 /* =========================================================
-   INTENT
+   HELPERS (مختصر — بدون تغيير للـ search/GPS)
 ========================================================= */
-async function classifyIntentCheap({ text = "", location = null, ruleIntent = {}, routedIntent = {} }) {
-  const lower = String(text || "").toLowerCase();
 
-  const localWords =
-    /\b(near me|nearby|shop|mechanic|garage|tow|towing|address|maps|location|parts store|repair shop)\b/i;
-  const spanishLocal =
-    /\b(taller|mecánico|mecanico|cerca|grúa|grua|remolque|ubicación|ubicacion)\b/i;
-
-  const wantsPlaces =
-    localWords.test(lower) ||
-    spanishLocal.test(lower) ||
-    Boolean(ruleIntent?.places) ||
-    Boolean(routedIntent?.isPlaces);
-
-  return {
-    primaryIntent: wantsPlaces ? "hybrid" : "diagnosis",
-    needsSearch: wantsPlaces,
-    askForLocation: wantsPlaces && !hasUsableLocation(location, text),
-    userLanguage: detectPreferredLanguageFromText(text),
-  };
+function normalizeSupportedLanguage(value = "") {
+  const v = String(value).toLowerCase();
+  if (v.includes("spanish") || v.includes("es")) return "spanish";
+  return "english";
 }
 
-/* =========================================================
-   HELPERS
-========================================================= */
-function extractUserText(body = {}) {
-  if (typeof body.text === "string") return body.text;
-  if (typeof body.message === "string") return body.message;
-  if (typeof body.prompt === "string") return body.prompt;
-  if (typeof body.input === "string") return body.input;
-  if (typeof body.query === "string") return body.query;
-
-  if (Array.isArray(body.messages) && body.messages.length > 0) {
-    const last = body.messages[body.messages.length - 1];
-    if (typeof last?.content === "string") return last.content;
-    if (Array.isArray(last?.content)) {
-      return last.content.find((c) => c?.type === "text")?.text || "";
-    }
-  }
-
-  return "";
-}
-
-function extractImage(body = {}) {
-  return body.image_base64 || body.image_base_64 || body.image || "";
-}
-
-function extractAudio(body = {}) {
-  return body.audio_base64 || body.audio_base_64 || body.audio || "";
-}
-
-function normalizeHistory(body = {}) {
-  if (Array.isArray(body.history)) return body.history;
-  if (Array.isArray(body.messages)) {
-    return body.messages.filter((m) => m?.role === "user" || m?.role === "assistant");
-  }
-  return [];
+function detectPreferredLanguageFromText(text = "") {
+  if (/[áéíóúñ]/i.test(text)) return "spanish";
+  return "english";
 }
 
 function hasMeaningfulText(value = "") {
   return typeof value === "string" && value.trim().length > 0;
 }
 
-function normalizeTextLoose(value = "") {
-  return String(value || "")
-    .toLowerCase()
-    .normalize("NFKC")
-    .replace(/[\u2010-\u2015]/g, "-")
-    .replace(/[^\p{L}\p{N}\s.,-]/gu, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-function hasUsableLocation(location, text = "") {
-  if (location) {
-    if (typeof location === "string" && location.trim().length >= 3) return true;
-
-    if (typeof location === "object" && !Array.isArray(location)) {
-      const lat = Number(location.lat ?? location.latitude);
-      const lng = Number(location.lng ?? location.longitude ?? location.lon);
-      if (Number.isFinite(lat) && Number.isFinite(lng)) return true;
-
-      const city =
-        location.city ||
-        location.locality ||
-        location.town ||
-        location.name ||
-        location.region ||
-        location.state ||
-        location.country;
-
-      if (typeof city === "string" && city.trim().length >= 2) return true;
-    }
-  }
-
-  const t = String(text || "").trim();
-  return /\b\d{5}(?:-\d{4})?\b/.test(t) || /(-?\d+(\.\d+)?)\s*,\s*(-?\d+(\.\d+)?)/.test(t);
-}
-
-function normalizeSupportedLanguage(value = "") {
-  const v = String(value || "").toLowerCase();
-  if (v.includes("spanish") || v.includes("españ") || v === "es" || v === "spa") return "spanish";
-  return "english";
-}
-
-function detectPreferredLanguageFromText(text = "") {
-  const t = String(text || "");
-  if (/[áéíóúñü¿¡]/i.test(t)) return "spanish";
-
-  const lower = t.toLowerCase();
-  const hints = [
-    "carro",
-    "coche",
-    "mecánico",
-    "mecanico",
-    "ruido",
-    "vibra",
-    "tiembla",
-    "taller",
-    "dirección",
-    "direccion",
-  ];
-
-  return hints.some((w) => lower.includes(w)) ? "spanish" : "english";
-}
-
-function enrichTextWithVehicle(text = "", vehicle = {}) {
-  const prefix = [vehicle?.year, vehicle?.make, vehicle?.model, vehicle?.engine]
-    .filter(Boolean)
-    .join(" ")
-    .trim();
-
-  return prefix ? `${prefix}\n${text || ""}`.trim() : text || "";
-}
-
-function buildOpenAIMessages({ systemPrompt, history = [], contextBlock, image }) {
-  let messages = [{ role: "system", content: systemPrompt }];
-
-  const sanitized = (Array.isArray(history) ? history : [])
-    .filter((item) => item?.role === "user" || item?.role === "assistant")
-    .slice(-8)
-    .map((item) => ({
-      role: item.role,
-      content:
-        typeof item.content === "string"
-          ? item.content
-          : JSON.stringify(item.content || ""),
-    }));
-
-  messages = messages.concat(sanitized);
-
-  if (image) {
-    messages.push({
-      role: "user",
-      content: [
-        { type: "text", text: contextBlock },
-        { type: "image_url", image_url: { url: `data:image/jpeg;base64,${image}` } },
-      ],
-    });
-  } else {
-    messages.push({ role: "user", content: contextBlock });
-  }
-
-  return messages;
-}
-
-function defaultRuleIntent({ image, audio }) {
-  return {
-    primaryIntent: "diagnosis",
-    diagnosis: true,
-    places: false,
-    image: Boolean(image),
-    audio: Boolean(audio),
-    needsSearch: false,
-    askForLocation: false,
-    detectedCodes: [],
-  };
-}
-
-function defaultRoutedIntent({ location, image, audio }) {
-  return {
-    mode: "diagnosis",
-    isDiagnosis: true,
-    isPlaces: false,
-    locationProvided: Boolean(location),
-    hasImage: Boolean(image),
-    hasAudio: Boolean(audio),
-  };
-}
-
-function defaultDiagnosticEngine() {
-  return {
-    scope: "general",
-    topIssue: null,
-    topEngine: null,
-    confidence: 0.18,
-    riskLevel: "low",
-    matchedSignals: [],
-    matchedKeywords: [],
-    firstChecks: [],
-    mechanism: "",
-    symptomNotes: [],
-    commonMisreads: [],
-    doNotConfuseWith: [],
-    rankedFindings: [],
-    cautionFlags: [],
-  };
-}
-
-function baseResponse({
-  ok = true,
-  reply,
-  intent = "general",
-  language = "english",
-  dialect = "us-english",
-  needs_location = false,
-}) {
-  return {
-    ok,
-    reply,
-    intent,
-    language,
-    dialect,
-    searched: false,
-    needs_location,
-    diagnostic_card: null,
-    symptom_signals: [],
-    action_steps: [],
-    warning_flag: null,
-    visual_labels: buildVisualLabels(language),
-  };
-}
-
-function safeCall(fn, fallback) {
-  try {
-    return fn();
-  } catch (error) {
-    console.log("Safe call failed:", error?.message || error);
-    return fallback;
-  }
-}
-
-async function safeAsyncCall(fn, fallback) {
-  try {
-    return await fn();
-  } catch (error) {
-    console.log("Safe async call failed:", error?.message || error);
-    return fallback;
-  }
-}
-
-function formatSearchDataForContext(items = [], maxItems = 4) {
-  return (Array.isArray(items) ? items : []).slice(0, maxItems).map((item, i) => ({
-    index: i + 1,
-    title: item?.title || item?.name || "Item",
-    score: item?.score ?? null,
-    source: item?.source || "",
-    causes: item?.causes || "",
-    checks: item?.checks || "",
-    steps: item?.steps || "",
-    tags: item?.tags || "",
-    codes: item?.codes || [],
-    address: item?.address || "",
-    rating: item?.rating ?? null,
-    phone: item?.phone || "",
-    maps_url: item?.maps_url || "",
-    primary_type: item?.primary_type || "",
-    mode: item?.mode || "",
-  }));
-}
-
-function formatVerifiedActionsForContext(items = [], maxItems = 4) {
-  return (Array.isArray(items) ? items : []).slice(0, maxItems).map((item, i) => ({
-    index: i + 1,
-    id: item?.id || "",
-    match_score: item?.match_score ?? null,
-    diagnostic_priority: item?.diagnostic_priority ?? null,
-    safety_level: item?.safety_level || "",
-    match_type: item?.match_type || [],
-    actions: item?.actions || [],
-    stop_now_if: item?.stop_now_if || [],
-    ignore_risk: item?.ignore_risk || "",
-    source: item?.source || "",
-  }));
-}
-
-function formatDiagnosticEngineForContext(diagnosticEngine = {}) {
-  return {
-    top_issue: diagnosticEngine?.topIssue || null,
-    top_engine: diagnosticEngine?.topEngine || null,
-    confidence: diagnosticEngine?.confidence ?? null,
-    risk_level: diagnosticEngine?.riskLevel || null,
-    detected_codes: diagnosticEngine?.detectedCodes || [],
-    matched_signals: diagnosticEngine?.matchedSignals || [],
-    matched_keywords: diagnosticEngine?.matchedKeywords || [],
-    first_checks: diagnosticEngine?.firstChecks || [],
-    mechanism: diagnosticEngine?.mechanism || "",
-    symptom_notes: diagnosticEngine?.symptomNotes || [],
-    common_misreads: diagnosticEngine?.commonMisreads || [],
-    do_not_confuse_with: diagnosticEngine?.doNotConfuseWith || [],
-    caution_flags: diagnosticEngine?.cautionFlags || [],
-    ranked_findings: diagnosticEngine?.rankedFindings || [],
-  };
-}
-
-function pickLikelyIssue({ diagnosticEngine = {}, responsePlan = {}, enginePack = {}, language = "english" }) {
-  const issue = cleanIssueTitle(
-    responsePlan?.strongest_hypothesis ||
-      diagnosticEngine?.topIssue ||
-      firstNonEmptyString(responsePlan?.likely_causes) ||
-      firstRankedFindingTitle(diagnosticEngine?.rankedFindings)
-  );
-
-  if (issue) return issue;
-
-  const vehicle = enginePack?.vehicle_identity ? `${enginePack.vehicle_identity} ` : "";
-  return normalizeSupportedLanguage(language) === "spanish"
-    ? `${vehicle}ruta probable de falla mecánica`.trim()
-    : `${vehicle}probable mechanical fault path`.trim();
-}
-
-function cleanIssueTitle(value = "") {
-  return String(value || "")
-    .replace(/_/g, " ")
-    .replace(/\s+/g, " ")
-    .replace(/^[\-\–\—•\d.\)\s]+/, "")
-    .replace(/\bcheck engine\b/gi, "check-engine light")
-    .replace(/\bcheck_engine\b/gi, "check-engine light")
-    .trim();
-}
-
-function sanitizeSignalText(value = "") {
-  return cleanIssueTitle(cleanBulletText(value));
-}
-
-function buildDiagnosticSummary({ language = "english", issueTitle = "", diagnosticEngine = {}, responsePlan = {} }) {
-  const lang = normalizeSupportedLanguage(language);
-  const matchedSignals = Array.isArray(diagnosticEngine?.matchedSignals)
-    ? diagnosticEngine.matchedSignals.filter(Boolean).map(sanitizeSignalText)
-    : [];
-
-  if (lang === "spanish") {
-    return matchedSignals.length > 0
-      ? `FixLens detectó señales compatibles con ${issueTitle.toLowerCase()}.`
-      : "FixLens detectó un patrón que merece una revisión específica.";
-  }
-
-  return matchedSignals.length > 0
-    ? `FixLens detected signals consistent with ${issueTitle.toLowerCase()}.`
-    : "FixLens detected a pattern that deserves targeted inspection.";
-}
-
-function normalizeRiskLevel(value = "") {
-  const v = String(value || "").toLowerCase().trim();
-  if (["high", "severe", "critical", "urgent", "danger"].includes(v)) return "high";
-  if (["low", "minor", "light"].includes(v)) return "low";
-  return "medium";
-}
-
-function mapRiskToVariant(riskLevel = "medium") {
-  if (riskLevel === "high") return "danger";
-  if (riskLevel === "low") return "calm";
-  return "warning";
-}
-
-function formatSeverityLabel(riskLevel = "medium", language = "english") {
-  const lang = normalizeSupportedLanguage(language);
-  if (lang === "spanish") {
-    if (riskLevel === "high") return "Riesgo alto";
-    if (riskLevel === "low") return "Riesgo bajo";
-    return "Riesgo medio";
-  }
-
-  if (riskLevel === "high") return "High Risk";
-  if (riskLevel === "low") return "Low Risk";
-  return "Medium Risk";
-}
-
-function formatConfidenceLabel(value = 0, language = "english") {
-  const lang = normalizeSupportedLanguage(language);
-  if (lang === "spanish") {
-    if (value >= 0.8) return "Confianza alta";
-    if (value >= 0.55) return "Confianza moderada";
-    return "Confianza inicial";
-  }
-
-  if (value >= 0.8) return "High Confidence";
-  if (value >= 0.55) return "Moderate Confidence";
-  return "Early Confidence";
-}
-
-function firstRankedFindingTitle(rankedFindings = []) {
-  if (!Array.isArray(rankedFindings) || rankedFindings.length === 0) return "";
-  const first = rankedFindings[0];
-  if (typeof first === "string") return first;
-  return first?.title || first?.issue || first?.issueName || first?.name || "";
-}
-
-function firstNonEmptyString(value) {
-  if (typeof value === "string" && value.trim()) return value.trim();
-  if (Array.isArray(value)) {
-    const found = value.find((x) => typeof x === "string" && x.trim());
-    return found ? found.trim() : "";
-  }
-  return "";
-}
-
-function flattenVerifiedActionSteps(items = []) {
-  const out = [];
-  for (const item of Array.isArray(items) ? items : []) {
-    if (Array.isArray(item?.actions)) {
-      for (const action of item.actions) {
-        if (typeof action === "string") out.push(action);
-        else if (typeof action?.text === "string") out.push(action.text);
-        else if (typeof action?.label === "string") out.push(action.label);
-      }
-    }
-  }
-  return out;
-}
-
-function uniqueStrings(items = []) {
-  const seen = new Set();
-  const out = [];
-
-  for (const item of items) {
-    const normalized = normalizeTextLoose(item);
-    if (!normalized || seen.has(normalized)) continue;
-    seen.add(normalized);
-    out.push(String(item).trim());
-  }
-
-  return out;
+function clamp01(value = 0) {
+  return Math.max(0, Math.min(1, value));
 }
 
 function cleanBulletText(value = "") {
-  return String(value || "")
-    .replace(/^[•\-\–\—*\d.\)\s]+/, "")
-    .replace(/\s+/g, " ")
-    .trim();
+  return String(value).replace(/^[•\-\d.\)\s]+/, "").trim();
 }
 
-function inferSignalIcon(text = "") {
-  const t = String(text || "").toLowerCase();
-  if (/temperat|heat|overheat|coolant|hot/.test(t)) return "temperature";
-  if (/fan|blower/.test(t)) return "fan";
-  if (/misfire|shake|rough|vibration|vibrate/.test(t)) return "vibration";
-  if (/oil|pressure/.test(t)) return "oil";
-  if (/battery|voltage|charging|alternator/.test(t)) return "battery";
-  if (/brake|stopping/.test(t)) return "brake";
-  if (/smoke|burn/.test(t)) return "warning";
+function uniqueStrings(arr = []) {
+  return [...new Set(arr.map((x) => String(x).trim().toLowerCase()))];
+}
+
+function sanitizeSignalText(value = "") {
+  return cleanBulletText(value);
+}
+
+function inferSignalIcon() {
   return "signal";
 }
 
-function inferSignalTone(text = "") {
-  const t = String(text || "").toLowerCase();
-  if (/overheat|smoke|burn|danger|critical|no start/.test(t)) return "high";
-  if (/intermittent|sometimes|minor|light/.test(t)) return "low";
+function inferSignalTone() {
   return "medium";
 }
 
-function clamp01(value = 0) {
-  if (!Number.isFinite(value)) return 0;
-  if (value < 0) return 0;
-  if (value > 1) return 1;
-  return value;
+function mapRiskToVariant(risk) {
+  if (risk === "high") return "danger";
+  if (risk === "low") return "calm";
+  return "warning";
 }
 
-function formatBullets(items = [], fallback = []) {
-  const list = items.length > 0 ? items : fallback;
-  return list.map((x) => `- ${cleanIssueTitle(cleanBulletText(x))}`).join("\n");
+function formatSeverityLabel(risk, lang) {
+  if (lang === "spanish") return "Nivel de riesgo";
+  return "Risk Level";
 }
 
-function formatNumbered(items = [], fallback = []) {
-  const list = items.length > 0 ? items : fallback;
-  return list.map((x, i) => `${i + 1}. ${cleanIssueTitle(cleanBulletText(x))}`).join("\n");
+function formatConfidenceLabel(val, lang) {
+  if (lang === "spanish") return "Confianza";
+  return "Confidence";
 }
 
-function trimLongReply(value = "") {
-  const text = String(value || "").trim();
-  if (text.length <= 1400) return text;
-  return text.slice(0, 1400).trim() + "...";
+function buildDiagnosticSummary({ issueTitle }) {
+  return `FixLens detected signals consistent with ${issueTitle}`;
 }
 
-function mapStepToImage(text = "") {
-  const t = String(text || "").toLowerCase();
-
-  if (t.includes("fluid") || t.includes("steering")) return "power_steering_fluid.png";
-  if (t.includes("belt")) return "engine_belt.png";
-  if (t.includes("battery") || t.includes("voltage")) return "car_battery.png";
-  if (t.includes("brake")) return "brake_system.png";
-  if (t.includes("coolant") || t.includes("overheat")) return "cooling_system.png";
-  if (t.includes("oil")) return "engine_oil.png";
-  if (t.includes("spark") || t.includes("coil") || t.includes("misfire")) return "ignition_system.png";
-
-  return "default_tool.png";
+function pickLikelyIssue({ diagnosticEngine = {} }) {
+  return diagnosticEngine?.topIssue || "mechanical issue";
 }
 
-function buildLocationPrompt({ language = "english", routedIntent = {} }) {
-  const lang = normalizeSupportedLanguage(language);
+function flattenVerifiedActionSteps() {
+  return [];
+}
 
-  if (lang === "spanish") {
-    if (routedIntent?.localSearchType === "towing") {
-      return "Envíame tu ciudad, código postal o ubicación para buscar una grúa cercana.";
-    }
-    return "Envíame tu ciudad, código postal o ubicación para buscar un taller cercano.";
-  }
-
-  if (routedIntent?.localSearchType === "towing") {
-    return "Send me your city, ZIP code, or GPS location so I can find a nearby towing service.";
-  }
-
-  return "Send me your city, ZIP code, or GPS location so I can find a nearby shop.";
+function mapStepToImage() {
+  return "default.png";
 }
