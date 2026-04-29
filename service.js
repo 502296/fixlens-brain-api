@@ -506,37 +506,29 @@ ${drivingCondition}
   }
 
   if (wantsPlaces && verifiedWorkshops.length > 0) {
-    const shops = verifiedWorkshops
-      .slice(0, 3)
-      .map((x, i) => {
-        const name = x?.name || x?.title || "Nearby shop";
-        const rating = x?.rating ? ` — ${x.rating}★` : "";
-        const address = x?.address ? ` — ${x.address}` : "";
-        const phone = x?.phone ? ` — ${x.phone}` : "";
-        return `${i + 1}. ${name}${rating}${address}${phone}`;
-      })
-      .join("\n");
+  const shopsText = verifiedWorkshops
+    .slice(0, 3)
+    .map((x) => {
+      const name = x?.name || x?.title || "a nearby shop";
+      const address = x?.address ? ` at ${x.address}` : "";
+      const phone = x?.phone ? `, phone ${x.phone}` : "";
+      return `${name}${address}${phone}`;
+    })
+    .join("; ");
 
-    return sanitizeUserFacingReply(
-      `
-Diagnosis:
-Based on what you described, this looks related to ${issue.toLowerCase()}.
+  return sanitizeUserFacingReply(
+    `
+From what you’re asking, you’re looking for someone nearby who can check this properly.
 
-Possible causes:
-${formatBullets(causes, ["Worn spark plugs", "Weak ignition coil", "Small vacuum leak"])}
+I’d go with a well-rated general auto repair shop first, since this kind of rough idle is usually something they can diagnose quickly without guessing.
 
-What to check first:
-${formatNumbered(checks, ["Scan for fault codes if available", "Inspect spark plugs and ignition coils", "Check intake hoses for a vacuum leak"])}
+You have a few nearby options like ${shopsText}. I’d call ahead, describe the shaking at idle, and ask them to scan it and check the ignition system before replacing anything.
 
-Nearby options:
-${shops}
-
-Driving condition:
-${drivingCondition}
+That way you stay in control and avoid unnecessary parts.
 `.trim(),
-      { language: lang, wantsPlaces }
-    );
-  }
+    { language: lang, wantsPlaces }
+  );
+}
 
   return sanitizeUserFacingReply(
     `
