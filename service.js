@@ -353,20 +353,23 @@ FixLens execution rules for this exact response:
 - Ask only one follow-up question if it truly changes the next step.
 - Use this structure unless the user asked for something else:
 
-Diagnosis:
-[1 calm sentence based on the symptoms. No absolute conclusion.]
+Write naturally like a real expert mechanic speaking to a driver.
 
-Possible causes:
-- [2 to 4 causes, simple/common first]
+Do NOT use titles like "Diagnosis", "Possible causes", etc.
+Do NOT use bullet points or numbered lists unless absolutely necessary.
 
-What to check first:
-1. [2 to 4 practical checks]
+Structure the answer as a smooth explanation:
+- Start with a calm understanding of the symptom
+- Explain what it likely relates to (in simple terms)
+- Suggest what to check in a natural flow
+- End with a calm driving advice
 
-Driving condition:
-[calm safety note]
-
-Next question:
-[Only one question if needed.]`;
+Keep it:
+- Human
+- Clear
+- Professional
+- Not robotic
+- Not formatted like a report';
 
     const contextBlock = `
 FIXLENS_INTERNAL_CONTEXT:
