@@ -530,22 +530,18 @@ That way you stay in control and avoid unnecessary parts.
   );
 }
 
-  return sanitizeUserFacingReply(
-    `
-Diagnosis:
-Based on what you described, this looks related to ${issue.toLowerCase()}.
+ return sanitizeUserFacingReply(
+  `
+From what you’re describing, this points more toward ${issue.toLowerCase()}.
 
-Possible causes:
-${formatBullets(causes, ["Worn spark plugs", "Weak ignition coil", "Small vacuum leak"])}
+In your case, I’d start by checking the ignition side first — things like the spark plugs or ignition coils, because they often cause rough idle before any warning light shows up.
 
-What to check first:
-${formatNumbered(checks, ["Scan for fault codes if available", "Inspect spark plugs and ignition coils", "Check intake hoses for a vacuum leak"])}
+If that checks out, then I’d take a quick look for a small vacuum leak around the intake, since unmetered air can also make the idle unstable.
 
-Driving condition:
-${drivingCondition}
+For now, gentle driving is usually fine, but if the shaking gets worse or the car starts losing power, I’d have it checked soon.
 `.trim(),
-    { language: lang, wantsPlaces }
-  );
+  { language: lang, wantsPlaces }
+);
 }
 
 function sanitizeUserFacingReply(reply = "", { language = "english", wantsPlaces = false } = {}) {
