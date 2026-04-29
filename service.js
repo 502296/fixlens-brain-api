@@ -370,7 +370,7 @@ Keep it:
 - Professional
 - Not robotic
 - Not formatted like a report
-';
+`;
 
     const contextBlock = `
 FIXLENS_INTERNAL_CONTEXT:
