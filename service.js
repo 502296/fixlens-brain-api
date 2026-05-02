@@ -5,6 +5,7 @@ import OpenAI from "openai";
 
 import { DOCTOR_PROMPT } from "./doctorPrompt.js";
 import { buildDiagnosticMemory } from "./memoryEngine.js";
+import { buildAIReply } from "./ai/aiDoctor.js";
 import { buildResponsePlan } from "./responsePlanner.js";
 import { buildEnginePack } from "./engineIntel.js";
 import { detectIntent } from "./intentDetector.js";
@@ -294,85 +295,6 @@ ok: false,
 reply: "FixLens hit an internal error while analyzing this case.",
 intent: "error",
 });
-}
-}
-
-/* =========================================================
-MODIFIED AI DOCTOR BRAIN (HIGH INTELLIGENCE)
-========================================================= */
-
-async function buildAIReply({
-history = [],
-image,
-locale,
-language,
-dialect,
-primaryIntent,
-userText,
-audioTranscript,
-memory,
-enginePack,
-diagnosticEngine,
-responsePlan,
-verifiedData,
-verifiedActions,
-verifiedWorkshops,
-wantsPlaces = false,
-location = null,
-}) {
-try {
-const outputLanguage = language === "spanish" ? "Spanish" : "English";
-
-const systemPrompt = `${DOCTOR_PROMPT}
-
-FixLens Master Protocol (Extreme Intelligence Mode):
-- Role: You are a elite master technician with 30+ years of experience. You think like an engineer and speak like a supportive doctor.
-- Visual Depth: If an image is provided, analyze it like a forensic expert. Look for textures, carbon color (dry vs oily), heat patterns, and structural wear.
-- Reasoning: Connect the "Symptom" to the "System Physics". Don't just give a list; explain the mechanical chain reaction.
-- Tone: Premium, calm, authoritative but humble. No AI cliches.
-- Formatting: Fluid prose. No bullet points or numbered lists in this text block.
-
-Rules:
-- Never say "I suggest". Say "The evidence points to..." or "This pattern typically indicates...".
-- Language: Output only in ${outputLanguage}.
-- Ask one brilliant follow-up question that would confirm the diagnosis.
-`;
-
-const contextBlock = `
-FIXLENS_SYSTEM_INTEL:
-[Engine Pack]: ${JSON.stringify(enginePack)}
-[Diagnosis Internal]: ${diagnosticEngine?.mechanism} | Conf: ${diagnosticEngine?.confidence}
-[Visual Evidence]: ${image ? "High-res Image provided for analysis" : "None"}
-[History]: ${memory?.memory_text}
-
-[Top Potential Cause]: ${diagnosticEngine?.topIssue}
-[Action Plan]: ${responsePlan?.planner_text}
-
-[Search Insights]: ${JSON.stringify(verifiedData.slice(0, 2))}
-
-User Input: ${userText}
-Audio: ${audioTranscript}
-
-TASK: Synthesize all data into one professional, high-intelligence paragraph of mechanical insight and guidance.
-`.trim();
-
-const messages = buildOpenAIMessages({
-systemPrompt,
-history,
-contextBlock,
-image,
-});
-
-const completion = await client.chat.completions.create({
-model: MODEL,
-temperature: 0.28, // Balanced creativity and logic
-messages,
-});
-
-return completion?.choices?.[0]?.message?.content?.trim() || "";
-} catch (error) {
-console.log("AI doctor reply failed:", error?.message || error);
-return "";
 }
 }
 
